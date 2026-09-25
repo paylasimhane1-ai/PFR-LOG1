@@ -1,0 +1,124 @@
+{
+  "entities": {
+    "Vehicle": {
+      "title": "Vehicle",
+      "description": "Warehouse yard vehicle tracking record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "depoId": { "type": "number" },
+        "cekiciPlaka": { "type": "string" },
+        "dorsePlaka": { "type": "string" },
+        "soforAd": { "type": "string" },
+        "soforTel": { "type": "string" },
+        "soforTc": { "type": "string" },
+        "musteri": { "type": "string" },
+        "islemTipi": { "type": "string" },
+        "durum": { "type": "string" },
+        "girisTarihi": { "type": "string" },
+        "girisTimestamp": { "type": "number" },
+        "rampaId": { "type": "number" },
+        "cagrildigiRampaId": { "type": "number" },
+        "isRampayaCagrildi": { "type": "boolean" },
+        "isAcil": { "type": "boolean" },
+        "cikisTarihi": { "type": "string" },
+        "cikisTimestamp": { "type": "number" }
+      },
+      "required": ["id", "depoId", "dorsePlaka", "musteri", "islemTipi", "durum", "girisTarihi"]
+    },
+    "Ramp": {
+      "title": "Ramp",
+      "description": "Warehouse loading dock ramp definition and live state",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "depoId": { "type": "number" },
+        "ad": { "type": "string" },
+        "durum": { "type": "string" }
+      },
+      "required": ["id", "depoId", "ad", "durum"]
+    },
+    "ExpectedVehicle": {
+      "title": "ExpectedVehicle",
+      "description": "Expected incoming vehicle schedule",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "depoId": { "type": "number" },
+        "musteri": { "type": "string" },
+        "islemTipi": { "type": "string" },
+        "beklenenTarih": { "type": "string" },
+        "durum": { "type": "string" }
+      },
+      "required": ["id", "depoId", "musteri", "islemTipi", "durum"]
+    },
+    "AppNotification": {
+      "title": "AppNotification",
+      "description": "System call and orientation notification between security and docks",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "plaka": { "type": "string" },
+        "text": { "type": "string" },
+        "time": { "type": "string" },
+        "status": { "type": "string" }
+      },
+      "required": ["id", "text", "time", "status"]
+    },
+    "ChatMessage": {
+      "title": "ChatMessage",
+      "description": "Internal instant message between warehouse team members",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "sender": { "type": "string" },
+        "role": { "type": "string" },
+        "text": { "type": "string" },
+        "timestamp": { "type": "number" }
+      },
+      "required": ["id", "sender", "text", "timestamp"]
+    },
+    "Customer": {
+      "title": "Customer",
+      "description": "Registered customer or contractor company details",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "vergiNo": { "type": "string" },
+        "yetkili": { "type": "string" },
+        "telefon": { "type": "string" },
+        "adres": { "type": "string" },
+        "notlar": { "type": "string" },
+        "olusturmaTarihi": { "type": "string" }
+      },
+      "required": ["id", "name"]
+    }
+  },
+  "firestore": {
+    "/vehicles/{vehicleId}": {
+      "schema": { "$ref": "#/entities/Vehicle" },
+      "description": "Active and historical yard vehicles"
+    },
+    "/ramps/{rampId}": {
+      "schema": { "$ref": "#/entities/Ramp" },
+      "description": "Dock ramps and current status"
+    },
+    "/expectedVehicles/{expectedVehicleId}": {
+      "schema": { "$ref": "#/entities/ExpectedVehicle" },
+      "description": "Expected incoming vehicle schedule"
+    },
+    "/notifications/{notificationId}": {
+      "schema": { "$ref": "#/entities/AppNotification" },
+      "description": "Ramp call notifications and security events"
+    },
+    "/chatMessages/{chatMessageId}": {
+      "schema": { "$ref": "#/entities/ChatMessage" },
+      "description": "Live warehouse team field chat messages"
+    },
+    "/customers/{customerId}": {
+      "schema": { "$ref": "#/entities/Customer" },
+      "description": "Registered customer and contractor companies"
+    }
+  }
+}

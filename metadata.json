@@ -1,0 +1,10 @@
+{
+  "name": "Remix PFR-LOG",
+  "description": "Depo, rampa, araç kabul, beklenen araçlar, canlı izleme ve güvenlik entegrasyonu",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
