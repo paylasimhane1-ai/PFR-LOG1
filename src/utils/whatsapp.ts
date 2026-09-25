@@ -6,6 +6,7 @@ export const DEFAULT_WHATSAPP_CONFIG: WhatsAppConfig = {
   autoShareOnVehicleAdd: true,
   autoShareOnRampAssign: true,
   autoShareOnRampCall: true,
+  alwaysShowPromptModal: true,
   groupName: 'Lojistik Depo Operasyon',
   groupPhoneOrId: '',
   webhookUrl: '',
@@ -43,55 +44,50 @@ export interface FormatVehicleMessageOptions {
   rampName?: string;
   eventType: 'vehicle_added' | 'ramp_assigned' | 'ramp_called' | 'manual_share';
   warehouseName?: string;
+  customText?: string;
 }
 
 /**
- * Kullanıcı isteğine tam uygun, net ve okunabilir WhatsApp mesaj formatı
+ * Kullanıcı isteğine uygun: Başlıksız (Müşteri:, İşlem Türü:, Plaka: vb. etiketler olmadan),
+ * doğrudan değerleri içeren (Firma, İşlem, Plaka) sade ve net WhatsApp mesaj formatı
  */
 export function formatVehicleWhatsAppMessage(options: FormatVehicleMessageOptions): string {
+  if (options.customText !== undefined && options.customText.trim() !== '') {
+    return options.customText;
+  }
+
   const { vehicle, rampName, eventType } = options;
 
-  // 1. Rampa Ataması Bildirimi ("şu araç rampaya yönlendirildi tarzında mesaj")
+  // 1. Rampa Ataması Bildirimi
   if (eventType === 'ramp_assigned') {
     const lines = [
-      `🚚 *${vehicle.dorsePlaka}* plakalı araç (${vehicle.musteri || 'Müşteri'}) *${rampName || 'Rampa'}* rampasına yönlendirildi!`,
-      `📋 *İşlem Türü:* ${vehicle.islemTuru}`,
-    ];
-    if (vehicle.fotograflar && vehicle.fotograflar.length > 0) {
-      lines.push(`📸 *Fotoğraflar:* ${vehicle.fotograflar.length} adet fotoğraf ekte`);
-    }
+      vehicle.musteri || '',
+      vehicle.islemTuru || '',
+      `${vehicle.dorsePlaka} -> ${rampName || 'Rampa'}`
+    ].filter(Boolean);
     return lines.join('\n');
   }
 
   // 2. Rampaya Çağrı Bildirimi
   if (eventType === 'ramp_called') {
     const lines = [
-      `📢 *${vehicle.dorsePlaka}* plakalı araç (${vehicle.musteri || 'Müşteri'}) *${rampName || 'Rampa'}* için çağrıldı!`,
-      `📋 *İşlem Türü:* ${vehicle.islemTuru}`,
-    ];
-    if (vehicle.fotograflar && vehicle.fotograflar.length > 0) {
-      lines.push(`📸 *Fotoğraflar:* ${vehicle.fotograflar.length} adet fotoğraf ekte`);
-    }
+      vehicle.musteri || '',
+      vehicle.islemTuru || '',
+      `📢 ${vehicle.dorsePlaka} (${rampName || 'Rampa'})`
+    ].filter(Boolean);
     return lines.join('\n');
   }
 
-  // 3. Araç Kaydı Bildirimi (Kullanıcı talebi: SADECE Müşteri, İşlem Türü, Araç Plakası ve Fotoğraflar - Bağlantı olmadan, ek olarak)
+  // 3. Araç Kaydı Bildirimi (Başlıklar kaldırıldı: SADECE Firma, İşlem Türü ve Plaka)
   const plateText = vehicle.cekiciPlaka 
     ? `${vehicle.dorsePlaka} / ${vehicle.cekiciPlaka}` 
     : vehicle.dorsePlaka;
 
   const lines: string[] = [
-    `👤 *Müşteri:* ${vehicle.musteri || 'Belirtilmedi'}`,
-    `📋 *İşlem Türü:* ${vehicle.islemTuru || 'Belirtilmedi'}`,
-    `🚛 *Araç Plakası:* ${plateText}`,
-  ];
-
-  // Fotoğraflar (Bağlantı olarak değil, ek olarak gönderildiği bilgisi)
-  if (vehicle.fotograflar && vehicle.fotograflar.length > 0) {
-    lines.push(`📸 *Fotoğraflar:* ${vehicle.fotograflar.length} adet fotoğraf ekte gönderildi`);
-  } else {
-    lines.push(`📸 *Fotoğraflar:* Fotoğraf eklenmedi`);
-  }
+    vehicle.musteri || '',
+    vehicle.islemTuru || '',
+    plateText,
+  ].filter(Boolean);
 
   return lines.join('\n');
 }
@@ -411,7 +407,7 @@ export async function sendVehicleToWhatsAppGroup(
 /**
  * WhatsApp Bağlantısını Test Eder
  */
-export async function sendTestWhatsAppMessage(config: WhatsAppConfig): Promise<WhatsAppSendResult> {
+export async function sendTestWhatsAppMessage(config: WhatsAppConfig, customText?: string): Promise<WhatsAppSendResult> {
   const dummyVehicle: Vehicle = {
     id: 9999,
     depoId: 1,
@@ -420,7 +416,7 @@ export async function sendTestWhatsAppMessage(config: WhatsAppConfig): Promise<W
     konteynirNo: 'TEST-123456',
     soforAd: 'Test Şoför',
     soforTel: '0555 123 45 67',
-    musteri: 'Test Lojistik Müşterisi',
+    musteri: 'ABC Lojistik A.Ş.',
     depoTuru: 'Antrepo',
     islemTuru: 'Boşaltma',
     aciklama: 'Bu bir sistem WhatsApp entegrasyonu bağlantı test mesajıdır.',
@@ -438,7 +434,8 @@ export async function sendTestWhatsAppMessage(config: WhatsAppConfig): Promise<W
       vehicle: dummyVehicle,
       rampName: 'Rampa 1 (Test)',
       eventType: 'manual_share',
-      warehouseName: 'Ana Depo (Test)'
+      warehouseName: 'Ana Depo (Test)',
+      customText: customText
     },
     config
   );

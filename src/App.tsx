@@ -129,7 +129,9 @@ import {
   saveNotificationToFirestore,
   deleteNotificationFromFirestore,
   saveChatMessageToFirestore,
-  saveWarehouseToFirestore
+  saveWarehouseToFirestore,
+  subscribeToWhatsAppSettings,
+  clearAllCustomersFromFirestore
 } from './lib/firebase';
 
 export default function App() {
@@ -163,7 +165,8 @@ export default function App() {
     }
     return 1;
   });
-  const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
+  // Sayfa yenilendiğinde veya açılışta doğrudan Araç Yönetimi (araclar) sekmesine gelinsin
+  const [activeTab, setActiveTab] = useState<ActiveTab>('araclar');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isFirebaseConnected, setIsFirebaseConnected] = useState<boolean>(false);
   const [isSoundEnabled, setIsSoundEnabled] = useState<boolean>(() => {
@@ -185,9 +188,6 @@ export default function App() {
 
   const [vehicles, setVehicles] = useState<Vehicle[]>(() => {
     try {
-      if (localStorage.getItem('yms_data_reset_v1') !== 'true') {
-        return [];
-      }
       const saved = localStorage.getItem('yms_vehicles');
       return saved ? JSON.parse(saved) : [];
     } catch {
@@ -197,9 +197,6 @@ export default function App() {
 
   const [expectedVehicles, setExpectedVehicles] = useState<ExpectedVehicle[]>(() => {
     try {
-      if (localStorage.getItem('yms_data_reset_v1') !== 'true') {
-        return [];
-      }
       const saved = localStorage.getItem('yms_expected_vehicles');
       return saved ? JSON.parse(saved) : [];
     } catch {
@@ -209,9 +206,6 @@ export default function App() {
 
   const [notifications, setNotifications] = useState<AppNotification[]>(() => {
     try {
-      if (localStorage.getItem('yms_data_reset_v1') !== 'true') {
-        return [];
-      }
       const saved = localStorage.getItem('yms_notifications');
       return saved ? JSON.parse(saved) : [];
     } catch {
@@ -249,6 +243,10 @@ export default function App() {
   const [showCustomerModal, setShowCustomerModal] = useState(false);
   const [customers, setCustomers] = useState<Customer[]>(() => {
     try {
+      if (localStorage.getItem('yms_customers_cleared') === 'true') {
+        const saved = localStorage.getItem('yms_customers');
+        return saved ? JSON.parse(saved) : [];
+      }
       const saved = localStorage.getItem('yms_customers');
       if (saved) return JSON.parse(saved);
     } catch (e) {
@@ -416,28 +414,6 @@ export default function App() {
     }
   }, [warehouses]);
 
-  // Initial startup clean: Reset dummy records if requested or if flag is not set
-  useEffect(() => {
-    try {
-      if (localStorage.getItem('yms_data_reset_v1') !== 'true') {
-        localStorage.setItem('yms_data_reset_v1', 'true');
-        localStorage.removeItem('yms_vehicles');
-        localStorage.removeItem('yms_expected_vehicles');
-        localStorage.removeItem('yms_notifications');
-        setVehicles([]);
-        setExpectedVehicles([]);
-        setNotifications([]);
-        setRamps(initialRamps);
-        // Clear remote Firestore collections
-        clearAllVehiclesFromFirestore();
-        clearAllExpectedVehiclesFromFirestore();
-        resetAllRampsInFirestore();
-      }
-    } catch (e) {
-      console.error('Error executing initial vehicle reset:', e);
-    }
-  }, []);
-
   // Firebase Firestore Canlı Eşzamanlama (Real-time Subscriptions)
   useEffect(() => {
     testFirebaseConnection()
@@ -493,7 +469,7 @@ export default function App() {
     });
 
     const unsubCustomers = subscribeToCustomers((remoteCustomers) => {
-      if (remoteCustomers && remoteCustomers.length > 0) {
+      if (remoteCustomers) {
         setCustomers(remoteCustomers);
         try {
           localStorage.setItem('yms_customers', JSON.stringify(remoteCustomers));
@@ -501,7 +477,14 @@ export default function App() {
           console.warn('Failed to cache customers:', e);
         }
       }
-    }, initialCustomers);
+    });
+
+    const unsubWhatsApp = subscribeToWhatsAppSettings((remoteConfig) => {
+      if (remoteConfig) {
+        setWhatsappConfig((prev) => ({ ...prev, ...remoteConfig }));
+        saveWhatsAppConfig(remoteConfig);
+      }
+    });
 
     return () => {
       unsubUsers();
@@ -512,6 +495,7 @@ export default function App() {
       unsubNotifs();
       unsubChat();
       unsubCustomers();
+      unsubWhatsApp();
     };
   }, []);
 
@@ -672,9 +656,7 @@ export default function App() {
   const handleLoginSuccess = (user: User, depoId: number) => {
     setCurrentUser(user);
     setSelectedDepoId(depoId);
-    if (user.role === 'security') {
-      setActiveTab('araclar');
-    }
+    setActiveTab('araclar');
   };
 
   useEffect(() => {
@@ -687,6 +669,7 @@ export default function App() {
 
   const handleLoginAsGuest = () => {
     setCurrentUser({ username: 'Misafir', password: '', role: 'guest', depoId: 0 });
+    setActiveTab('araclar');
   };
 
   const handleLogout = () => {
@@ -751,15 +734,33 @@ export default function App() {
       `"${customerName}" firmasını sistemden silmek istediğinize emin misiniz?`,
       async () => {
         setCustomers((prev) => {
-          const updated = prev.filter((c) => c.id !== customerId);
+          const updated = prev.filter((c) => c.id !== customerId && c.name !== customerName);
           try {
             localStorage.setItem('yms_customers', JSON.stringify(updated));
           } catch (e) {}
           return updated;
         });
-        await deleteCustomerFromFirestore(customerId);
+        await deleteCustomerFromFirestore(customerId, customerName);
         showToast(`"${customerName}" firması silindi.`, 'info');
       }
+    );
+  };
+
+  const handleResetCustomers = () => {
+    askConfirm(
+      'Örnek Firmaları Sıfırla',
+      'Tüm kayıtlı demo ve örnek firmalar sistemden ve bulut veritabanından kalıcı olarak silinecektir. Liste boşaldıktan sonra sıfırdan firma ekleme formu açılacaktır. Onaylıyor musunuz?',
+      async () => {
+        setCustomers([]);
+        try {
+          localStorage.setItem('yms_customers', '[]');
+          localStorage.setItem('yms_customers_cleared', 'true');
+        } catch (e) {}
+        await clearAllCustomersFromFirestore();
+        showToast('Tüm örnek firmalar temizlendi. Sıfırdan yeni firma ekleyebilirsiniz.', 'success');
+      },
+      'danger',
+      'Evet, Örnekleri Sıfırla'
     );
   };
 
@@ -2561,6 +2562,12 @@ export default function App() {
                 <Building className="w-3 h-3 text-indigo-200" /> Depo Yönetimi (Aktif/Pasif)
               </button>
               <button
+                onClick={() => setShowWhatsAppModal(true)}
+                className="w-full py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white text-xs rounded-lg font-bold transition flex items-center justify-center gap-1.5 shadow cursor-pointer"
+              >
+                <MessageSquare className="w-3 h-3 text-emerald-200" /> WhatsApp Bildirim Ayarları
+              </button>
+              <button
                 onClick={() => setShowPasswordModal(true)}
                 className="w-full py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs rounded-lg border border-slate-700 transition flex items-center justify-center gap-1.5 cursor-pointer"
               >
@@ -2851,23 +2858,6 @@ export default function App() {
                 </div>
               )}
             </div>
-
-            {/* WhatsApp Entegrasyon butonu (Mobil & Masaüstü) */}
-            <button
-              onClick={() => setShowWhatsAppModal(true)}
-              title="WhatsApp Grubu API ve Otomasyon Ayarları"
-              className={`flex px-2 sm:px-2.5 md:px-3 py-1.5 md:py-2 text-xs font-bold rounded-xl transition items-center gap-1.5 cursor-pointer relative shrink-0 ${
-                whatsappConfig.enabled
-                  ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-300'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-200'
-              }`}
-            >
-              <MessageSquare className="w-4 h-4 text-emerald-600" />
-              <span className="hidden sm:inline">WhatsApp</span>
-              {whatsappConfig.enabled && (
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              )}
-            </button>
 
             {/* Web Push & Sistem Bildirimleri butonu (Mobil & Masaüstü) */}
             <button
@@ -3193,6 +3183,7 @@ export default function App() {
         onAddCustomer={handleSaveCustomer}
         onUpdateCustomer={handleSaveCustomer}
         onDeleteCustomer={handleDeleteCustomer}
+        onResetCustomers={handleResetCustomers}
       />
 
       {/* 9. Şifre Değiştirme Modalı */}

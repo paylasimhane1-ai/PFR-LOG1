@@ -93,6 +93,26 @@
         "olusturmaTarihi": { "type": "string" }
       },
       "required": ["id", "name"]
+    },
+    "WhatsAppSettings": {
+      "title": "WhatsAppSettings",
+      "description": "Cross-device WhatsApp group notification and integration settings",
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "provider": { "type": "string" },
+        "autoShareOnVehicleAdd": { "type": "boolean" },
+        "autoShareOnRampAssign": { "type": "boolean" },
+        "autoShareOnRampCall": { "type": "boolean" },
+        "groupName": { "type": "string" },
+        "groupPhoneOrId": { "type": "string" },
+        "webhookUrl": { "type": "string" },
+        "apiKey": { "type": "string" },
+        "instanceId": { "type": "string" },
+        "twilioAccountSid": { "type": "string" },
+        "twilioAuthToken": { "type": "string" },
+        "twilioFromNumber": { "type": "string" }
+      }
     }
   },
   "firestore": {
@@ -119,6 +139,10 @@
     "/customers/{customerId}": {
       "schema": { "$ref": "#/entities/Customer" },
       "description": "Registered customer and contractor companies"
+    },
+    "/settings/{settingId}": {
+      "schema": { "$ref": "#/entities/WhatsAppSettings" },
+      "description": "Application shared configuration settings"
     }
   }
 }

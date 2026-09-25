@@ -279,3 +279,39 @@ export function downloadExpectedTemplateCsv(): void {
   link.download = 'beklenen_araclar_sablonu.csv';
   link.click();
 }
+
+/**
+ * Akıllı telefon ve tarayıcı kameralarından yüklenen yüksek çözünürlüklü fotoğrafları
+ * Firestore'un 1 MB doküman boyut sınırını aşmamak ve hızlı kaydetmek için
+ * maksimum 800px genişlik ve %70 JPEG kalitesinde sıkıştırır (~30-50 KB).
+ */
+export async function compressImageFile(file: File, maxWidth = 800, quality = 0.7): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Fotoğraf dosyası okunamadı'));
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('Fotoğraf formatı desteklenmiyor'));
+      img.onload = () => {
+        let width = img.width;
+        let height = img.height;
+        if (width > maxWidth) {
+          height = Math.round((height * maxWidth) / width);
+          width = maxWidth;
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve(event.target?.result as string);
+          return;
+        }
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.src = event.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+  });
+}

@@ -20,7 +20,8 @@ import {
   getRampDurationText,
   getDepoKayitTarihi,
   getRampaGirisTarihi,
-  getRampaCikisTarihi
+  getRampaCikisTarihi,
+  compressImageFile
 } from '../utils/helpers';
 import {
   PERMISSIONS_LIST,
@@ -1617,34 +1618,24 @@ export const NewVehicleModal: React.FC<NewVehicleModalProps> = ({
     setDriverSuggestions([]);
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || !files.length) return;
 
-    (Array.from(files) as File[]).forEach((file) => {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const img = new Image();
-        img.src = event.target?.result as string;
-        img.onload = () => {
-          const canvas = document.createElement('canvas');
-          const maxW = 800;
-          const scale = maxW / img.width;
-          canvas.width = maxW;
-          canvas.height = img.height * scale;
-          const ctx = canvas.getContext('2d');
-          if (ctx) {
-            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-            const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.7);
-            setForm((prev) => ({
-              ...prev,
-              fotograflar: [...prev.fotograflar, compressedDataUrl]
-            }));
-          }
-        };
-      };
-      reader.readAsDataURL(file);
-    });
+    try {
+      const compressedPhotos: string[] = [];
+      const fileList = Array.from(files) as File[];
+      for (const file of fileList) {
+        const compressed = await compressImageFile(file);
+        compressedPhotos.push(compressed);
+      }
+      setForm((prev) => ({
+        ...prev,
+        fotograflar: [...prev.fotograflar, ...compressedPhotos]
+      }));
+    } catch (err) {
+      console.error('Fotoğraf sıkıştırma hatası:', err);
+    }
   };
 
   const handleRemovePhoto = (idx: number) => {
@@ -2115,38 +2106,28 @@ export const EditVehicleModal: React.FC<EditVehicleModalProps> = ({
     );
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || !files.length) return;
 
-    (Array.from(files) as File[]).forEach((file) => {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const img = new Image();
-        img.src = event.target?.result as string;
-        img.onload = () => {
-          const canvas = document.createElement('canvas');
-          const maxW = 800;
-          const scale = maxW / img.width;
-          canvas.width = maxW;
-          canvas.height = img.height * scale;
-          const ctx = canvas.getContext('2d');
-          if (ctx) {
-            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-            const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.7);
-            setForm((prev) =>
-              prev
-                ? {
-                    ...prev,
-                    fotograflar: [...(prev.fotograflar || []), compressedDataUrl]
-                  }
-                : null
-            );
-          }
-        };
-      };
-      reader.readAsDataURL(file);
-    });
+    try {
+      const compressedPhotos: string[] = [];
+      const fileList = Array.from(files) as File[];
+      for (const file of fileList) {
+        const compressed = await compressImageFile(file);
+        compressedPhotos.push(compressed);
+      }
+      setForm((prev) =>
+        prev
+          ? {
+              ...prev,
+              fotograflar: [...(prev.fotograflar || []), ...compressedPhotos]
+            }
+          : null
+      );
+    } catch (err) {
+      console.error('Fotoğraf sıkıştırma hatası:', err);
+    }
   };
 
   const handleRemovePhoto = (idx: number) => {

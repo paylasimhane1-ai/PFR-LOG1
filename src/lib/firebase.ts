@@ -8,28 +8,43 @@ import {
   onSnapshot,
   getDocs,
   getDocFromServer,
-  writeBatch
+  writeBatch,
+  query,
+  where
 } from 'firebase/firestore';
-import type { Vehicle, Ramp, ExpectedVehicle, AppNotification, ChatMessage, Warehouse, User, Customer } from '../types';
+import type { Vehicle, Ramp, ExpectedVehicle, AppNotification, ChatMessage, Warehouse, User, Customer, WhatsAppConfig } from '../types';
 import firebaseConfigData from '../../firebase-applet-config.json';
+
+/**
+ * Vercel veya diğer üretim platformlarından girilen ortam değişkenlerini temizler.
+ * Tırnak işaretlerini (" veya ') ve boşlukları kırpar.
+ */
+export function cleanEnvVal(val: string | undefined): string {
+  if (!val) return '';
+  let str = String(val).trim();
+  if ((str.startsWith('"') && str.endsWith('"')) || (str.startsWith("'") && str.endsWith("'"))) {
+    str = str.slice(1, -1).trim();
+  }
+  return str;
+}
 
 // Resolve configuration: Vercel/production environment variables take precedence,
 // with graceful fallback to firebase-applet-config.json for local/AI Studio development.
 const env: Record<string, string | undefined> =
   (import.meta as unknown as { env?: Record<string, string | undefined> })?.env || {};
 
-const firebaseConfig = {
-  apiKey: env.VITE_FIREBASE_API_KEY || firebaseConfigData.apiKey || '',
-  authDomain: env.VITE_FIREBASE_AUTH_DOMAIN || firebaseConfigData.authDomain || '',
-  projectId: env.VITE_FIREBASE_PROJECT_ID || firebaseConfigData.projectId || '',
-  storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET || firebaseConfigData.storageBucket || '',
-  messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID || firebaseConfigData.messagingSenderId || '',
-  appId: env.VITE_FIREBASE_APP_ID || firebaseConfigData.appId || '',
+export const firebaseConfig = {
+  apiKey: cleanEnvVal(env.VITE_FIREBASE_API_KEY) || firebaseConfigData.apiKey || '',
+  authDomain: cleanEnvVal(env.VITE_FIREBASE_AUTH_DOMAIN) || firebaseConfigData.authDomain || '',
+  projectId: cleanEnvVal(env.VITE_FIREBASE_PROJECT_ID) || firebaseConfigData.projectId || '',
+  storageBucket: cleanEnvVal(env.VITE_FIREBASE_STORAGE_BUCKET) || firebaseConfigData.storageBucket || '',
+  messagingSenderId: cleanEnvVal(env.VITE_FIREBASE_MESSAGING_SENDER_ID) || firebaseConfigData.messagingSenderId || '',
+  appId: cleanEnvVal(env.VITE_FIREBASE_APP_ID) || firebaseConfigData.appId || '',
 };
 
 const firestoreDbId =
-  env.VITE_FIREBASE_DATABASE_ID ||
-  env.VITE_FIREBASE_FIRESTORE_DATABASE_ID ||
+  cleanEnvVal(env.VITE_FIREBASE_DATABASE_ID) ||
+  cleanEnvVal(env.VITE_FIREBASE_FIRESTORE_DATABASE_ID) ||
   firebaseConfigData.firestoreDatabaseId ||
   '(default)';
 
@@ -50,6 +65,7 @@ export async function testFirebaseConnection(): Promise<boolean> {
   } catch (error) {
     if (error instanceof Error && error.message.includes('the client is offline')) {
       console.warn('Firebase client is offline, using offline persistence cache.');
+      return false;
     }
     // If doc doesn't exist, it still contacted server successfully
     return true;
@@ -496,28 +512,13 @@ export async function deleteWarehouseFromFirestore(id: number): Promise<void> {
 // -------------------------------------------------------------
 
 export function subscribeToCustomers(
-  onData: (items: Customer[]) => void,
-  initialDataIfEmpty?: Customer[]
+  onData: (items: Customer[]) => void
 ): () => void {
   const colRef = collection(db, 'customers');
 
   const unsubscribe = onSnapshot(
     colRef,
-    async (snapshot) => {
-      if (snapshot.empty && initialDataIfEmpty && initialDataIfEmpty.length > 0) {
-        try {
-          const batch = writeBatch(db);
-          for (const item of initialDataIfEmpty) {
-            batch.set(doc(db, 'customers', String(item.id)), removeUndefinedFields(item));
-          }
-          await batch.commit();
-        } catch (e) {
-          console.warn('Error seeding initial customers to Firestore:', e);
-          onData(initialDataIfEmpty);
-        }
-        return;
-      }
-
+    (snapshot) => {
       const list: Customer[] = [];
       snapshot.forEach((d) => {
         list.push(d.data() as Customer);
@@ -542,10 +543,65 @@ export async function saveCustomerToFirestore(customer: Customer): Promise<void>
   }
 }
 
-export async function deleteCustomerFromFirestore(id: string): Promise<void> {
+export async function deleteCustomerFromFirestore(id: string, name?: string): Promise<void> {
   try {
-    await deleteDoc(doc(db, 'customers', String(id)));
+    if (id) {
+      await deleteDoc(doc(db, 'customers', String(id)));
+    }
+    if (name && name.trim()) {
+      const q = query(collection(db, 'customers'), where('name', '==', name.trim()));
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        const batch = writeBatch(db);
+        snap.forEach((d) => batch.delete(d.ref));
+        await batch.commit();
+      }
+    }
   } catch (err) {
     console.error('deleteCustomerFromFirestore error:', err);
+  }
+}
+
+export async function clearAllCustomersFromFirestore(): Promise<void> {
+  try {
+    const snap = await getDocs(collection(db, 'customers'));
+    if (!snap.empty) {
+      const batch = writeBatch(db);
+      snap.forEach((d) => batch.delete(d.ref));
+      await batch.commit();
+    }
+  } catch (err) {
+    console.error('clearAllCustomersFromFirestore error:', err);
+  }
+}
+
+// -------------------------------------------------------------
+// WhatsApp Configuration Sync & Mutations (Cross-Device Global Settings)
+// -------------------------------------------------------------
+
+export function subscribeToWhatsAppSettings(
+  onData: (cfg: WhatsAppConfig) => void
+): () => void {
+  const docRef = doc(db, 'settings', 'whatsapp');
+  const unsubscribe = onSnapshot(
+    docRef,
+    (snapshot) => {
+      if (snapshot.exists()) {
+        onData(snapshot.data() as WhatsAppConfig);
+      }
+    },
+    (err) => {
+      console.warn('Firestore whatsapp settings sync error:', err);
+    }
+  );
+  return unsubscribe;
+}
+
+export async function saveWhatsAppSettingsToFirestore(config: WhatsAppConfig): Promise<void> {
+  try {
+    const cleaned = removeUndefinedFields(config);
+    await setDoc(doc(db, 'settings', 'whatsapp'), cleaned);
+  } catch (err) {
+    console.error('saveWhatsAppSettingsToFirestore error:', err);
   }
 }

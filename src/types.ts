@@ -156,6 +156,8 @@ export interface WhatsAppConfig {
   twilioAccountSid?: string;
   twilioAuthToken?: string;
   twilioFromNumber?: string;
+  alwaysShowPromptModal?: boolean; // Göndermeden Önce Düzeltme & Önizleme Penceresini Aç
+  customTemplate?: string; // Özelleştirilmiş mesaj şablonu
 }
 
 export interface PushNotificationSettings {

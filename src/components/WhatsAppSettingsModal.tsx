@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { WhatsAppConfig, WhatsAppProvider } from '../types';
 import { saveWhatsAppConfig, sendTestWhatsAppMessage, DEFAULT_WHATSAPP_CONFIG } from '../utils/whatsapp';
-import { X, MessageSquare, Check, RefreshCw, AlertCircle, ExternalLink, Send, ShieldCheck, BookOpen, Smartphone, HelpCircle, ArrowRight } from 'lucide-react';
+import { saveWhatsAppSettingsToFirestore } from '../lib/firebase';
+import { X, MessageSquare, Check, RefreshCw, AlertCircle, ExternalLink, Send, ShieldCheck, BookOpen, Smartphone, HelpCircle, ArrowRight, Edit3, RotateCcw } from 'lucide-react';
 
 interface WhatsAppSettingsModalProps {
   isOpen: boolean;
@@ -21,12 +22,18 @@ export const WhatsAppSettingsModal: React.FC<WhatsAppSettingsModalProps> = ({
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string; urlFallback?: string } | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [customTestText, setCustomTestText] = useState("ABC Lojistik A.Ş.\nBoşaltma\n34 YMS 999 / 34 TEST 01");
 
   if (!isOpen) return null;
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     saveWhatsAppConfig(config);
+    try {
+      await saveWhatsAppSettingsToFirestore(config);
+    } catch (err) {
+      console.warn('Could not sync WhatsApp settings to Firestore:', err);
+    }
     onConfigSaved(config);
     setSaveSuccess(true);
     setTimeout(() => {
@@ -39,7 +46,7 @@ export const WhatsAppSettingsModal: React.FC<WhatsAppSettingsModalProps> = ({
     setIsTesting(true);
     setTestResult(null);
     try {
-      const res = await sendTestWhatsAppMessage(config);
+      const res = await sendTestWhatsAppMessage(config, customTestText);
       setTestResult(res);
       if (res.urlFallback && config.provider === 'sharelink') {
         window.open(res.urlFallback, '_blank');
@@ -258,6 +265,19 @@ export const WhatsAppSettingsModal: React.FC<WhatsAppSettingsModalProps> = ({
                     <span className="text-[10px] text-slate-500">"Şu araç rampaya yönlendirildi" mesajı</span>
                   </div>
                 </label>
+
+                <label className="flex items-center gap-2.5 p-2.5 rounded-lg border border-emerald-200 bg-emerald-50/40 hover:bg-emerald-50 cursor-pointer sm:col-span-2">
+                  <input
+                    type="checkbox"
+                    checked={config.alwaysShowPromptModal ?? true}
+                    onChange={(e) => setConfig({ ...config, alwaysShowPromptModal: e.target.checked })}
+                    className="rounded text-emerald-600 focus:ring-emerald-500 w-4 h-4"
+                  />
+                  <div>
+                    <span className="font-bold text-emerald-950 block text-xs">Göndermeden Önce Düzeltme & Önizleme Penceresini Aç</span>
+                    <span className="text-[10px] text-emerald-700">Mesajı göndermeden önce ekranda gösterip metni dilediğiniz gibi düzeltmenize imkan tanır.</span>
+                  </div>
+                </label>
               </div>
             </div>
 
@@ -447,20 +467,47 @@ export const WhatsAppSettingsModal: React.FC<WhatsAppSettingsModalProps> = ({
               </div>
             )}
 
-            {/* Örnek Mesaj Formatı Bilgi Kutusu (Kullanıcı İsteğine Birebir Uygun) */}
+            {/* Gruba İletilen Standart Mesaj Formatı (Başlıklar kaldırılmış temiz format) */}
             <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-slate-600 text-[11px] space-y-1.5">
               <div className="flex items-center justify-between">
                 <span className="font-bold text-slate-800 block">Gruba İletilen Standart Mesaj Formatı:</span>
-                <span className="text-[10px] text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded font-semibold">Sadece Gerekli 4 Bilgi</span>
+                <span className="text-[10px] text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded font-semibold">Başlıksız Sade Değerler</span>
               </div>
-              <pre className="bg-white p-2.5 rounded-lg border border-slate-200 text-[10px] font-mono overflow-x-auto text-slate-700 leading-relaxed">
-{`👤 *Müşteri:* ABC Lojistik A.Ş.
-📋 *İşlem Türü:* Boşaltma
-🚛 *Araç Plakası:* 34 YMS 999 / 34 TEST 01
-📸 *Fotoğraflar:* https://uygulama-linki/?aracId=...&view=photos`}
+              <pre className="bg-white p-2.5 rounded-lg border border-slate-200 text-[11px] font-mono overflow-x-auto text-slate-800 leading-relaxed font-semibold">
+{`ABC Lojistik A.Ş.
+Boşaltma
+34 YMS 999 / 34 TEST 01`}
               </pre>
               <p className="text-[10px] text-slate-500">
-                Rampa atamasında ise: <em>"🚚 34 YMS 999 plakalı araç (ABC Lojistik) Rampa 2 rampasına yönlendirildi!"</em> formatında iletilir.
+                Mesajlar başlık olmadan doğrudan <strong>Firma</strong>, <strong>İşlem Türü</strong> ve <strong>Araç Plakası</strong> satırlarıyla iletilir. Fotoğraflar ise doğrudan dosya/medya eki olarak WhatsApp'a eklenir.
+              </p>
+            </div>
+
+            {/* Canlı Mesaj Düzenleme & Test Alanı */}
+            <div className="bg-emerald-50/50 border border-emerald-200 rounded-xl p-3.5 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-emerald-950 text-xs flex items-center gap-1.5">
+                  <Edit3 className="w-3.5 h-3.5 text-emerald-700" />
+                  Örnek Mesajı Düzelt ve Test Et
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setCustomTestText("ABC Lojistik A.Ş.\nBoşaltma\n34 YMS 999 / 34 TEST 01")}
+                  className="text-[10px] text-emerald-700 hover:text-emerald-900 flex items-center gap-1 cursor-pointer font-medium"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  <span>Varsayılana Dön</span>
+                </button>
+              </div>
+              <textarea
+                value={customTestText}
+                onChange={(e) => setCustomTestText(e.target.value)}
+                rows={3}
+                className="w-full bg-white border border-emerald-300 rounded-lg p-2.5 text-xs font-mono focus:ring-2 focus:ring-emerald-500 outline-none text-slate-800"
+                placeholder="Örnek mesaj metnini burada düzenleyebilirsiniz..."
+              />
+              <p className="text-[10px] text-emerald-800">
+                Aşağıdaki "Bağlantıyı Test Et" butonuna bastığınızda bu kutucuktaki güncel metin gönderilecektir.
               </p>
             </div>
 

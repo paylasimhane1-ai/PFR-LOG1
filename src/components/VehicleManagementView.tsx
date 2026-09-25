@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { FixedSizeList as List } from 'react-window';
 import { Vehicle, Ramp, User } from '../types';
 import { cleanPhone, cleanPhoneForWa, getDurationText, getDepoKayitTarihi, getRampaGirisTarihi, getRampaCikisTarihi } from '../utils/helpers';
 import {
