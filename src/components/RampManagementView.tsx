@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Ramp, Vehicle, User } from '../types';
 import { getRampStatusClass, cleanPhone, cleanPhoneForWa } from '../utils/helpers';
+import { RampTrafficLight } from './RampTrafficLight';
 import {
   Warehouse as WarehouseIcon,
   Truck,
@@ -202,7 +203,7 @@ export const RampManagementView: React.FC<RampManagementViewProps> = ({
           return (
             <div
               key={r.id}
-              className={`bg-white rounded-2xl border shadow-sm overflow-hidden flex flex-col justify-between transition hover:shadow-md ${
+              className={`ramp-item bg-white rounded-2xl border shadow-sm overflow-hidden flex flex-col justify-between transition hover:shadow-md ${
                 r.durum === 'Dolu'
                   ? 'border-blue-300 ring-1 ring-blue-100'
                   : r.durum === 'Boş'
@@ -210,31 +211,38 @@ export const RampManagementView: React.FC<RampManagementViewProps> = ({
                   : 'border-amber-200'
               }`}
             >
-              {/* Rampa Başlık & Durum */}
-              <div className="p-3 border-b border-slate-100 flex items-center justify-between bg-slate-50">
-                <h3 className="font-extrabold text-slate-800 text-sm flex items-center gap-1.5">
-                  <WarehouseIcon className="w-4 h-4 text-blue-600" />
-                  {r.ad}
-                </h3>
+              {/* Rampa Başlık & Durum (Trafik Işığı ve Renkli Durum Bileşeni) */}
+              <div className="p-3 border-b border-slate-100 flex items-center justify-between bg-slate-50 gap-2">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <WarehouseIcon className="w-4 h-4 text-blue-600 shrink-0" />
+                  <h3 className="font-extrabold text-slate-800 text-sm truncate">
+                    {r.ad}
+                  </h3>
+                </div>
 
-                {canManageRamps ? (
-                  <select
-                    value={r.durum}
-                    onChange={(e) => onRampStatusChange(r, e.target.value as Ramp['durum'])}
-                    className={`text-xs font-bold border rounded-xl px-2 py-1 outline-none cursor-pointer shadow-2xs ${getRampStatusClass(
-                      r.durum
-                    )}`}
-                  >
-                    <option value="Boş">Boş</option>
-                    <option value="Dolu">Dolu</option>
-                    <option value="Arızalı">Arızalı</option>
-                    <option value="Bakımda">Bakımda</option>
-                  </select>
-                ) : (
-                  <span className={`text-xs font-bold border rounded-xl px-2 py-0.5 ${getRampStatusClass(r.durum)}`}>
-                    {r.durum}
-                  </span>
-                )}
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {/* Trafik Işığı Göstergesi (Dolu için Kırmızı, Arızalı için Sarı, Boş için Yeşil) */}
+                  <RampTrafficLight status={r.durum} showBadge={false} />
+
+                  {canManageRamps ? (
+                    <select
+                      value={r.durum}
+                      onChange={(e) => onRampStatusChange(r, e.target.value as Ramp['durum'])}
+                      className={`text-[11px] font-bold border rounded-lg px-2 py-0.5 outline-none cursor-pointer shadow-2xs ${getRampStatusClass(
+                        r.durum
+                      )}`}
+                    >
+                      <option value="Boş">Boş</option>
+                      <option value="Dolu">Dolu</option>
+                      <option value="Arızalı">Arızalı</option>
+                      <option value="Bakımda">Bakımda</option>
+                    </select>
+                  ) : (
+                    <span className={`text-[11px] font-bold border rounded-lg px-2 py-0.5 ${getRampStatusClass(r.durum)}`}>
+                      {r.durum}
+                    </span>
+                  )}
+                </div>
               </div>
 
               {/* Rampa İçeriği */}
