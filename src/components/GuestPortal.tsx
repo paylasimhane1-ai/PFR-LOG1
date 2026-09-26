@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Vehicle } from '../types';
 import { getStatusBadgeClass, getStatusDurationLabel, getSpecificStatusDuration } from '../utils/helpers';
 import { Truck, LogOut, Search, Megaphone, ShieldAlert, Image, HelpCircle } from 'lucide-react';
+import { PerformanceIcon } from './PerformanceLogo';
 
 interface GuestPortalProps {
   vehicles: Vehicle[];
@@ -49,11 +50,15 @@ export const GuestPortal: React.FC<GuestPortalProps> = ({
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col">
       <header className="h-16 bg-slate-950 border-b border-slate-800 px-6 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center font-bold">
-            <Truck className="w-4 h-4 text-white" />
+        <div className="flex items-center gap-2.5">
+          <PerformanceIcon className="w-8 h-8 shrink-0 drop-shadow" />
+          <div>
+            <div className="flex items-center gap-1.5">
+              <span className="font-black text-sm text-white tracking-wider uppercase font-sans">PERFORMANCE</span>
+              <span className="text-[10px] font-black text-fuchsia-400 tracking-widest uppercase">PFR NOVA</span>
+            </div>
+            <p className="text-[10px] text-slate-400">Misafir Araç Takip Portalı</p>
           </div>
-          <h1 className="font-bold text-sm">Misafir Araç Takip Portalı</h1>
         </div>
         <button
           onClick={onLogout}

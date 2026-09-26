@@ -170,6 +170,39 @@ export async function shareViaWebShareWithFiles(options: {
 }
 
 /**
+ * Masaüstü tarayıcılarda fotoğrafı doğrudan sistem panosuna kopyalar (Ctrl+V ile WhatsApp'a yapıştırmak için)
+ */
+export async function copyPhotoToClipboard(photoDataUrlOrHttp: string): Promise<boolean> {
+  try {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    await new Promise<void>((resolve, reject) => {
+      img.onload = () => resolve();
+      img.onerror = (e) => reject(e);
+      img.src = photoDataUrlOrHttp;
+    });
+
+    const canvas = document.createElement('canvas');
+    canvas.width = img.naturalWidth || img.width;
+    canvas.height = img.naturalHeight || img.height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return false;
+
+    ctx.drawImage(img, 0, 0);
+    const blob: Blob | null = await new Promise((r) => canvas.toBlob(r, 'image/png'));
+    if (blob && typeof ClipboardItem !== 'undefined' && navigator.clipboard?.write) {
+      await navigator.clipboard.write([
+        new ClipboardItem({ 'image/png': blob })
+      ]);
+      return true;
+    }
+  } catch (err) {
+    console.warn('Panoya fotoğraf kopyalama desteklenmiyor veya engellendi:', err);
+  }
+  return false;
+}
+
+/**
  * Doğrudan WhatsApp Paylaşım Linki Üretir (wa.me / web.whatsapp.com)
  */
 export function getWhatsAppDirectShareUrl(messageText: string, phoneOrGroup?: string): string {
@@ -269,44 +302,79 @@ export async function sendVehicleToWhatsAppGroup(
         chatId = chatId.length > 15 ? `${chatId}@g.us` : `${chatId.replace(/[^0-9]/g, '')}@c.us`;
       }
 
-      const greenApiUrl = `https://api.green-api.com/waInstance${config.instanceId}/sendMessage/${config.apiKey}`;
-      const response = await fetch(greenApiUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          chatId,
-          message: textMessage
-        })
-      });
+      const photos = options.vehicle.fotograflar || [];
+      const firstPhoto = photos.length > 0 ? photos[0] : null;
 
-      if (!response.ok) {
-        const errorData = await response.text();
-        throw new Error(`Green API Hatası (${response.status}): ${errorData}`);
-      }
+      // Kullanıcı talebi: Fotoğraf varsa araç bilgileri ayrı bir mesaj olarak değil, fotoğrafın açıklaması (caption) olarak gönderilir
+      if (firstPhoto) {
+        if (firstPhoto.startsWith('data:')) {
+          // Base64 fotoğraf: Green API sendFileByUpload ile doğrudan multipart form olarak gönderilir
+          const base64Data = firstPhoto.split(',')[1] || '';
+          const mime = firstPhoto.split(';')[0]?.split(':')[1] || 'image/jpeg';
+          const byteChars = atob(base64Data);
+          const byteNumbers = new Uint8Array(byteChars.length);
+          for (let i = 0; i < byteChars.length; i++) {
+            byteNumbers[i] = byteChars.charCodeAt(i);
+          }
+          const blob = new Blob([byteNumbers], { type: mime });
+          const formData = new FormData();
+          formData.append('chatId', chatId);
+          formData.append('file', blob, `arac_${options.vehicle.dorsePlaka}.jpg`);
+          formData.append('fileName', `arac_${options.vehicle.dorsePlaka}.jpg`);
+          formData.append('caption', textMessage);
 
-      // Eğer fotoğraf varsa ve URL şeklindeyse ilk fotoğrafı dosya olarak da ilet
-      const photoUrls = options.vehicle.fotograflar?.filter(p => p.startsWith('http')) || [];
-      if (photoUrls.length > 0) {
-        try {
+          const sendUploadUrl = `https://api.green-api.com/waInstance${config.instanceId}/sendFileByUpload/${config.apiKey}`;
+          const response = await fetch(sendUploadUrl, {
+            method: 'POST',
+            body: formData
+          });
+
+          if (!response.ok) {
+            const errorData = await response.text();
+            throw new Error(`Green API Hatası (${response.status}): ${errorData}`);
+          }
+        } else {
+          // HTTP URL fotoğraf: Green API sendFileByUrl ile doğrudan url üzerinden iletilir
           const sendFileUrl = `https://api.green-api.com/waInstance${config.instanceId}/sendFileByUrl/${config.apiKey}`;
-          await fetch(sendFileUrl, {
+          const response = await fetch(sendFileUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               chatId,
-              urlFile: photoUrls[0],
+              urlFile: firstPhoto,
               fileName: `arac_${options.vehicle.dorsePlaka}.jpg`,
-              caption: `${options.vehicle.dorsePlaka} Araç Fotoğrafı`
+              caption: textMessage // Bilgiler fotoğrafın altına açıklama olarak eklenir
             })
           });
-        } catch (photoErr) {
-          console.warn('Fotoğraf gönderimi ikincil adımda başarısız oldu:', photoErr);
+
+          if (!response.ok) {
+            const errorData = await response.text();
+            throw new Error(`Green API Hatası (${response.status}): ${errorData}`);
+          }
+        }
+      } else {
+        // Fotoğraf yoksa sadece metin mesajı ilet
+        const greenApiUrl = `https://api.green-api.com/waInstance${config.instanceId}/sendMessage/${config.apiKey}`;
+        const response = await fetch(greenApiUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chatId,
+            message: textMessage
+          })
+        });
+
+        if (!response.ok) {
+          const errorData = await response.text();
+          throw new Error(`Green API Hatası (${response.status}): ${errorData}`);
         }
       }
 
       return {
         success: true,
-        message: 'Green API ile WhatsApp grubuna başarıyla gönderildi',
+        message: firstPhoto
+          ? 'Green API ile fotoğraf ve açıklaması WhatsApp grubuna başarıyla gönderildi'
+          : 'Green API ile WhatsApp grubuna başarıyla gönderildi',
         urlFallback: fallbackUrl
       };
     }
@@ -321,26 +389,52 @@ export async function sendVehicleToWhatsAppGroup(
         };
       }
 
-      const ultraMsgUrl = `https://api.ultramsg.com/${config.instanceId}/messages/chat`;
-      const params = new URLSearchParams();
-      params.append('token', config.apiKey);
-      params.append('to', config.groupPhoneOrId.trim());
-      params.append('body', textMessage);
+      const photos = options.vehicle.fotograflar || [];
+      const firstPhoto = photos.length > 0 ? photos[0] : null;
 
-      const response = await fetch(ultraMsgUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: params
-      });
+      if (firstPhoto) {
+        // Fotoğraflı gönderim: Bilgiler fotoğraf açıklaması (caption) olarak tek parça iletilir (HTTP URL veya Data URL base64)
+        const ultraMsgUrl = `https://api.ultramsg.com/${config.instanceId}/messages/image`;
+        const params = new URLSearchParams();
+        params.append('token', config.apiKey);
+        params.append('to', config.groupPhoneOrId.trim());
+        params.append('image', firstPhoto);
+        params.append('caption', textMessage);
 
-      if (!response.ok) {
-        const errText = await response.text();
-        throw new Error(`UltraMsg Hatası: ${errText}`);
+        const response = await fetch(ultraMsgUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: params
+        });
+
+        if (!response.ok) {
+          const errText = await response.text();
+          throw new Error(`UltraMsg Hatası: ${errText}`);
+        }
+      } else {
+        const ultraMsgUrl = `https://api.ultramsg.com/${config.instanceId}/messages/chat`;
+        const params = new URLSearchParams();
+        params.append('token', config.apiKey);
+        params.append('to', config.groupPhoneOrId.trim());
+        params.append('body', textMessage);
+
+        const response = await fetch(ultraMsgUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: params
+        });
+
+        if (!response.ok) {
+          const errText = await response.text();
+          throw new Error(`UltraMsg Hatası: ${errText}`);
+        }
       }
 
       return {
         success: true,
-        message: 'UltraMsg ile WhatsApp grubuna başarıyla gönderildi',
+        message: firstPhoto
+          ? 'UltraMsg ile fotoğraf ve açıklaması WhatsApp grubuna başarıyla gönderildi'
+          : 'UltraMsg ile WhatsApp grubuna başarıyla gönderildi',
         urlFallback: fallbackUrl
       };
     }
@@ -360,11 +454,16 @@ export async function sendVehicleToWhatsAppGroup(
         : `whatsapp:${config.groupPhoneOrId}`;
       const from = config.twilioFromNumber || 'whatsapp:+14155238886';
 
+      const photoUrls = options.vehicle.fotograflar?.filter(p => p.startsWith('http')) || [];
+
       const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${config.twilioAccountSid}/Messages.json`;
       const bodyParams = new URLSearchParams();
       bodyParams.append('To', to);
       bodyParams.append('From', from);
-      bodyParams.append('Body', textMessage);
+      bodyParams.append('Body', textMessage); // Twilio'da MediaUrl ile Body birlikte gidince fotoğraf açıklaması olur
+      if (photoUrls.length > 0) {
+        bodyParams.append('MediaUrl', photoUrls[0]);
+      }
 
       const credentials = btoa(`${config.twilioAccountSid}:${config.twilioAuthToken}`);
       const response = await fetch(twilioUrl, {

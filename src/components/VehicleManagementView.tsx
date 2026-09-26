@@ -242,38 +242,41 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
           return (
             <div
               key={v.id}
-              className={`bg-white rounded-2xl border p-3.5 shadow-sm space-y-3 transition ${
+              className={`bg-white rounded-2xl border p-3 shadow-xs space-y-2.5 transition ${
                 v.isAcik
                   ? 'border-red-500 bg-red-50/40 ring-1 ring-red-400'
-                  : 'border-slate-200 hover:border-blue-200'
+                  : 'border-slate-200'
               }`}
             >
-              {/* Kart Başlığı: Plaka & Durum */}
-              <div className="flex items-start justify-between gap-2">
-                <div className="space-y-1">
-                  {/* Türk Plaka Rozeti */}
-                  <div className="inline-flex items-center border-2 border-slate-800 rounded-lg overflow-hidden font-mono font-black text-xs shadow-xs bg-white">
-                    <span className="bg-blue-600 text-white px-1.5 py-0.5 text-[9px] font-bold">TR</span>
-                    <span className="px-2 py-0.5 tracking-wider text-slate-900">{v.dorsePlaka}</span>
+              {/* Kart Başlığı: Plaka, Acil Rozeti, Durum ve Rampa */}
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+                  <div className="inline-flex items-center border border-slate-800 rounded-md overflow-hidden font-mono font-black text-xs bg-white shadow-2xs">
+                    <span className="bg-blue-600 text-white px-1 py-0.2 text-[8px] font-bold">TR</span>
+                    <span className="px-1.5 py-0.2 tracking-wider text-slate-900">{v.dorsePlaka}</span>
                   </div>
 
                   {v.cekiciPlaka && (
-                    <div className="text-[10px] text-slate-500 font-medium">
-                      Çekici: <span className="font-bold text-slate-700">{v.cekiciPlaka}</span>
-                    </div>
+                    <span className="text-[10px] text-slate-500 font-mono">
+                      ({v.cekiciPlaka})
+                    </span>
                   )}
 
                   {v.isAcik && (
-                    <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-600 text-white text-[9px] font-black animate-pulse shadow-xs">
-                      <AlertTriangle className="w-2.5 h-2.5" /> ACİL ARAÇ
-                    </div>
+                    <span className="px-1.5 py-0.2 rounded-full bg-red-600 text-white text-[9px] font-black animate-pulse shadow-2xs">
+                      ACİL
+                    </span>
                   )}
                 </div>
 
-                {/* Durum Rozeti */}
-                <div className="flex flex-col items-end gap-1">
+                <div className="flex items-center gap-1 shrink-0">
+                  {rampName && (
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-purple-100 text-purple-800 border border-purple-200 flex items-center gap-0.5">
+                      <WarehouseIcon className="w-2.5 h-2.5" /> {rampName}
+                    </span>
+                  )}
                   <span
-                    className={`px-2.5 py-1 rounded-lg text-[10px] font-extrabold uppercase border ${
+                    className={`px-2 py-0.5 rounded-lg text-[10px] font-extrabold uppercase border ${
                       v.durum === 'BEKLEMEDE'
                         ? 'bg-amber-100 text-amber-900 border-amber-300'
                         : v.durum === 'EVRAK HAZIR'
@@ -285,69 +288,56 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                   >
                     {v.durum}
                   </span>
-
-                  {rampName && (
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-purple-100 text-purple-800 border border-purple-200 flex items-center gap-1">
-                      <WarehouseIcon className="w-3 h-3" /> {rampName}
-                    </span>
-                  )}
                 </div>
               </div>
 
-              {/* Müşteri & Yük Detayı */}
-              <div className="bg-slate-50 p-2.5 rounded-xl text-xs space-y-1.5 border border-slate-100">
-                <div className="flex justify-between items-center font-bold text-slate-800">
-                  <span className="truncate pr-2">{v.musteri}</span>
-                  <span className="text-[10px] text-blue-600 shrink-0 font-semibold">{v.nakliyeFirmasi || 'Nakliye Belirtilmedi'}</span>
+              {/* Müşteri, Nakliye & Şoför Kompakt Bilgisi */}
+              <div className="bg-slate-50 p-2 rounded-xl text-xs space-y-1 border border-slate-100">
+                <div className="flex justify-between items-center text-xs">
+                  <span className="font-bold text-slate-800 truncate pr-2">{v.musteri}</span>
+                  <span className="text-[10px] text-blue-600 shrink-0 font-medium">{v.nakliyeFirmasi || 'Nakliye Yok'}</span>
                 </div>
-                {v.konteynirNo && (
-                  <div className="text-[11px] text-slate-500 font-mono">
-                    Konteynır: <b>{v.konteynirNo}</b>
+
+                <div className="flex items-center justify-between text-[11px] pt-0.5 text-slate-600">
+                  <span className="truncate">
+                    <b>{v.soforAd}</b> {v.soforTel && <span className="text-slate-400">({v.soforTel})</span>}
+                  </span>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <a
+                      href={`tel:${cleanPhone(v.soforTel)}`}
+                      className="p-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition"
+                      title="Ara"
+                    >
+                      <Phone className="w-3 h-3" />
+                    </a>
+                    <a
+                      href={`https://wa.me/${cleanPhoneForWa(v.soforTel)}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="p-1 bg-emerald-100 hover:bg-emerald-200 text-emerald-800 rounded-lg border border-emerald-300 transition"
+                      title="WhatsApp"
+                    >
+                      <MessageSquare className="w-3 h-3 text-emerald-700" />
+                    </a>
                   </div>
-                )}
-                <div className="flex items-center justify-between text-[10px] text-slate-500 pt-1 border-t border-slate-200/60">
-                  <span>Depo: <b className="text-slate-700">{v.depoTuru}</b> ({v.islemTuru})</span>
-                  <span className="font-mono text-slate-500">Giriş: {v.girisTarihi}</span>
-                </div>
-              </div>
-
-              {/* Şoför & İletişim */}
-              <div className="flex items-center justify-between gap-2 pt-0.5">
-                <div className="min-w-0">
-                  <p className="text-[11px] font-bold text-slate-800 truncate">{v.soforAd}</p>
-                  <p className="text-[10px] text-slate-400 truncate">{v.soforTel}</p>
                 </div>
 
-                <div className="flex items-center gap-1.5 shrink-0">
-                  <a
-                    href={`tel:${cleanPhone(v.soforTel)}`}
-                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-1 shadow-xs active:scale-95"
-                    title="Şoförü Ara"
-                  >
-                    <Phone className="w-3.5 h-3.5" /> Ara
-                  </a>
-                  <a
-                    href={`https://wa.me/${cleanPhoneForWa(v.soforTel)}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="p-1.5 bg-emerald-100 hover:bg-emerald-200 text-emerald-800 rounded-xl transition flex items-center justify-center border border-emerald-300 active:scale-95"
-                    title="WhatsApp"
-                  >
-                    <MessageSquare className="w-4 h-4 text-emerald-700" />
-                  </a>
+                <div className="flex items-center justify-between text-[10px] text-slate-400 pt-0.5 border-t border-slate-200/50">
+                  <span>{v.depoTuru} • {v.islemTuru}{v.konteynirNo ? ` • Kont: ${v.konteynirNo}` : ''}</span>
+                  <span>Giriş: {v.girisTarihi}</span>
                 </div>
               </div>
 
               {/* Rampa Çağrısı Notu / Alarmı */}
               {v.isRampayaCagrildi && (
-                <div className="bg-amber-500 text-slate-900 font-black p-2 rounded-xl text-xs flex items-center justify-between shadow-xs animate-pulse">
-                  <span className="flex items-center gap-1.5">
-                    <Megaphone className="w-4 h-4" /> Rampaya Çağrıldı!
+                <div className="bg-amber-500 text-slate-900 font-black p-1.5 rounded-xl text-[11px] flex items-center justify-between shadow-2xs animate-pulse">
+                  <span className="flex items-center gap-1">
+                    <Megaphone className="w-3.5 h-3.5" /> Rampaya Çağrıldı!
                   </span>
                   {currentUser?.role === 'admin' && (
                     <button
                       onClick={() => onCancelRampCall(v)}
-                      className="px-2 py-0.5 bg-red-800 text-white text-[10px] font-bold rounded cursor-pointer"
+                      className="px-2 py-0.5 bg-red-800 text-white text-[9px] font-bold rounded cursor-pointer"
                     >
                       İptal
                     </button>
@@ -355,93 +345,90 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                 </div>
               )}
 
-              {/* Telefon Dokunmatik Aksiyon Butonları (İncele, Çıkış, Foto, Düzenle) */}
-              <div className="grid grid-cols-4 gap-1.5 pt-2 border-t border-slate-100">
-                {/* İncele Butonu */}
+              {/* 4 Eksenli Kompakt Aksiyon Butonları */}
+              <div className="grid grid-cols-4 gap-1 pt-1 border-t border-slate-100">
                 <button
                   onClick={() => onOpenDetailModal(v)}
-                  className="py-2 px-1 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition active:scale-95 cursor-pointer col-span-1 shadow-2xs"
-                  title="Araç Detaylarını ve Fotoğraflarını İncele"
+                  className="py-1.5 px-1 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-xl text-[11px] font-bold flex items-center justify-center gap-1 transition active:scale-95 cursor-pointer shadow-2xs"
+                  title="Detay İncele"
                 >
-                  <Eye className="w-3.5 h-3.5 text-blue-600" />
+                  <Eye className="w-3 h-3 text-blue-600" />
                   <span>İncele</span>
                 </button>
 
-                {/* Güvenlik İçin Doğrudan Çıkış Onayı */}
-                {currentUser?.role !== 'guest' ? (
-                  <button
-                    onClick={() => handleConfirmExit(v)}
-                    className="py-2 px-1 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition active:scale-95 cursor-pointer col-span-1"
-                    title="Aracın Sahadan Çıkışını Onayla"
-                  >
-                    <LogOut className="w-3.5 h-3.5" /> Çıkış Ver
-                  </button>
-                ) : <div className="col-span-1" />}
-
-                {/* Fotoğraf Görüntüle */}
                 <button
                   onClick={() => onOpenPhotoGallery(v)}
-                  className="py-2 px-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold flex items-center justify-center gap-1 transition active:scale-95 cursor-pointer col-span-1"
+                  className="py-1.5 px-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-[11px] font-semibold flex items-center justify-center gap-1 transition active:scale-95 cursor-pointer"
+                  title="Fotoğraflar"
                 >
-                  <Camera className="w-3.5 h-3.5 text-blue-600" />
+                  <Camera className="w-3 h-3 text-blue-600" />
                   <span>Foto ({v.fotograflar?.length || 0})</span>
                 </button>
 
-                {/* Düzenle Butonu */}
                 {currentUser?.role !== 'guest' ? (
                   <button
                     onClick={() => onOpenEditModal(v)}
-                    className="py-2 px-1 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition active:scale-95 cursor-pointer col-span-1"
+                    className="py-1.5 px-1 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-[11px] font-bold flex items-center justify-center gap-1 transition active:scale-95 cursor-pointer"
+                    title="Düzenle"
                   >
-                    <Edit3 className="w-3.5 h-3.5" /> Düzenle
+                    <Edit3 className="w-3 h-3" />
+                    <span>Düzenle</span>
                   </button>
-                ) : <div className="col-span-1" />}
+                ) : <div />}
+
+                {currentUser?.role !== 'guest' ? (
+                  <button
+                    onClick={() => handleConfirmExit(v)}
+                    className="py-1.5 px-1 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-xl text-[11px] font-bold flex items-center justify-center gap-1 transition active:scale-95 cursor-pointer"
+                    title="Çıkış Ver"
+                  >
+                    <LogOut className="w-3 h-3" />
+                    <span>Çıkış</span>
+                  </button>
+                ) : <div />}
               </div>
 
-              {/* Durum Değiştirici (Mobilde Dokunmatik Seçici) */}
+              {/* Durum & Rampa Seçimi: Yan Yana 2 Kolon Grid (Mobilde Az Yer Kaplar) */}
               {currentUser?.role !== 'guest' && (
-                <div className="pt-1">
-                  <select
-                    value={v.durum}
-                    onChange={(e) => onUpdateStatus(v, e.target.value as Vehicle['durum'])}
-                    className="w-full text-xs font-bold border border-slate-300 rounded-xl p-2 bg-slate-50 text-slate-800 outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="BEKLEMEDE">Durum: BEKLEMEDE</option>
-                    <option
-                      value="EVRAK HAZIR"
-                      disabled={currentUser?.role !== 'admin' && v.durum !== 'EVRAK HAZIR'}
+                <div className="space-y-1.5 pt-1">
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {/* Durum Dropdown */}
+                    <select
+                      value={v.durum}
+                      onChange={(e) => onUpdateStatus(v, e.target.value as Vehicle['durum'])}
+                      className="w-full text-[11px] font-bold border border-slate-300 rounded-xl p-1.5 bg-slate-50 text-slate-800 outline-none focus:ring-1 focus:ring-blue-500"
                     >
-                      Durum: EVRAK HAZIR {currentUser?.role !== 'admin' && v.durum !== 'EVRAK HAZIR' ? '(Sadece Admin)' : ''}
-                    </option>
-                    <option value="RAMPADA">Durum: RAMPADA</option>
-                    <option value="ÇIKIŞ YAPTI">Durum: ÇIKIŞ YAPTI</option>
-                  </select>
-                </div>
-              )}
+                      <option value="BEKLEMEDE">BEKLEMEDE</option>
+                      <option
+                        value="EVRAK HAZIR"
+                        disabled={currentUser?.role !== 'admin' && v.durum !== 'EVRAK HAZIR'}
+                      >
+                        EVRAK HAZIR {currentUser?.role !== 'admin' && v.durum !== 'EVRAK HAZIR' ? '(Admin)' : ''}
+                      </option>
+                      <option value="RAMPADA">RAMPADA</option>
+                      <option value="ÇIKIŞ YAPTI">ÇIKIŞ YAPTI</option>
+                    </select>
 
-              {/* Rampa Atama & Hızlı Rampa Ata (Araç Durumunun Hemen Altında) */}
-              {currentUser?.role !== 'guest' && (
-                <div className="pt-2 space-y-2 border-t border-slate-100">
-                  <div className="flex items-center gap-1.5">
-                    <div className="relative flex-1">
+                    {/* Rampa Dropdown */}
+                    <div className="flex items-center gap-1">
                       <select
                         value={v.rampaId ?? ''}
                         onChange={(e) => {
                           const val = e.target.value ? Number(e.target.value) : null;
                           if (val !== null && v.durum !== 'EVRAK HAZIR' && v.durum !== 'RAMPADA') {
-                            alert(`Rampa ataması yapılabilmesi için aracın durumunun 'EVRAK HAZIR' olması gerekmektedir.\n\nMevcut Durum: ${v.durum}\nLütfen önce evrak onayını tamamlayınız.`);
+                            alert(`Rampa ataması için durumun 'EVRAK HAZIR' olması gerekmektedir.\n\nMevcut Durum: ${v.durum}`);
                             return;
                           }
                           onAssignRamp(v, val);
                         }}
                         disabled={(v.durum !== 'EVRAK HAZIR' && v.durum !== 'RAMPADA')}
-                        className={`w-full text-xs font-bold border rounded-xl p-2 outline-none focus:ring-2 focus:ring-purple-500 shadow-xs ${
+                        className={`w-full text-[11px] font-bold border rounded-xl p-1.5 outline-none focus:ring-1 focus:ring-purple-500 ${
                           v.durum !== 'EVRAK HAZIR' && v.durum !== 'RAMPADA'
                             ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed'
                             : 'border-purple-300 bg-purple-50/70 text-purple-900'
                         }`}
                       >
-                        <option value="">Rampa Ata / Seç: {v.rampaId ? `(${getRampName(v.rampaId)})` : '(Seçilmedi)'}</option>
+                        <option value="">Rampa: {v.rampaId ? getRampName(v.rampaId) : 'Seçilmedi'}</option>
                         {ramps.map((r) => {
                           const isOccupiedByOther = vehicles.some(
                             (o) => o.rampaId === r.id && o.durum === 'RAMPADA' && o.id !== v.id
@@ -452,38 +439,35 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                               value={r.id}
                               disabled={isOccupiedByOther && r.durum === 'Dolu'}
                             >
-                              {r.ad} ({r.durum}){isOccupiedByOther ? ' - Dolu' : ''}
+                              {r.ad} ({r.durum}){isOccupiedByOther ? ' [Dolu]' : ''}
                             </option>
                           );
                         })}
                       </select>
+                      {v.rampaId && (
+                        <button
+                          type="button"
+                          onClick={() => onAssignRamp(v, null)}
+                          className="px-2 py-1.5 text-[10px] font-bold text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 rounded-xl shrink-0 cursor-pointer"
+                          title="Rampa Atamasını Kaldır"
+                        >
+                          X
+                        </button>
+                      )}
                     </div>
-                    {v.rampaId && (
-                      <button
-                        type="button"
-                        onClick={() => onAssignRamp(v, null)}
-                        className="px-2.5 py-2 text-[10px] font-bold text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 rounded-xl shrink-0 cursor-pointer transition active:scale-95"
-                        title="Rampa Atamasını Kaldır"
-                      >
-                        Kaldır
-                      </button>
-                    )}
                   </div>
 
-                  {/* Rampa Atama Düğmesinin Hemen Altında 'Hızlı Rampa Ata' Butonu */}
-                  <button
-                    type="button"
-                    onClick={() => handleQuickAssignRamp(v)}
-                    className={`w-full py-2 px-3 font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 transition active:scale-98 cursor-pointer ${
-                      v.durum === 'EVRAK HAZIR'
-                        ? 'bg-linear-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white shadow-md shadow-purple-500/20'
-                        : 'bg-slate-100 hover:bg-slate-200 text-slate-500 border border-slate-200'
-                    }`}
-                    title={v.durum === 'EVRAK HAZIR' ? 'Boş bir rampaya hızlı ata' : 'Rampa ataması için durum EVRAK HAZIR olmalıdır'}
-                  >
-                    <Zap className={`w-3.5 h-3.5 ${v.durum === 'EVRAK HAZIR' ? 'text-amber-300 fill-amber-300' : 'text-slate-400'}`} />
-                    <span>Hızlı Rampa Ata {v.durum !== 'EVRAK HAZIR' ? '(Önce Evrak Hazır Olmalı)' : ''}</span>
-                  </button>
+                  {/* EVRAK HAZIR ise Hızlı Rampa Ata Butonu */}
+                  {v.durum === 'EVRAK HAZIR' && !v.rampaId && (
+                    <button
+                      type="button"
+                      onClick={() => handleQuickAssignRamp(v)}
+                      className="w-full py-1.5 px-2 font-bold rounded-xl text-[11px] flex items-center justify-center gap-1 transition active:scale-98 cursor-pointer bg-linear-to-r from-purple-600 to-indigo-600 text-white shadow-xs"
+                    >
+                      <Zap className="w-3 h-3 text-amber-300 fill-amber-300" />
+                      <span>Boş Rampaya Hızlı Ata</span>
+                    </button>
+                  )}
                 </div>
               )}
             </div>

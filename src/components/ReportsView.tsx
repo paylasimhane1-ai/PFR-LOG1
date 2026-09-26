@@ -177,8 +177,8 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
   return (
     <div className="space-y-4">
       {/* Üst Filtre ve Dışa Aktarma Başlığı */}
-      <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+      <div className="bg-white p-3.5 sm:p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3.5">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
           <div>
             <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2">
               <BarChart3 className="w-4 h-4 text-blue-600" />
@@ -189,12 +189,12 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
             {/* Görünüm Geçişi */}
-            <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs">
+            <div className="flex w-full sm:w-auto bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs">
               <button
                 onClick={() => setActiveTab('both')}
-                className={`px-3 py-1 rounded-lg font-semibold transition cursor-pointer ${
+                className={`flex-1 sm:flex-none px-3 py-1 rounded-lg font-semibold transition cursor-pointer text-center ${
                   activeTab === 'both' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
@@ -202,15 +202,15 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
               </button>
               <button
                 onClick={() => setActiveTab('charts')}
-                className={`px-3 py-1 rounded-lg font-semibold transition cursor-pointer flex items-center gap-1 ${
+                className={`flex-1 sm:flex-none px-3 py-1 rounded-lg font-semibold transition cursor-pointer flex items-center justify-center gap-1 ${
                   activeTab === 'charts' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
-                <PieIcon className="w-3.5 h-3.5" /> Grafikler (KPI)
+                <PieIcon className="w-3.5 h-3.5" /> Grafikler
               </button>
               <button
                 onClick={() => setActiveTab('table')}
-                className={`px-3 py-1 rounded-lg font-semibold transition cursor-pointer flex items-center gap-1 ${
+                className={`flex-1 sm:flex-none px-3 py-1 rounded-lg font-semibold transition cursor-pointer flex items-center justify-center gap-1 ${
                   activeTab === 'table' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
@@ -218,58 +218,64 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
               </button>
             </div>
 
-            <button
-              onClick={() => onExportCsv(sortedReports)}
-              className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl transition flex items-center gap-1.5 shadow-md shadow-emerald-600/20 cursor-pointer"
-            >
-              <FileSpreadsheet className="w-4 h-4" /> Excel (.CSV)
-            </button>
-            <button
-              onClick={handlePrint}
-              className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold rounded-xl transition flex items-center gap-1.5 cursor-pointer"
-            >
-              <Printer className="w-4 h-4" /> Yazdır / PDF
-            </button>
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <button
+                onClick={() => onExportCsv(sortedReports)}
+                className="flex-1 sm:flex-none px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl transition flex items-center justify-center gap-1.5 shadow-md shadow-emerald-600/20 cursor-pointer"
+              >
+                <FileSpreadsheet className="w-4 h-4" /> Excel (.CSV)
+              </button>
+              <button
+                onClick={handlePrint}
+                className="flex-1 sm:flex-none px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <Printer className="w-4 h-4" /> Yazdır / PDF
+              </button>
+            </div>
           </div>
         </div>
 
         {/* Filtre Barı */}
-        <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3 text-xs">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="font-bold text-slate-600">Tarih Aralığı:</span>
-            <input
-              type="date"
-              value={filters.startDate}
-              onChange={(e) => setFilters({ ...filters, startDate: e.target.value })}
-              className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:ring-2 focus:ring-blue-500"
-            />
-            <span className="text-slate-400">-</span>
-            <input
-              type="date"
-              value={filters.endDate}
-              onChange={(e) => setFilters({ ...filters, endDate: e.target.value })}
-              className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:ring-2 focus:ring-blue-500"
-            />
+        <div className="pt-2.5 border-t border-slate-100 space-y-2.5 md:space-y-0 md:flex md:items-center md:justify-between md:gap-3 text-xs">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2 text-xs">
+            <div className="flex items-center justify-between sm:justify-start gap-1.5">
+              <span className="font-bold text-slate-700 text-xs shrink-0">Tarih:</span>
+              {(filters.startDate || filters.endDate) && (
+                <button
+                  onClick={handleClearFilters}
+                  className="px-2 py-0.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-[11px] font-semibold transition flex items-center gap-1 cursor-pointer"
+                >
+                  <FilterX className="w-3 h-3" /> Sıfırla
+                </button>
+              )}
+            </div>
 
-            <button
-              onClick={handleClearFilters}
-              className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg font-semibold transition flex items-center gap-1 cursor-pointer"
-            >
-              <FilterX className="w-3.5 h-3.5" /> Filtreleri Temizle
-            </button>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <div className="relative w-64">
-              <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-400" />
+            <div className="grid grid-cols-2 gap-1.5 sm:flex sm:items-center sm:gap-1.5 w-full sm:w-auto">
               <input
-                type="text"
-                value={filters.search}
-                onChange={(e) => setFilters({ ...filters, search: e.target.value })}
-                placeholder="Genel Arama (Plaka, Müşteri)..."
-                className="w-full pl-9 pr-3 py-1.5 border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-blue-500"
+                type="date"
+                value={filters.startDate}
+                onChange={(e) => setFilters({ ...filters, startDate: e.target.value })}
+                className="w-full sm:w-auto border border-slate-200 rounded-lg px-2 py-1.5 text-xs outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 md:bg-white"
+              />
+              <span className="hidden sm:inline text-slate-400">-</span>
+              <input
+                type="date"
+                value={filters.endDate}
+                onChange={(e) => setFilters({ ...filters, endDate: e.target.value })}
+                className="w-full sm:w-auto border border-slate-200 rounded-lg px-2 py-1.5 text-xs outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 md:bg-white"
               />
             </div>
+          </div>
+
+          <div className="relative w-full md:w-64">
+            <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-400" />
+            <input
+              type="text"
+              value={filters.search}
+              onChange={(e) => setFilters({ ...filters, search: e.target.value })}
+              placeholder="Genel Arama (Plaka, Müşteri)..."
+              className="w-full pl-9 pr-3 py-1.5 border border-slate-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 md:bg-white"
+            />
           </div>
         </div>
       </div>

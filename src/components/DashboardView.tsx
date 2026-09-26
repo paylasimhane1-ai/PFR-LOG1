@@ -34,7 +34,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     .slice(0, 10);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-[2560px] mx-auto w-full">
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3 md:gap-4">
         <div
           onClick={() => onNavigateTab('beklenen')}

@@ -1173,18 +1173,46 @@ export const DetailViewModal: React.FC<DetailViewModalProps> = ({
           {/* Fotoğraflar (Varsa) */}
           {vehicle.fotograflar && vehicle.fotograflar.length > 0 && (
             <div>
-              <h4 className="font-bold text-slate-700 mb-1.5 flex items-center gap-1.5 text-[11px]">
-                <Camera className="w-3.5 h-3.5 text-blue-600" /> Kayıtlı Fotoğraflar ({vehicle.fotograflar.length})
-              </h4>
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="font-bold text-slate-700 flex items-center gap-1.5 text-[11px]">
+                  <Camera className="w-3.5 h-3.5 text-blue-600" /> Kayıtlı Fotoğraflar ({vehicle.fotograflar.length})
+                </h4>
+                {onShareWhatsApp && (
+                  <button
+                    type="button"
+                    onClick={() => onShareWhatsApp(vehicle)}
+                    className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[10px] font-bold flex items-center gap-1.5 transition cursor-pointer shadow-xs active:scale-95"
+                    title="Fotoğrafları araç bilgileri açıklamasıyla WhatsApp'ta paylaş"
+                  >
+                    <MessageSquare className="w-3 h-3" />
+                    <span>Fotoğrafı Açıklamasıyla Paylaş</span>
+                  </button>
+                )}
+              </div>
               <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
                 {vehicle.fotograflar.map((img, idx) => (
-                  <img
-                    key={idx}
-                    src={img}
-                    alt={`Fotoğraf ${idx + 1}`}
-                    onClick={() => onOpenPhotoGallery(vehicle)}
-                    className="w-full h-20 object-cover rounded-lg border border-slate-200 hover:scale-105 transition cursor-pointer shadow-2xs"
-                  />
+                  <div key={idx} className="relative group">
+                    <img
+                      src={img}
+                      alt={`Fotoğraf ${idx + 1}`}
+                      onClick={() => onOpenPhotoGallery(vehicle)}
+                      className="w-full h-20 object-cover rounded-lg border border-slate-200 hover:scale-102 transition cursor-pointer shadow-2xs"
+                    />
+                    {onShareWhatsApp && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onShareWhatsApp(vehicle);
+                        }}
+                        title="Bu fotoğrafı açıklamasıyla WhatsApp'ta paylaş"
+                        className="absolute bottom-1 right-1 px-1.5 py-0.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded opacity-0 group-hover:opacity-100 transition shadow cursor-pointer text-[9px] flex items-center gap-0.5"
+                      >
+                        <MessageSquare className="w-2.5 h-2.5" />
+                        <span>Paylaş</span>
+                      </button>
+                    )}
+                  </div>
                 ))}
               </div>
             </div>
@@ -1964,10 +1992,12 @@ export const PhotoGalleryModal: React.FC<PhotoGalleryModalProps> = ({ vehicle, o
               <button
                 type="button"
                 onClick={() => onShareWhatsApp(vehicle)}
-                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer shadow-sm"
+                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer shadow-sm active:scale-95"
+                title="Fotoğrafı araç bilgisi açıklamasıyla WhatsApp'ta paylaş"
               >
                 <MessageSquare className="w-3.5 h-3.5" />
-                <span>WhatsApp</span>
+                <span className="hidden sm:inline">Fotoğrafı Açıklamasıyla Paylaş</span>
+                <span className="sm:hidden">Paylaş</span>
               </button>
             )}
             <span className="text-xs font-mono bg-slate-800 px-3 py-1 rounded-full text-slate-300">
@@ -2009,6 +2039,23 @@ export const PhotoGalleryModal: React.FC<PhotoGalleryModalProps> = ({ vehicle, o
             <div className="text-slate-500 text-xs py-12">Bu araç için yüklenmiş fotoğraf bulunmamaktadır.</div>
           )}
         </div>
+
+        {photos.length > 0 && onShareWhatsApp && (
+          <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-slate-800/90 rounded-2xl border border-slate-700/80 mb-3">
+            <div className="flex items-center gap-2 text-xs text-slate-300">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+              <span className="text-[11px] leading-tight">Araç bilgileri (plaka, müşteri, işlem türü) doğrudan fotoğrafın altına açıklama (caption) olarak eklenir.</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => onShareWhatsApp(vehicle)}
+              className="w-full sm:w-auto px-4 py-2 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition cursor-pointer shadow-lg shadow-emerald-950/40"
+            >
+              <MessageSquare className="w-4 h-4" />
+              <span>Fotoğrafı Açıklamasıyla Paylaş (WhatsApp)</span>
+            </button>
+          </div>
+        )}
 
         {photos.length > 1 && (
           <div className="flex items-center justify-center gap-2 overflow-x-auto pt-2 border-t border-slate-800">

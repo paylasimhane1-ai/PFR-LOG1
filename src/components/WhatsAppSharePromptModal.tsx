@@ -5,9 +5,23 @@ import {
   getWhatsAppDirectShareUrl,
   FormatVehicleMessageOptions,
   shareViaWebShareWithFiles,
-  convertPhotosToFiles
+  convertPhotosToFiles,
+  copyPhotoToClipboard
 } from '../utils/whatsapp';
-import { MessageSquare, ExternalLink, Copy, Check, X, ArrowRight, ShieldCheck, Paperclip, Download, Edit3, RotateCcw } from 'lucide-react';
+import {
+  MessageSquare,
+  ExternalLink,
+  Copy,
+  Check,
+  X,
+  ArrowRight,
+  ShieldCheck,
+  Paperclip,
+  Download,
+  Edit3,
+  RotateCcw,
+  Image as ImageIcon
+} from 'lucide-react';
 
 interface WhatsAppSharePromptModalProps {
   isOpen: boolean;
@@ -25,6 +39,8 @@ export const WhatsAppSharePromptModal: React.FC<WhatsAppSharePromptModalProps> =
   apiMessage
 }) => {
   const [copied, setCopied] = useState(false);
+  const [photoCopied, setPhotoCopied] = useState(false);
+  const [pasteNotice, setPasteNotice] = useState(false);
   const [isSharingFiles, setIsSharingFiles] = useState(false);
   const [editedText, setEditedText] = useState('');
 
@@ -43,11 +59,21 @@ export const WhatsAppSharePromptModal: React.FC<WhatsAppSharePromptModalProps> =
   const shareUrl = getWhatsAppDirectShareUrl(activeMessageText);
   const photos = vehicle.fotograflar || [];
 
-  const handleCopy = () => {
+  const handleCopyText = () => {
     navigator.clipboard.writeText(activeMessageText).then(() => {
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      setTimeout(() => setCopied(false), 2500);
     });
+  };
+
+  const handleCopyPhoto = async () => {
+    if (photos.length > 0) {
+      const ok = await copyPhotoToClipboard(photos[0]);
+      if (ok) {
+        setPhotoCopied(true);
+        setTimeout(() => setPhotoCopied(false), 3000);
+      }
+    }
   };
 
   const handleOpenWhatsAppText = () => {
@@ -58,6 +84,7 @@ export const WhatsAppSharePromptModal: React.FC<WhatsAppSharePromptModalProps> =
     setIsSharingFiles(true);
     try {
       if (photos.length > 0) {
+        // 1. Mobil veya Web Share destekleyen tarayıcı
         const res = await shareViaWebShareWithFiles({
           title: `${vehicle.dorsePlaka} Araç Bilgisi`,
           text: activeMessageText,
@@ -69,11 +96,27 @@ export const WhatsAppSharePromptModal: React.FC<WhatsAppSharePromptModalProps> =
           onClose();
           return;
         }
+
+        // 2. Web Share desteklenmiyorsa (Masaüstü Web):
+        // Fotoğrafı ve açıklamayı panoya kopyala, fotoğrafı indir ve WhatsApp Web'i aç
+        const ok = await copyPhotoToClipboard(photos[0]);
+        if (ok) setPhotoCopied(true);
+        try {
+          await navigator.clipboard.writeText(activeMessageText);
+          setCopied(true);
+        } catch {
+          // ignore
+        }
+        setPasteNotice(true);
+        await handleDownloadPhotos();
+
+        // WhatsApp Web'i aç
+        window.open('https://web.whatsapp.com', '_blank');
+      } else {
+        window.open(shareUrl, '_blank');
       }
-      // Desteklenmiyorsa standart link ile aç
-      window.open(shareUrl, '_blank');
     } catch (err) {
-      console.warn('Dosya eki paylaşımı başarısız:', err);
+      console.warn('Dosya eki paylaşımı:', err);
       window.open(shareUrl, '_blank');
     } finally {
       setIsSharingFiles(false);
@@ -203,9 +246,21 @@ export const WhatsAppSharePromptModal: React.FC<WhatsAppSharePromptModalProps> =
                   </div>
                 ))}
               </div>
-              <p className="text-[10px] text-emerald-800">
-                ✅ Fotoğraflar bağlantı olarak değil, doğrudan <strong>dosya/medya eki</strong> olarak iletilir.
-              </p>
+              <div className="bg-white/90 p-2.5 rounded-xl border border-emerald-300 text-[11px] text-emerald-900 space-y-1 shadow-2xs">
+                <div className="flex items-center gap-1.5 text-emerald-800 font-bold text-xs">
+                  <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                  <span>Fotoğraf Açıklaması (Caption) Olarak Gönderilir</span>
+                </div>
+                <p className="text-[10px] text-slate-600 leading-relaxed font-medium">
+                  Araç bilgileri ayrı bir metin mesajı olarak iletilmez; doğrudan seçilen fotoğrafın altına <strong>açıklama (caption)</strong> olarak eklenir.
+                </p>
+                {pasteNotice && (
+                  <div className="mt-1.5 p-2 bg-emerald-100 border border-emerald-400 rounded-lg text-emerald-900 font-bold text-[10px] flex items-center gap-1.5 animate-pulse">
+                    <Check className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
+                    <span>Fotoğraf ve açıklama hazırlandı! Açılan WhatsApp Web ekranında Ctrl+V ile yapıştırarak fotoğrafı açıklamasıyla birlikte gönderebilirsiniz.</span>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
@@ -230,7 +285,7 @@ export const WhatsAppSharePromptModal: React.FC<WhatsAppSharePromptModalProps> =
                 )}
                 <button
                   type="button"
-                  onClick={handleCopy}
+                  onClick={handleCopyText}
                   className="text-[11px] text-emerald-600 hover:text-emerald-700 font-semibold flex items-center gap-1 cursor-pointer"
                 >
                   {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
@@ -267,12 +322,24 @@ export const WhatsAppSharePromptModal: React.FC<WhatsAppSharePromptModalProps> =
           <div className="w-full sm:w-auto flex flex-wrap items-center gap-2 order-1 sm:order-2 justify-end">
             <button
               type="button"
-              onClick={handleCopy}
+              onClick={handleCopyText}
               className="px-3 py-2.5 rounded-xl border border-slate-300 text-slate-700 bg-white hover:bg-slate-50 font-bold text-xs flex items-center justify-center gap-1.5 transition cursor-pointer shadow-xs"
             >
               {copied ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4 text-slate-600" />}
-              <span>{copied ? 'Kopyalandı' : 'Kopyala'}</span>
+              <span>{copied ? 'Kopyalandı' : 'Açıklamayı Kopyala'}</span>
             </button>
+
+            {photos.length > 0 && (
+              <button
+                type="button"
+                onClick={handleCopyPhoto}
+                className="px-3 py-2.5 rounded-xl border border-blue-200 text-blue-800 bg-blue-50 hover:bg-blue-100 font-bold text-xs flex items-center justify-center gap-1.5 transition cursor-pointer shadow-xs"
+                title="Fotoğrafı panoya kopyala (Ctrl+V ile yapıştırmak için)"
+              >
+                {photoCopied ? <Check className="w-4 h-4 text-blue-600" /> : <ImageIcon className="w-4 h-4 text-blue-600" />}
+                <span>{photoCopied ? 'Fotoğraf Kopyalandı' : 'Fotoğrafı Kopyala'}</span>
+              </button>
+            )}
 
             {photos.length > 0 ? (
               <button
@@ -282,7 +349,7 @@ export const WhatsAppSharePromptModal: React.FC<WhatsAppSharePromptModalProps> =
                 className="flex-1 sm:flex-none px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-black text-xs flex items-center justify-center gap-2 transition shadow-lg shadow-emerald-600/30 cursor-pointer disabled:opacity-50"
               >
                 <Paperclip className="w-4 h-4" />
-                <span>{isSharingFiles ? 'Hazırlanıyor...' : 'Fotoğrafları Ek Olarak Paylaş'}</span>
+                <span>{isSharingFiles ? 'Hazırlanıyor...' : 'Fotoğrafı Açıklamasıyla Paylaş'}</span>
               </button>
             ) : (
               <button

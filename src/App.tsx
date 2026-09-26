@@ -42,11 +42,14 @@ import { PushNotificationSettingsModal } from './components/PushNotificationSett
 import { WhatsAppSharePromptModal } from './components/WhatsAppSharePromptModal';
 import { InAppNotificationBanner, InAppAlert } from './components/InAppNotificationBanner';
 import { PushNotificationPromptBanner } from './components/PushNotificationPromptBanner';
+import { PerformanceIcon } from './components/PerformanceLogo';
 import {
   loadWhatsAppConfig,
   saveWhatsAppConfig,
   sendVehicleToWhatsAppGroup,
   getWhatsAppDirectShareUrl,
+  formatVehicleWhatsAppMessage,
+  shareViaWebShareWithFiles,
   FormatVehicleMessageOptions
 } from './utils/whatsapp';
 import {
@@ -128,7 +131,9 @@ import {
   deleteExpectedVehicleFromFirestore,
   saveNotificationToFirestore,
   deleteNotificationFromFirestore,
+  markNotificationAsReadInFirestore,
   saveChatMessageToFirestore,
+  markChatMessageAsReadInFirestore,
   saveWarehouseToFirestore,
   subscribeToWhatsAppSettings,
   clearAllCustomersFromFirestore
@@ -587,9 +592,52 @@ export default function App() {
     return list.filter((e) => e.durum === 'BEKLENİYOR').length;
   }, [expectedVehicles, selectedDepoId, activeDepoIds]);
 
+  // Kullanıcı bazlı okunmamış bildirim sayısı (giriş yapan kullanıcının henüz okumadığı bildirimler)
   const pendingNotificationsCount = useMemo(() => {
-    return notifications.filter((n) => n.status === 'BEKLİYOR').length;
-  }, [notifications]);
+    if (!currentUser) return 0;
+    const currentUsername = currentUser.username;
+    return notifications.filter((n) => {
+      if (n.status !== 'BEKLİYOR') return false;
+      const readBy = Array.isArray(n.readBy) ? n.readBy : [];
+      return !readBy.includes(currentUsername);
+    }).length;
+  }, [notifications, currentUser]);
+
+  // Kullanıcı bazlı okunmamış sohbet mesajı sayısı (giriş yapan kullanıcının henüz okumadığı mesajlar)
+  const unreadChatCount = useMemo(() => {
+    if (!currentUser) return 0;
+    const currentUsername = currentUser.username;
+    return chatMessages.filter((m) => {
+      if (m.sender === currentUsername) return false;
+      const readBy = Array.isArray(m.readBy) ? m.readBy : [];
+      return !readBy.includes(currentUsername);
+    }).length;
+  }, [chatMessages, currentUser]);
+
+  const handleMarkNotificationsAsReadForMe = useCallback(() => {
+    if (!currentUser) return;
+    const currentUsername = currentUser.username;
+    const unread = notifications.filter(
+      (n) => n.status === 'BEKLİYOR' && !(Array.isArray(n.readBy) && n.readBy.includes(currentUsername))
+    );
+    if (unread.length === 0) return;
+
+    setNotifications((prev) =>
+      prev.map((n) => {
+        if (n.status === 'BEKLİYOR') {
+          const currentReadBy = Array.isArray(n.readBy) ? n.readBy : [];
+          if (!currentReadBy.includes(currentUsername)) {
+            return { ...n, readBy: [...currentReadBy, currentUsername] };
+          }
+        }
+        return n;
+      })
+    );
+
+    unread.forEach((n) => {
+      markNotificationAsReadInFirestore(n.id, currentUsername);
+    });
+  }, [currentUser, notifications]);
 
   const driverHistory = useMemo(() => {
     const map = new Map<string, { ad: string; tel: string }>();
@@ -913,20 +961,52 @@ export default function App() {
       warehouseName
     };
     setWhatsappShareOptions(shareOpts);
+
+    const hasPhotos = vehicle.fotograflar && vehicle.fotograflar.length > 0;
+    const isApiProvider =
+      whatsappConfig.enabled &&
+      ['greenapi', 'ultramsg', 'webhook', 'twilio'].includes(whatsappConfig.provider);
+
+    // 1. Durum: Green API / UltraMsg / Webhook otomatik bot entegrasyonu aktifse doğrudan API'ye fotoğrafla birlikte ilet
+    if (isApiProvider) {
+      const res = await sendVehicleToWhatsAppGroup(shareOpts, whatsappConfig);
+      setWhatsappApiStatus(res);
+      if (res.success) {
+        showToast(res.message || 'Fotoğraf ve araç bilgisi WhatsApp grubuna iletildi.', 'success');
+        return;
+      } else {
+        showToast(res.message || 'WhatsApp API gönderimi başarısız oldu.', 'warning');
+        setShowWhatsAppSharePrompt(true);
+        return;
+      }
+    }
+
+    // 2. Durum: Fotoğraf varsa ve tarayıcı Web Share dosya paylaşımını destekliyorsa (Mobil / Tablet / Destekleyen Masaüstü)
+    // Doğrudan fotoğrafı ve altına araç bilgisini açıklama (caption) olarak WhatsApp'a aktarır!
+    if (hasPhotos && typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+      try {
+        const textMessage = formatVehicleWhatsAppMessage(shareOpts);
+        const shareResult = await shareViaWebShareWithFiles({
+          title: `${vehicle.dorsePlaka} - ${vehicle.musteri}`,
+          text: textMessage, // Bu açıklama WhatsApp'ta fotoğrafın altına doğrudan eklenir!
+          photos: vehicle.fotograflar,
+          vehiclePlate: vehicle.dorsePlaka
+        });
+
+        if (shareResult.shared) {
+          showToast('Fotoğraf açıklamasıyla birlikte WhatsApp\'a aktarıldı.', 'success');
+          return;
+        }
+      } catch (err: any) {
+        if (err.name !== 'AbortError') {
+          console.warn('Web Share hatası:', err);
+        }
+      }
+    }
+
+    // 3. Durum: Web Share desteklenmiyorsa (Masaüstü Web) veya fotoğraf yoksa
+    // Kullanıcıya düzenleme, fotoğrafı panoya kopyalama ve doğrudan WhatsApp'a aktarma penceresini aç
     setShowWhatsAppSharePrompt(true);
-
-    const res = await sendVehicleToWhatsAppGroup(shareOpts, whatsappConfig);
-    setWhatsappApiStatus(res);
-
-    if (res.success) {
-      showToast(res.message || 'Araç bilgileri WhatsApp grubuna iletildi.', 'success');
-    } else {
-      showToast(res.message || 'WhatsApp gönderimi tamamlanamadı.', 'warning');
-    }
-
-    if (res.urlFallback && (whatsappConfig.provider === 'sharelink' || !whatsappConfig.enabled)) {
-      window.open(res.urlFallback, '_blank');
-    }
   };
 
   const toggleSound = () => {
@@ -2364,11 +2444,37 @@ export default function App() {
       text: msgText,
       time: new Date().toLocaleTimeString('tr-TR').slice(0, 5),
       replyTo: replyTo || null,
-      mentions: mentions && mentions.length > 0 ? mentions : []
+      mentions: mentions && mentions.length > 0 ? mentions : [],
+      readBy: [currentUser.username],
+      timestamp: Date.now()
     };
     setChatMessages((prev) => [...prev, newMsg]);
     saveChatMessageToFirestore(newMsg);
   };
+
+  const handleMarkChatMessagesAsRead = useCallback((messageIds: number[]) => {
+    if (!currentUser || messageIds.length === 0) return;
+    const currentUsername = currentUser.username;
+
+    setChatMessages((prev) => {
+      let changed = false;
+      const next = prev.map((msg) => {
+        if (messageIds.includes(msg.id)) {
+          const currentReadBy = Array.isArray(msg.readBy) ? msg.readBy : [];
+          if (!currentReadBy.includes(currentUsername)) {
+            changed = true;
+            return { ...msg, readBy: [...currentReadBy, currentUsername] };
+          }
+        }
+        return msg;
+      });
+      return changed ? next : prev;
+    });
+
+    messageIds.forEach((id) => {
+      markChatMessageAsReadInFirestore(id, currentUsername);
+    });
+  }, [currentUser]);
 
   const handleExportCsv = (list: Vehicle[]) => {
     exportVehiclesToCsv(list, getWarehouseNameById, getRampName);
@@ -2412,20 +2518,25 @@ export default function App() {
   };
 
   return (
-    <div className="flex h-screen overflow-hidden bg-slate-100 pb-16 md:pb-0 font-sans text-slate-800">
+    <div className="flex h-[100dvh] overflow-hidden bg-slate-100 pb-[calc(4rem+env(safe-area-inset-bottom))] md:pb-0 font-sans text-slate-800">
       {/* ================= Sol Sidebar Menu (Masaüstü) ================= */}
       <aside className="hidden md:flex w-64 bg-slate-900 text-slate-300 flex-col justify-between shrink-0 shadow-xl no-print">
         <div>
-          <div className="p-5 border-b border-slate-800 flex items-center gap-3">
-            <div className="w-10 h-10 bg-blue-600 text-white rounded-xl flex items-center justify-center font-bold text-lg shadow-md shadow-blue-500/20">
-              <Truck className="w-5 h-5" />
-            </div>
+          <div className="p-4 sm:p-5 border-b border-slate-800 flex items-center gap-3">
+            <PerformanceIcon className="w-10 h-10 shrink-0 drop-shadow-md" />
             <div className="truncate">
-              <h1 className="font-bold text-white text-sm leading-tight">YMS PANEL</h1>
-              <span className="text-[10px] text-blue-400 font-semibold block truncate max-w-[140px]">
-                <WarehouseIcon className="w-3 h-3 inline mr-1" />
-                {currentWarehouseName}
-              </span>
+              <h1 className="font-black text-white text-base tracking-wider leading-tight uppercase font-sans">
+                PERFORMANCE
+              </h1>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <span className="text-[10px] text-fuchsia-300 font-black tracking-widest uppercase">
+                  PFR NOVA
+                </span>
+                <span className="text-slate-600 text-[10px]">•</span>
+                <span className="text-[10px] text-blue-400 font-semibold truncate max-w-[90px]">
+                  {currentWarehouseName}
+                </span>
+              </div>
             </div>
           </div>
 
@@ -2579,7 +2690,7 @@ export default function App() {
       </aside>
 
       {/* ================= Mobil Alt Navigasyon Barı ================= */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-slate-900 text-slate-400 border-t border-slate-800 flex justify-around items-center h-16 z-40 shadow-2xl no-print px-2">
+      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-slate-900 text-slate-400 border-t border-slate-800 flex justify-around items-center h-[calc(4rem+env(safe-area-inset-bottom))] pb-[env(safe-area-inset-bottom)] z-40 shadow-2xl no-print px-2">
         {currentUser.role === 'security' ? (
           <>
             <button
@@ -2751,7 +2862,13 @@ export default function App() {
             {/* RAMPAYA ÇAĞRILAN ARAÇLAR BİLDİRİM BUTONU (Mobil ve Masaüstü Optimize) */}
             <div className="relative">
               <button
-                onClick={() => setShowNotificationMenu(!showNotificationMenu)}
+                onClick={() => {
+                  const nextState = !showNotificationMenu;
+                  setShowNotificationMenu(nextState);
+                  if (nextState) {
+                    handleMarkNotificationsAsReadForMe();
+                  }
+                }}
                 className="px-2.5 py-1.5 md:py-2 bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-200 text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer relative shrink-0 h-9"
                 title="Rampaya Çağrılan Araçlar"
               >
@@ -3061,6 +3178,7 @@ export default function App() {
         onSendMessage={handleSendChatMessage}
         onDeleteMessage={handleDeleteChatMessage}
         onClearMessages={handleClearChatMessages}
+        onMarkMessagesAsRead={handleMarkChatMessagesAsRead}
       />
 
       {/* ================= MODALLAR ================= */}
@@ -3327,6 +3445,26 @@ export default function App() {
                     <span>Kullanıcı & İzin Yönetimi</span>
                   </span>
                   <span className="text-[10px] bg-blue-600 text-white px-2 py-0.5 rounded-full font-semibold">Kutucuklu İzinler</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    setShowMobileAdminMenu(false);
+                    window.dispatchEvent(new CustomEvent('open-chat-widget'));
+                  }}
+                  className="w-full p-3.5 bg-blue-50 hover:bg-blue-100 text-blue-900 rounded-2xl font-bold text-xs flex items-center justify-between border border-blue-200 transition cursor-pointer"
+                >
+                  <span className="flex items-center gap-2.5">
+                    <MessageSquare className="w-4 h-4 text-blue-600" />
+                    <span>Saha & Güvenlik Sohbeti</span>
+                  </span>
+                  {unreadChatCount > 0 ? (
+                    <span className="text-[10px] bg-red-600 text-white px-2 py-0.5 rounded-full font-black animate-bounce">
+                      {unreadChatCount} Okunmamış
+                    </span>
+                  ) : (
+                    <span className="text-[10px] bg-blue-600 text-white px-2 py-0.5 rounded-full font-semibold">Aç</span>
+                  )}
                 </button>
 
                 <button

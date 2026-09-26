@@ -5,6 +5,9 @@ import {
   doc,
   setDoc,
   deleteDoc,
+  updateDoc,
+  getDoc,
+  arrayUnion,
   onSnapshot,
   getDocs,
   getDocFromServer,
@@ -349,12 +352,70 @@ export async function deleteNotificationFromFirestore(id: number): Promise<void>
   }
 }
 
+/**
+ * Kullanıcı bazlı bildirim okundu kaydı (readBy listesine kullanıcı ekler)
+ */
+export async function markNotificationAsReadInFirestore(id: number, username: string): Promise<void> {
+  if (!username) return;
+  try {
+    const docRef = doc(db, 'notifications', String(id));
+    await updateDoc(docRef, {
+      readBy: arrayUnion(username)
+    });
+  } catch (err) {
+    try {
+      const snap = await getDoc(doc(db, 'notifications', String(id)));
+      if (snap.exists()) {
+        const data = snap.data();
+        const currentReadBy = Array.isArray(data.readBy) ? data.readBy : [];
+        if (!currentReadBy.includes(username)) {
+          await setDoc(doc(db, 'notifications', String(id)), {
+            ...data,
+            readBy: [...currentReadBy, username]
+          }, { merge: true });
+        }
+      }
+    } catch (fallbackErr) {
+      console.warn('markNotificationAsReadInFirestore fallback error:', fallbackErr);
+    }
+  }
+}
+
 export async function saveChatMessageToFirestore(message: ChatMessage): Promise<void> {
   try {
     const cleaned = removeUndefinedFields(message);
     await setDoc(doc(db, 'chatMessages', String(message.id)), cleaned);
   } catch (err) {
     console.error('saveChatMessageToFirestore error:', err);
+  }
+}
+
+/**
+ * Kullanıcı bazlı mesaj okundu kaydı (readBy listesine kullanıcı ekler)
+ */
+export async function markChatMessageAsReadInFirestore(id: number, username: string): Promise<void> {
+  if (!username) return;
+  try {
+    const docRef = doc(db, 'chatMessages', String(id));
+    await updateDoc(docRef, {
+      readBy: arrayUnion(username)
+    });
+  } catch (err) {
+    try {
+      const snap = await getDoc(doc(db, 'chatMessages', String(id)));
+      if (snap.exists()) {
+        const data = snap.data();
+        const currentReadBy = Array.isArray(data.readBy) ? data.readBy : [];
+        if (!currentReadBy.includes(username)) {
+          await setDoc(doc(db, 'chatMessages', String(id)), {
+            ...data,
+            readBy: [...currentReadBy, username]
+          }, { merge: true });
+        }
+      }
+    } catch (fallbackErr) {
+      console.warn('markChatMessageAsReadInFirestore fallback error:', fallbackErr);
+    }
   }
 }
 

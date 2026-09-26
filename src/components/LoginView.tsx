@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Warehouse, User } from '../types';
-import { Truck, Warehouse as WarehouseIcon, AlertCircle, Clock } from 'lucide-react';
+import { Warehouse as WarehouseIcon, AlertCircle, Clock } from 'lucide-react';
+import { PerformanceIcon } from './PerformanceLogo';
 
 interface LoginViewProps {
   warehouses: Warehouse[];
@@ -40,11 +41,12 @@ export const LoginView: React.FC<LoginViewProps> = ({
     <div className="min-h-screen flex items-center justify-center bg-slate-900 px-4">
       <div className="max-w-md w-full bg-white rounded-2xl shadow-2xl p-8 border border-slate-200">
         <div className="text-center mb-6">
-          <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center text-white text-3xl mx-auto mb-3 shadow-lg shadow-blue-500/30">
-            <Truck className="w-9 h-9" />
+          <div className="flex justify-center mb-3">
+            <PerformanceIcon className="w-16 h-16 drop-shadow-xl" />
           </div>
-          <h2 className="text-2xl font-bold text-slate-800">Depo & Rampa Yönetimi</h2>
-          <p className="text-xs text-slate-500 mt-1">İşlem yapacağınız depoyu seçip giriş yapınız</p>
+          <h2 className="text-2xl font-black text-slate-900 tracking-wider uppercase">PERFORMANCE</h2>
+          <span className="text-xs font-black text-fuchsia-700 tracking-widest uppercase block mt-1">PFR NOVA</span>
+          <p className="text-xs text-slate-500 mt-2">İşlem yapacağınız depoyu seçip giriş yapınız</p>
         </div>
 
         {error && (

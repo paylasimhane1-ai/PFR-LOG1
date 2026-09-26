@@ -156,7 +156,7 @@ export const RampManagementView: React.FC<RampManagementViewProps> = ({
             }`}
           >
             <CheckCircle className="w-3.5 h-3.5" />
-            Boş Rampalar
+            Boş
             <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-emerald-200 text-emerald-900 font-extrabold">
               {emptyCount}
             </span>
@@ -171,7 +171,7 @@ export const RampManagementView: React.FC<RampManagementViewProps> = ({
             }`}
           >
             <Truck className="w-3.5 h-3.5" />
-            Dolu Rampalar
+            Dolu
             <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-blue-200 text-blue-900 font-extrabold">
               {fullCount}
             </span>
@@ -186,7 +186,7 @@ export const RampManagementView: React.FC<RampManagementViewProps> = ({
             }`}
           >
             <Wrench className="w-3.5 h-3.5" />
-            Bakım / Arıza
+            Arızalı
             <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-amber-200 text-amber-900 font-extrabold">
               {maintenanceCount}
             </span>

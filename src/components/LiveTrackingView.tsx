@@ -68,49 +68,59 @@ export const LiveTrackingView: React.FC<LiveTrackingViewProps> = ({
   const sortedList = [...activeVehicles, ...exitedVehicles];
 
   return (
-    <div className="space-y-4">
-      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2 text-xs">
-          <span className="font-bold text-slate-700">Tarih Aralığı:</span>
-          <input
-            type="date"
-            value={filters.startDate}
-            onChange={(e) => setFilters({ ...filters, startDate: e.target.value })}
-            className="border border-slate-200 rounded-lg px-2.5 py-1.5 outline-none focus:ring-2 focus:ring-blue-500"
-          />
-          <span className="text-slate-400">-</span>
-          <input
-            type="date"
-            value={filters.endDate}
-            onChange={(e) => setFilters({ ...filters, endDate: e.target.value })}
-            className="border border-slate-200 rounded-lg px-2.5 py-1.5 outline-none focus:ring-2 focus:ring-blue-500"
-          />
+    <div className="space-y-4 max-w-[2560px] mx-auto w-full">
+      <div className="bg-white p-3 sm:p-4 rounded-2xl border border-slate-200 shadow-sm space-y-2.5 md:space-y-0 md:flex md:items-center md:justify-between md:gap-3">
+        {/* Tarih Filtresi */}
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 text-xs">
+          <div className="flex items-center justify-between sm:justify-start gap-1.5">
+            <span className="font-bold text-slate-700 text-xs shrink-0">Tarih:</span>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={handleSetToday}
+                className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-lg text-[11px] font-bold transition cursor-pointer"
+              >
+                Bugün
+              </button>
+              {(filters.startDate || filters.endDate) && (
+                <button
+                  type="button"
+                  onClick={handleClearFilters}
+                  className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-[11px] font-semibold transition cursor-pointer"
+                >
+                  Sıfırla
+                </button>
+              )}
+            </div>
+          </div>
 
-          <button
-            onClick={handleSetToday}
-            className="px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-lg font-bold transition cursor-pointer"
-          >
-            Today (Bugün)
-          </button>
-          <button
-            onClick={handleClearFilters}
-            className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg font-semibold transition cursor-pointer"
-          >
-            Sıfırla
-          </button>
-        </div>
-
-        <div className="flex items-center gap-2 w-full md:w-auto">
-          <div className="relative w-full md:w-64">
-            <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-400" />
+          <div className="grid grid-cols-2 gap-1.5 sm:flex sm:items-center sm:gap-1.5 w-full sm:w-auto">
             <input
-              type="text"
-              value={filters.search}
-              onChange={(e) => setFilters({ ...filters, search: e.target.value })}
-              placeholder="Genel Arama (Plaka, Müşteri)..."
-              className="w-full pl-9 pr-3 py-1.5 border border-slate-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-blue-500"
+              type="date"
+              value={filters.startDate}
+              onChange={(e) => setFilters({ ...filters, startDate: e.target.value })}
+              className="w-full sm:w-auto border border-slate-200 rounded-lg px-2 py-1.5 text-xs outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 md:bg-white"
+            />
+            <span className="hidden sm:inline text-slate-400 text-xs">-</span>
+            <input
+              type="date"
+              value={filters.endDate}
+              onChange={(e) => setFilters({ ...filters, endDate: e.target.value })}
+              className="w-full sm:w-auto border border-slate-200 rounded-lg px-2 py-1.5 text-xs outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 md:bg-white"
             />
           </div>
+        </div>
+
+        {/* Arama Kutusu */}
+        <div className="relative w-full md:w-64">
+          <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-400" />
+          <input
+            type="text"
+            value={filters.search}
+            onChange={(e) => setFilters({ ...filters, search: e.target.value })}
+            placeholder="Ara (Plaka, Müşteri)..."
+            className="w-full pl-9 pr-3 py-1.5 border border-slate-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 md:bg-white"
+          />
         </div>
       </div>
 

@@ -1,6 +1,6 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect, useMemo } from 'react';
 import { ChatMessage, ChatReply, User } from '../types';
-import { MessageSquare, X, Send, Trash2, CornerUpLeft, AtSign, Users as UsersIcon } from 'lucide-react';
+import { MessageSquare, X, Minus, Send, Trash2, CornerUpLeft, AtSign, Users as UsersIcon, ChevronUp, ChevronDown } from 'lucide-react';
 import { playChime } from '../utils/audio';
 import { sendNativeNotification, loadPushSettings } from '../utils/notifications';
 
@@ -11,6 +11,7 @@ interface ChatWidgetProps {
   onSendMessage: (text: string, replyTo?: ChatReply | null, mentions?: string[]) => void;
   onDeleteMessage?: (id: number) => void;
   onClearMessages?: () => void;
+  onMarkMessagesAsRead?: (messageIds: number[]) => void;
 }
 
 export const ChatWidget: React.FC<ChatWidgetProps> = ({
@@ -19,13 +20,27 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
   users = [],
   onSendMessage,
   onDeleteMessage,
-  onClearMessages
+  onClearMessages,
+  onMarkMessagesAsRead
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [text, setText] = useState('');
-  const [unreadCount, setUnreadCount] = useState(0);
   const [replyingTo, setReplyingTo] = useState<ChatMessage | null>(null);
   const [highlightedMessageId, setHighlightedMessageId] = useState<number | null>(null);
+
+  // Kullanıcı bazlı okunmamış mesaj hesaplama:
+  // Giriş yapan kullanıcının henüz okumadığı (readBy listesinde olmadığı ve kendisinin göndermediği) mesajlar
+  const unreadMessages = useMemo(() => {
+    if (!currentUser) return [];
+    return chatMessages.filter((m) => {
+      if (m.sender === currentUser.username) return false;
+      const readBy = Array.isArray(m.readBy) ? m.readBy : [];
+      return !readBy.includes(currentUser.username);
+    });
+  }, [chatMessages, currentUser]);
+
+  const unreadCount = unreadMessages.length;
+  const firstUnreadMsgId = unreadMessages.length > 0 ? unreadMessages[0].id : null;
 
   // Mention State
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
@@ -33,9 +48,20 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
   const [selectedMentionIdx, setSelectedMentionIdx] = useState<number>(0);
 
   const inputRef = useRef<HTMLInputElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const prevMessagesCountRef = useRef(chatMessages.length);
   const isInitialLoadRef = useRef(true);
+  const wasOpenRef = useRef(false);
+
+  // Global event listener to open chat widget from any trigger
+  useEffect(() => {
+    const handleOpenChat = () => {
+      setIsOpen(true);
+    };
+    window.addEventListener('open-chat-widget', handleOpenChat);
+    return () => window.removeEventListener('open-chat-widget', handleOpenChat);
+  }, []);
 
   // Available users list for @mentions
   const mentionCandidates = useMemo(() => {
@@ -73,7 +99,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
     );
   }, [users, mentionQuery]);
 
-  // Incoming message detection, audio alert, unread count & native push for mentions
+  // Incoming message detection, audio alert, & native push for mentions
   useEffect(() => {
     if (isInitialLoadRef.current) {
       isInitialLoadRef.current = false;
@@ -87,10 +113,6 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
         if (msg.sender !== currentUser?.username) {
           // Play notification sound
           playChime('message');
-
-          if (!isOpen) {
-            setUnreadCount((prev) => prev + 1);
-          }
 
           // Check if current user is @mentioned in the incoming message
           const myName = currentUser?.username?.toLowerCase() || '';
@@ -115,15 +137,48 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
       });
     }
     prevMessagesCountRef.current = chatMessages.length;
-  }, [chatMessages, currentUser, isOpen]);
+  }, [chatMessages, currentUser]);
 
-  // When chat opens, reset unread count and scroll to bottom
-  useEffect(() => {
-    if (isOpen) {
-      setUnreadCount(0);
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  // Sohbet açıldığında: İlk okunmamış mesajdan başla veya en alta git (Ekran çizilmeden önce useLayoutEffect ile anlık konumlanır, kayma yapmaz)
+  useLayoutEffect(() => {
+    if (isOpen && !wasOpenRef.current) {
+      wasOpenRef.current = true;
+      const unread = unreadMessages;
+
+      if (messagesContainerRef.current) {
+        if (unread.length > 0) {
+          const firstUnreadId = unread[0].id;
+          const targetEl = document.getElementById(`chat-msg-${firstUnreadId}`);
+          if (targetEl) {
+            const containerRect = messagesContainerRef.current.getBoundingClientRect();
+            const targetRect = targetEl.getBoundingClientRect();
+            messagesContainerRef.current.scrollTop += (targetRect.top - containerRect.top - 8);
+          } else {
+            messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+          }
+        } else {
+          // Okunmamış mesaj yoksa doğrudan en son mesaja odaklan
+          messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+        }
+      }
+
+      if (unread.length > 0) {
+        const ids = unread.map((m) => m.id);
+        onMarkMessagesAsRead?.(ids);
+      }
+    } else if (isOpen && wasOpenRef.current) {
+      // Sohbet açıkken yeni mesaj geldiğinde
+      if (messagesContainerRef.current) {
+        messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+      }
+      if (unreadMessages.length > 0) {
+        const ids = unreadMessages.map((m) => m.id);
+        onMarkMessagesAsRead?.(ids);
+      }
+    } else if (!isOpen) {
+      wasOpenRef.current = false;
     }
-  }, [isOpen, chatMessages.length]);
+  }, [isOpen, unreadMessages, onMarkMessagesAsRead]);
 
   // Auto-focus input when replying
   useEffect(() => {
@@ -275,23 +330,27 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
   if (!currentUser) return null;
 
   return (
-    <div className="fixed bottom-20 md:bottom-6 right-4 md:right-6 z-40 chat-widget">
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="w-12 h-14 md:w-14 md:h-16 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl shadow-2xl flex flex-col items-center justify-center transition transform hover:scale-105 cursor-pointer relative"
-        title="Sohbet & Saha İletişimi"
-      >
-        <MessageSquare className="w-5 h-5 md:w-6 md:h-6" />
-        <span className="text-[8px] md:text-[9px] font-bold mt-0.5">Sohbet</span>
-        {unreadCount > 0 && !isOpen && (
-          <span className="absolute -top-1 -right-1 bg-red-600 text-white font-black text-[10px] min-w-[20px] h-5 rounded-full flex items-center justify-center px-1 shadow-lg animate-bounce border-2 border-white">
-            {unreadCount > 99 ? '99+' : unreadCount}
-          </span>
-        )}
-      </button>
+    <div className="fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom))] md:bottom-6 right-3 sm:right-6 z-40 chat-widget">
+      {/* 1. Kapalı Durum: Tekil Yuvarlak Mesaj Balonu Butonu (Sağ altta sabit) */}
+      {!isOpen && (
+        <button
+          onClick={() => setIsOpen(true)}
+          className="w-12 h-14 md:w-14 md:h-16 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl shadow-2xl flex flex-col items-center justify-center transition transform hover:scale-105 cursor-pointer relative"
+          title="Sohbet & Saha İletişimi"
+        >
+          <MessageSquare className="w-5 h-5 md:w-6 md:h-6" />
+          <span className="text-[8px] md:text-[9px] font-bold mt-0.5">Sohbet</span>
+          {unreadCount > 0 && (
+            <span className="absolute -top-1 -right-1 bg-red-600 text-white font-black text-[10px] min-w-[20px] h-5 rounded-full flex items-center justify-center px-1 shadow-lg animate-bounce border-2 border-white">
+              {unreadCount > 99 ? '99+' : unreadCount}
+            </span>
+          )}
+        </button>
+      )}
 
+      {/* 2. Açık Durum: Mesajlaşma Penceresi (Yukarıdan aşağıya kayma animasyonu tamamen kaldırıldı, doğrudan statik açılır) */}
       {isOpen && (
-        <div className="absolute bottom-16 right-0 w-84 sm:w-96 bg-white border border-slate-200 rounded-3xl shadow-2xl overflow-hidden flex flex-col h-[480px]">
+        <div className="fixed sm:absolute bottom-[calc(4.75rem+env(safe-area-inset-bottom))] sm:bottom-0 right-2 sm:right-0 left-2 sm:left-auto w-auto sm:w-96 max-w-[calc(100vw-16px)] sm:max-w-[400px] h-[72dvh] sm:h-[490px] max-h-[560px] bg-white border border-slate-200 rounded-3xl shadow-2xl overflow-hidden flex flex-col">
           {/* Header */}
           <div className="p-3.5 bg-slate-900 text-white flex justify-between items-center border-b border-slate-800 shrink-0">
             <div className="flex items-center gap-2">
@@ -318,17 +377,32 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
                   <span className="hidden sm:inline">Temizle</span>
                 </button>
               )}
+              {/* - ile Kapat Butonu (Direkt sohbet ikonuna döner) */}
               <button
+                type="button"
                 onClick={() => setIsOpen(false)}
-                className="p-1 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition cursor-pointer"
+                title="Sohbeti Kapat (-)"
+                className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition cursor-pointer"
+              >
+                <Minus className="w-4 h-4" />
+              </button>
+              {/* x ile Kapat Butonu */}
+              <button
+                type="button"
+                onClick={() => setIsOpen(false)}
+                title="Pencereyi Kapat (x)"
+                className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
           </div>
 
-          {/* Messages List */}
-          <div className="flex-1 p-3.5 overflow-y-auto space-y-2.5 custom-scroll bg-slate-50 text-xs">
+          {/* Messages List Container */}
+          <div
+            ref={messagesContainerRef}
+            className="flex-1 p-3.5 overflow-y-auto space-y-2.5 custom-scroll bg-slate-50 text-xs"
+          >
             {chatMessages.length === 0 && (
               <div className="h-full flex flex-col items-center justify-center text-slate-400 text-xs text-center p-4">
                 <MessageSquare className="w-8 h-8 mb-2 opacity-30 text-slate-500" />
@@ -345,15 +419,27 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
             {chatMessages.map((m) => {
               const isMine = m.sender === currentUser.username;
               const isHighlighted = highlightedMessageId === m.id;
+              const isFirstUnread = firstUnreadMsgId === m.id;
 
               return (
-                <div
-                  id={`chat-msg-${m.id}`}
-                  key={m.id}
-                  className={`flex flex-col group transition-all duration-300 ${
-                    isMine ? 'items-end' : 'items-start'
-                  } ${isHighlighted ? 'scale-102 ring-2 ring-blue-500 rounded-2xl p-0.5' : ''}`}
-                >
+                <React.Fragment key={m.id}>
+                  {/* Okunmamış Mesajlar Başlangıç Çizgisi */}
+                  {isFirstUnread && (
+                    <div className="flex items-center gap-2 my-2 py-0.5 select-none">
+                      <div className="flex-1 h-px bg-red-300" />
+                      <span className="text-[9px] font-black text-red-700 bg-red-50 border border-red-200 px-2 py-0.5 rounded-full shadow-2xs">
+                        Okunmamış Mesajlar ({unreadCount})
+                      </span>
+                      <div className="flex-1 h-px bg-red-300" />
+                    </div>
+                  )}
+
+                  <div
+                    id={`chat-msg-${m.id}`}
+                    className={`flex flex-col group transition-all duration-200 ${
+                      isMine ? 'items-end' : 'items-start'
+                    } ${isHighlighted ? 'scale-102 ring-2 ring-blue-500 rounded-2xl p-0.5' : ''}`}
+                  >
                   <div
                     className={`p-2.5 rounded-2xl shadow-xs max-w-[88%] space-y-1.5 relative transition ${
                       isMine
@@ -421,9 +507,10 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
                     </p>
                   </div>
                 </div>
-              );
-            })}
-            <div ref={messagesEndRef} />
+              </React.Fragment>
+            );
+          })}
+          <div ref={messagesEndRef} />
           </div>
 
           {/* Cevap Veriliyor Barı (Reply Preview) */}
@@ -498,7 +585,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
                 onChange={handleInputChange}
                 onKeyDown={handleKeyDown}
                 placeholder={replyingTo ? 'Cevabınızı yazın (@ ile bahset)...' : 'Mesajınızı yazın (@ ile bahset)...'}
-                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-blue-500 pr-8"
+                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-base sm:text-xs outline-none focus:ring-2 focus:ring-blue-500 pr-8"
               />
               <button
                 type="button"

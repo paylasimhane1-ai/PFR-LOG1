@@ -121,6 +121,7 @@ export interface AppNotification {
   time: string;
   status: 'BEKLİYOR' | 'İŞLEM YAPILDI' | 'ONAYLANDI' | 'İPTAL' | 'OKUNDU';
   securityNote?: string;
+  readBy?: string[]; // Kullanıcı bazlı okundu takibi (username listesi)
 }
 
 export interface ChatReply {
@@ -138,6 +139,8 @@ export interface ChatMessage {
   time: string;
   replyTo?: ChatReply | null;
   mentions?: string[];
+  readBy?: string[];
+  timestamp?: number;
 }
 
 export type WhatsAppProvider = 'webhook' | 'greenapi' | 'ultramsg' | 'twilio' | 'sharelink';
