@@ -183,7 +183,7 @@ export const ExpectedVehiclesView: React.FC<ExpectedVehiclesViewProps> = ({
   return (
     <div className="space-y-4">
       {/* Üst Arama & Filtre Paneli */}
-      <div className="bg-white p-3.5 md:p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+      <div className="bg-white dark:bg-slate-900 p-3.5 md:p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-3 transition-colors">
         <div className="flex flex-col md:flex-row gap-3 justify-between items-stretch md:items-center">
           {/* Arama Inputu */}
           <div className="flex items-center gap-2 flex-1">
@@ -194,12 +194,12 @@ export const ExpectedVehiclesView: React.FC<ExpectedVehiclesViewProps> = ({
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Beklenen Araç Ara (Plaka, Şoför, Müşteri)..."
-                className="w-full pl-9 pr-8 py-2 border border-slate-200 rounded-xl text-xs md:text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                className="w-full pl-9 pr-8 py-2 border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-100 placeholder-slate-400 rounded-xl text-xs md:text-sm focus:ring-2 focus:ring-blue-500 outline-none"
               />
               {search && (
                 <button
                   onClick={() => setSearch('')}
-                  className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 cursor-pointer"
+                  className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 cursor-pointer"
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -208,7 +208,7 @@ export const ExpectedVehiclesView: React.FC<ExpectedVehiclesViewProps> = ({
             {search && (
               <button
                 onClick={() => setSearch('')}
-                className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-xs font-semibold transition cursor-pointer shrink-0"
+                className="px-3 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-xl text-xs font-semibold transition cursor-pointer shrink-0"
               >
                 Temizle
               </button>
@@ -305,7 +305,7 @@ export const ExpectedVehiclesView: React.FC<ExpectedVehiclesViewProps> = ({
         {sortedList.map((exp) => (
           <div
             key={exp.id}
-            className="bg-white rounded-2xl border border-slate-200 p-3.5 shadow-sm space-y-3"
+            className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-3.5 shadow-sm space-y-3 transition-colors"
           >
             {/* Kart Üst Bilgisi: Plaka & Durum */}
             <div className="flex items-start justify-between gap-2">
@@ -317,8 +317,8 @@ export const ExpectedVehiclesView: React.FC<ExpectedVehiclesViewProps> = ({
                 </div>
 
                 {exp.cekiciPlaka && (
-                  <div className="text-[10px] text-slate-500 font-medium">
-                    Çekici: <span className="font-bold text-slate-700">{exp.cekiciPlaka}</span>
+                  <div className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
+                    Çekici: <span className="font-bold text-slate-700 dark:text-slate-300">{exp.cekiciPlaka}</span>
                   </div>
                 )}
               </div>
@@ -327,14 +327,14 @@ export const ExpectedVehiclesView: React.FC<ExpectedVehiclesViewProps> = ({
                 <span
                   className={`px-2.5 py-1 rounded-lg text-[10px] font-extrabold uppercase border ${
                     exp.durum === 'BEKLENİYOR'
-                      ? 'bg-amber-100 text-amber-900 border-amber-300'
-                      : 'bg-emerald-100 text-emerald-900 border-emerald-300'
+                      ? 'bg-amber-100 dark:bg-amber-950/40 text-amber-900 dark:text-amber-300 border-amber-300 dark:border-amber-700'
+                      : 'bg-emerald-100 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700'
                   }`}
                 >
                   {exp.durum}
                 </span>
 
-                <span className="text-[10px] font-bold text-blue-700 flex items-center gap-1">
+                <span className="text-[10px] font-bold text-blue-700 dark:text-blue-400 flex items-center gap-1">
                   <WarehouseIcon className="w-3 h-3" />
                   {getWarehouseNameById(exp.depoId)}
                 </span>
@@ -342,15 +342,15 @@ export const ExpectedVehiclesView: React.FC<ExpectedVehiclesViewProps> = ({
             </div>
 
             {/* Müşteri, Tahmini Tarih & İşlem Bilgisi */}
-            <div className="bg-slate-50 p-2.5 rounded-xl text-xs space-y-1 border border-slate-100">
-              <div className="flex justify-between items-center font-bold text-slate-800">
+            <div className="bg-slate-50 dark:bg-slate-800/60 p-2.5 rounded-xl text-xs space-y-1 border border-slate-100 dark:border-slate-700/50">
+              <div className="flex justify-between items-center font-bold text-slate-800 dark:text-slate-100">
                 <span className="truncate">{exp.musteri || 'Müşteri Belirtilmedi'}</span>
               </div>
-              <div className="flex justify-between items-center text-[10px] text-slate-600 pt-1 border-t border-slate-200/60">
+              <div className="flex justify-between items-center text-[10px] text-slate-600 dark:text-slate-300 pt-1 border-t border-slate-200/60 dark:border-slate-700/60">
                 <span>
                   {exp.depoTuru || 'Antrepo'} / {exp.islemTuru === 'Tahliye' ? 'Boşaltma' : (exp.islemTuru || 'Boşaltma')}
                 </span>
-                <span className="font-bold text-purple-700 flex items-center gap-1">
+                <span className="font-bold text-purple-700 dark:text-purple-400 flex items-center gap-1">
                   <CalendarCheck className="w-3 h-3" />
                   {formatExpectedDate(exp.beklenenTarih)}
                 </span>
@@ -423,10 +423,10 @@ export const ExpectedVehiclesView: React.FC<ExpectedVehiclesViewProps> = ({
       </div>
 
       {/* ================= MASAÜSTÜ TABLO GÖRÜNÜMÜ ================= */}
-      <div className="hidden md:block bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+      <div className="hidden md:block bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden transition-colors">
         <div className="overflow-x-auto max-h-[600px] custom-scroll">
           <table className="w-full text-left border-collapse text-xs">
-            <thead className="sticky top-0 z-10 bg-slate-100 border-b border-slate-200 text-slate-600 uppercase font-semibold shadow-sm">
+            <thead className="sticky top-0 z-10 bg-slate-100 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 uppercase font-semibold shadow-sm">
               <tr>
                 <th className="p-3 w-8 text-center">
                   <input
@@ -447,9 +447,9 @@ export const ExpectedVehiclesView: React.FC<ExpectedVehiclesViewProps> = ({
                 <th className="p-3 text-center">Sil</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {sortedList.map((exp) => (
-                <tr key={exp.id} className="hover:bg-slate-50 transition">
+                <tr key={exp.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/60 transition text-slate-700 dark:text-slate-200">
                   <td className="p-3 text-center">
                     <input
                       type="checkbox"

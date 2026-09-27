@@ -111,7 +111,7 @@ export const RampManagementView: React.FC<RampManagementViewProps> = ({
       )}
 
       {/* Üst Arama & Hızlı Filtre Paneli (Mobil ve Masaüstü Uyumlu) */}
-      <div className="bg-white p-3.5 md:p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+      <div className="bg-white dark:bg-slate-900 p-3.5 md:p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-3 transition-colors">
         <div className="flex flex-col sm:flex-row gap-3 justify-between items-stretch sm:items-center">
           {/* Arama */}
           <div className="relative flex-1">
@@ -121,12 +121,12 @@ export const RampManagementView: React.FC<RampManagementViewProps> = ({
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Rampa veya Araç Ara (Rampa Adı, Plaka, Müşteri)..."
-              className="w-full pl-9 pr-8 py-2 border border-slate-200 rounded-xl text-xs md:text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+              className="w-full pl-9 pr-8 py-2 border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-100 placeholder-slate-400 rounded-xl text-xs md:text-sm focus:ring-2 focus:ring-blue-500 outline-none"
             />
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery('')}
-                className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 cursor-pointer"
+                className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -140,8 +140,8 @@ export const RampManagementView: React.FC<RampManagementViewProps> = ({
             onClick={() => setStatusFilter('Tümü')}
             className={`px-3 py-1.5 rounded-xl font-bold transition shrink-0 flex items-center gap-1.5 cursor-pointer ${
               statusFilter === 'Tümü'
-                ? 'bg-slate-900 text-white shadow-sm'
-                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                ? 'bg-slate-900 dark:bg-blue-600 text-white shadow-sm'
+                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
             }`}
           >
             Tümü
@@ -153,12 +153,12 @@ export const RampManagementView: React.FC<RampManagementViewProps> = ({
             className={`px-3 py-1.5 rounded-xl font-bold transition shrink-0 flex items-center gap-1.5 cursor-pointer ${
               statusFilter === 'Boş'
                 ? 'bg-emerald-600 text-white shadow-sm'
-                : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200'
+                : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 border border-emerald-200 dark:border-emerald-800'
             }`}
           >
             <CheckCircle className="w-3.5 h-3.5" />
             Boş
-            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-emerald-200 text-emerald-900 font-extrabold">
+            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-emerald-200 dark:bg-emerald-800 text-emerald-900 dark:text-emerald-100 font-extrabold">
               {emptyCount}
             </span>
           </button>
@@ -168,12 +168,12 @@ export const RampManagementView: React.FC<RampManagementViewProps> = ({
             className={`px-3 py-1.5 rounded-xl font-bold transition shrink-0 flex items-center gap-1.5 cursor-pointer ${
               statusFilter === 'Dolu'
                 ? 'bg-blue-600 text-white shadow-sm'
-                : 'bg-blue-50 text-blue-800 hover:bg-blue-100 border border-blue-200'
+                : 'bg-blue-50 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/50 border border-blue-200 dark:border-blue-800'
             }`}
           >
             <Truck className="w-3.5 h-3.5" />
             Dolu
-            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-blue-200 text-blue-900 font-extrabold">
+            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-blue-200 dark:bg-blue-800 text-blue-900 dark:text-blue-100 font-extrabold">
               {fullCount}
             </span>
           </button>
@@ -183,12 +183,12 @@ export const RampManagementView: React.FC<RampManagementViewProps> = ({
             className={`px-3 py-1.5 rounded-xl font-bold transition shrink-0 flex items-center gap-1.5 cursor-pointer ${
               statusFilter === 'Bakım-Arıza'
                 ? 'bg-amber-600 text-white shadow-sm'
-                : 'bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200'
+                : 'bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/50 border border-amber-200 dark:border-amber-800'
             }`}
           >
             <Wrench className="w-3.5 h-3.5" />
             Arızalı
-            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-amber-200 text-amber-900 font-extrabold">
+            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-amber-200 dark:bg-amber-800 text-amber-900 dark:text-amber-100 font-extrabold">
               {maintenanceCount}
             </span>
           </button>
@@ -203,19 +203,19 @@ export const RampManagementView: React.FC<RampManagementViewProps> = ({
           return (
             <div
               key={r.id}
-              className={`ramp-item bg-white rounded-2xl border shadow-sm overflow-hidden flex flex-col justify-between transition hover:shadow-md ${
+              className={`ramp-item bg-white dark:bg-slate-900 rounded-2xl border shadow-sm overflow-hidden flex flex-col justify-between transition hover:shadow-md ${
                 r.durum === 'Dolu'
-                  ? 'border-blue-300 ring-1 ring-blue-100'
+                  ? 'border-blue-300 dark:border-blue-800 ring-1 ring-blue-100 dark:ring-blue-900/40'
                   : r.durum === 'Boş'
-                  ? 'border-emerald-200'
-                  : 'border-amber-200'
+                  ? 'border-emerald-200 dark:border-emerald-800/80'
+                  : 'border-amber-200 dark:border-amber-800/80'
               }`}
             >
               {/* Rampa Başlık & Durum (Trafik Işığı ve Renkli Durum Bileşeni) */}
-              <div className="p-3 border-b border-slate-100 flex items-center justify-between bg-slate-50 gap-2">
+              <div className="p-3 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-800/60 gap-2">
                 <div className="flex items-center gap-1.5 min-w-0">
-                  <WarehouseIcon className="w-4 h-4 text-blue-600 shrink-0" />
-                  <h3 className="font-extrabold text-slate-800 text-sm truncate">
+                  <WarehouseIcon className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
+                  <h3 className="font-extrabold text-slate-800 dark:text-slate-100 text-sm truncate">
                     {r.ad}
                   </h3>
                 </div>
@@ -250,7 +250,7 @@ export const RampManagementView: React.FC<RampManagementViewProps> = ({
                 {vehicle ? (
                   <div className="space-y-2.5">
                     {/* Araç Kartı */}
-                    <div className="bg-blue-50/70 border border-blue-200 p-2.5 rounded-xl relative overflow-hidden space-y-1.5">
+                    <div className="bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800/80 p-2.5 rounded-xl relative overflow-hidden space-y-1.5">
                       {vehicle.isAcik && (
                         <div className="absolute top-0 right-0 bg-red-600 text-white text-[9px] font-black px-2 py-0.5 rounded-bl-lg shadow animate-pulse flex items-center gap-0.5">
                           <Zap className="w-3 h-3" /> ACİL
@@ -263,15 +263,15 @@ export const RampManagementView: React.FC<RampManagementViewProps> = ({
                         <span className="px-2 py-0.5 tracking-wider text-slate-900">{vehicle.dorsePlaka}</span>
                       </div>
 
-                      <p className="text-xs font-bold text-blue-950 truncate pr-8">{vehicle.musteri}</p>
+                      <p className="text-xs font-bold text-blue-950 dark:text-blue-200 truncate pr-8">{vehicle.musteri}</p>
 
                       {vehicle.konteynirNo && (
-                        <p className="text-[11px] text-slate-600 truncate flex items-center gap-1 font-mono">
+                        <p className="text-[11px] text-slate-600 dark:text-slate-400 truncate flex items-center gap-1 font-mono">
                           <Box className="w-3 h-3 text-slate-400" /> {vehicle.konteynirNo}
                         </p>
                       )}
 
-                      <div className="pt-1.5 border-t border-blue-200/60 flex justify-between text-[10px] text-slate-600">
+                      <div className="pt-1.5 border-t border-blue-200/60 dark:border-blue-800/60 flex justify-between text-[10px] text-slate-600 dark:text-slate-400">
                         <span>
                           <b>Depo:</b> {vehicle.depoTuru}
                         </span>
@@ -282,8 +282,8 @@ export const RampManagementView: React.FC<RampManagementViewProps> = ({
 
                       {/* Şoför İletişim (Telefon / WhatsApp) */}
                       {vehicle.soforTel && (
-                        <div className="pt-1.5 border-t border-blue-200/60 flex items-center justify-between gap-1">
-                          <span className="text-[10px] text-slate-600 truncate font-semibold">
+                        <div className="pt-1.5 border-t border-blue-200/60 dark:border-blue-800/60 flex items-center justify-between gap-1">
+                          <span className="text-[10px] text-slate-600 dark:text-slate-300 truncate font-semibold">
                             {vehicle.soforAd || 'Şoför'}
                           </span>
                           <div className="flex items-center gap-1 shrink-0">
@@ -298,10 +298,10 @@ export const RampManagementView: React.FC<RampManagementViewProps> = ({
                               href={`https://wa.me/${cleanPhoneForWa(vehicle.soforTel)}`}
                               target="_blank"
                               rel="noreferrer"
-                              className="p-1 bg-emerald-100 hover:bg-emerald-200 text-emerald-800 rounded-lg text-[10px] flex items-center justify-center border border-emerald-300 active:scale-95"
+                              className="p-1 bg-emerald-100 dark:bg-emerald-950/50 hover:bg-emerald-200 dark:hover:bg-emerald-900 text-emerald-800 dark:text-emerald-300 rounded-lg text-[10px] flex items-center justify-center border border-emerald-300 dark:border-emerald-800 active:scale-95"
                               title="WhatsApp"
                             >
-                              <MessageSquare className="w-3 h-3 text-emerald-700" />
+                              <MessageSquare className="w-3 h-3 text-emerald-700 dark:text-emerald-400" />
                             </a>
                           </div>
                         </div>
@@ -312,10 +312,10 @@ export const RampManagementView: React.FC<RampManagementViewProps> = ({
                         <button
                           type="button"
                           onClick={() => onOpenDetailModal(vehicle)}
-                          className="w-full mt-2 py-1.5 px-2 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-[10px] font-bold rounded-lg transition flex items-center justify-center gap-1 cursor-pointer shadow-2xs active:scale-95"
+                          className="w-full mt-2 py-1.5 px-2 bg-blue-50 dark:bg-blue-900/40 hover:bg-blue-100 dark:hover:bg-blue-900/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 text-[10px] font-bold rounded-lg transition flex items-center justify-center gap-1 cursor-pointer shadow-2xs active:scale-95"
                           title="Araç Detaylarını ve Fotoğraflarını İncele"
                         >
-                          <Eye className="w-3 h-3 text-blue-600" />
+                          <Eye className="w-3 h-3 text-blue-600 dark:text-blue-400" />
                           <span>Araç Detayını İncele</span>
                         </button>
                       )}
@@ -332,7 +332,7 @@ export const RampManagementView: React.FC<RampManagementViewProps> = ({
                               e.target.value = '';
                             }
                           }}
-                          className="w-full text-xs font-bold border rounded-xl p-2 bg-slate-50 hover:bg-white border-slate-300 outline-none text-slate-700 cursor-pointer shadow-2xs"
+                          className="w-full text-xs font-bold border rounded-xl p-2 bg-slate-50 dark:bg-slate-800 hover:bg-white dark:hover:bg-slate-700 border-slate-300 dark:border-slate-700 outline-none text-slate-700 dark:text-slate-200 cursor-pointer shadow-2xs"
                         >
                           <option value="">Rampa Değiştir...</option>
                           {getAvailableRamps().map((targetR) => (
@@ -381,7 +381,7 @@ export const RampManagementView: React.FC<RampManagementViewProps> = ({
       </div>
 
       {filteredRamps.length === 0 && (
-        <div className="p-8 text-center bg-white rounded-2xl border border-slate-200 text-slate-400 space-y-2">
+        <div className="p-8 text-center bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 text-slate-400 space-y-2">
           <WarehouseIcon className="w-8 h-8 mx-auto opacity-30 text-blue-500" />
           <p className="text-xs font-semibold">Aradığınız kriterlere uygun rampa bulunamadı.</p>
         </div>

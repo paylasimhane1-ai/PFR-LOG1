@@ -41,12 +41,14 @@ export const LoginView: React.FC<LoginViewProps> = ({
     <div className="min-h-screen flex items-center justify-center bg-slate-900 px-4">
       <div className="max-w-md w-full bg-white rounded-2xl shadow-2xl p-8 border border-slate-200">
         <div className="text-center mb-6">
-          <div className="flex justify-center mb-3">
-            <PerformanceIcon className="w-16 h-16 drop-shadow-xl" />
+          <div className="flex justify-center mb-2">
+            <img
+              src="/logo.png"
+              alt="Performance Logistics"
+              className="w-44 h-44 object-contain rounded-2xl select-none"
+            />
           </div>
-          <h2 className="text-2xl font-black text-slate-900 tracking-wider uppercase">PERFORMANCE</h2>
-          <span className="text-xs font-black text-fuchsia-700 tracking-widest uppercase block mt-1">PFR NOVA</span>
-          <p className="text-xs text-slate-500 mt-2">İşlem yapacağınız depoyu seçip giriş yapınız</p>
+          <p className="text-xs text-slate-500 mt-1">İşlem yapacağınız depoyu seçip giriş yapınız</p>
         </div>
 
         {error && (

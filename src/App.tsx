@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   User,
   Warehouse,
@@ -102,7 +102,9 @@ import {
   Building,
   Briefcase,
   Bell,
-  MessageSquare
+  MessageSquare,
+  Sun,
+  Moon
 } from 'lucide-react';
 import { playChime } from './utils/audio';
 import {
@@ -270,6 +272,34 @@ export default function App() {
   const [showWhatsAppSharePrompt, setShowWhatsAppSharePrompt] = useState(false);
   const [whatsappApiStatus, setWhatsappApiStatus] = useState<{ success: boolean; message: string } | null>(null);
   const [inAppAlert, setInAppAlert] = useState<InAppAlert | null>(null);
+  const isFirstNotifLoadRef = useRef(true);
+  const seenNotifIdsRef = useRef<Set<number>>(new Set());
+
+  // Siyah (Karanlık) Mod / Normal Mod Tema Durumu
+  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('yms_theme');
+      if (saved === 'dark' || saved === 'light') return saved;
+    }
+    return 'dark'; // Varsayılan: Siyah Mod
+  });
+
+  useEffect(() => {
+    if (typeof document !== 'undefined') {
+      if (theme === 'dark') {
+        document.documentElement.classList.add('dark');
+        document.documentElement.classList.remove('light');
+      } else {
+        document.documentElement.classList.remove('dark');
+        document.documentElement.classList.add('light');
+      }
+      localStorage.setItem('yms_theme', theme);
+    }
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
+  };
 
   useEffect(() => {
     setPushPermission(getNotificationPermission());
@@ -464,6 +494,36 @@ export default function App() {
     const unsubNotifs = subscribeToNotifications((remoteNotifs) => {
       if (remoteNotifs) {
         setNotifications(remoteNotifs);
+
+        if (isFirstNotifLoadRef.current) {
+          isFirstNotifLoadRef.current = false;
+          remoteNotifs.forEach((n) => seenNotifIdsRef.current.add(n.id));
+        } else {
+          // Yeni gelen bekleyen bildirimleri anında telefon ve tarayıcıya kayan bildirim olarak ilet
+          remoteNotifs.forEach((n) => {
+            if (!seenNotifIdsRef.current.has(n.id)) {
+              seenNotifIdsRef.current.add(n.id);
+              if (n.status === 'BEKLİYOR') {
+                sendNativeNotification({
+                  title: `🚨 ${n.plaka ? n.plaka + ' - ' : ''}Rampaya Çağrıldı!`,
+                  body: n.text,
+                  soundType: 'call',
+                  tag: `notif-${n.id}`,
+                  icon: '/pwa-192x192.png'
+                });
+                setInAppAlert({
+                  id: `remote-notif-${n.id}`,
+                  title: n.plaka ? `${n.plaka} - Rampa Çağrısı` : 'Yeni Operasyon Çağrısı',
+                  body: n.text,
+                  type: 'call',
+                  onClick: () => {
+                    setShowNotificationMenu(true);
+                  }
+                });
+              }
+            }
+          });
+        }
       }
     });
 
@@ -2518,19 +2578,19 @@ export default function App() {
   };
 
   return (
-    <div className="flex h-[100dvh] overflow-hidden bg-slate-100 pb-[calc(4rem+env(safe-area-inset-bottom))] md:pb-0 font-sans text-slate-800">
+    <div className="flex h-[100dvh] overflow-hidden bg-slate-100 dark:bg-slate-950 pb-[calc(4rem+env(safe-area-inset-bottom))] md:pb-0 font-sans text-slate-800 dark:text-slate-100 transition-colors duration-200">
       {/* ================= Sol Sidebar Menu (Masaüstü) ================= */}
-      <aside className="hidden md:flex w-64 bg-slate-900 text-slate-300 flex-col justify-between shrink-0 shadow-xl no-print">
+      <aside className="hidden md:flex w-64 bg-slate-900 dark:bg-black text-slate-300 flex-col justify-between shrink-0 shadow-xl no-print border-r border-slate-800 dark:border-slate-850">
         <div>
           <div className="p-4 sm:p-5 border-b border-slate-800 flex items-center gap-3">
-            <PerformanceIcon className="w-10 h-10 shrink-0 drop-shadow-md" />
+            <PerformanceIcon className="w-10 h-10 shrink-0 drop-shadow-md rounded-lg" />
             <div className="truncate">
               <h1 className="font-black text-white text-base tracking-wider leading-tight uppercase font-sans">
-                PERFORMANCE
+                Performance
               </h1>
               <div className="flex items-center gap-1.5 mt-0.5">
-                <span className="text-[10px] text-fuchsia-300 font-black tracking-widest uppercase">
-                  PFR NOVA
+                <span className="text-[10px] text-fuchsia-300 font-bold tracking-wider uppercase">
+                  Logistics
                 </span>
                 <span className="text-slate-600 text-[10px]">•</span>
                 <span className="text-[10px] text-blue-400 font-semibold truncate max-w-[90px]">
@@ -2816,20 +2876,20 @@ export default function App() {
       </div>
 
       {/* ================= Sağ İçerik Alanı ================= */}
-      <main className="flex-1 flex flex-col overflow-hidden bg-slate-100 relative">
+      <main className="flex-1 flex flex-col overflow-hidden bg-slate-100 dark:bg-slate-950 relative transition-colors duration-200">
         {/* Üst Header */}
-        <header className="h-16 bg-white border-b border-slate-200 px-3 md:px-6 flex items-center justify-between shrink-0 shadow-sm no-print">
+        <header className="h-16 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-3 md:px-6 flex items-center justify-between shrink-0 shadow-sm no-print transition-colors duration-200">
           <div className="flex items-center gap-1.5 sm:gap-2 md:gap-3 min-w-0">
-            <h2 className="text-sm md:text-lg font-bold text-slate-800 capitalize truncate">
+            <h2 className="text-sm md:text-lg font-bold text-slate-800 dark:text-slate-100 capitalize truncate">
               {tabTitles[activeTab]}
             </h2>
 
-            <div className="flex items-center gap-1 bg-slate-100 p-1 sm:p-1.5 rounded-xl border border-slate-200 max-w-[130px] sm:max-w-none">
-              <WarehouseIcon className="w-3.5 h-3.5 text-blue-600 ml-1 shrink-0" />
+            <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 sm:p-1.5 rounded-xl border border-slate-200 dark:border-slate-700 max-w-[130px] sm:max-w-none">
+              <WarehouseIcon className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 ml-1 shrink-0" />
               <select
                 value={selectedDepoId}
                 onChange={(e) => setSelectedDepoId(Number(e.target.value))}
-                className="bg-transparent font-bold text-xs text-slate-700 outline-none cursor-pointer truncate max-w-[100px] sm:max-w-none"
+                className="bg-transparent font-bold text-xs text-slate-700 dark:text-slate-200 outline-none cursor-pointer truncate max-w-[100px] sm:max-w-none"
               >
                 {currentUser.role === 'admin' && (
                   <option value={0}>🌐 Tüm Depolar</option>
@@ -3012,6 +3072,29 @@ export default function App() {
               <span className="hidden sm:inline">
                 {pushPermission === 'granted' ? 'Bildirimler' : 'Bildirimleri Aç'}
               </span>
+            </button>
+
+            {/* Siyah Mod / Normal Mod Tema Butonu (Masaüstü & Mobil) */}
+            <button
+              onClick={toggleTheme}
+              title={theme === 'dark' ? 'Normal (Aydınlık) Moda Geç' : 'Siyah (Karanlık) Moda Geç'}
+              className={`flex px-2 sm:px-2.5 md:px-3 py-1.5 md:py-2 text-xs font-bold rounded-xl transition items-center gap-1.5 cursor-pointer shrink-0 border shadow-2xs active:scale-95 ${
+                theme === 'dark'
+                  ? 'bg-slate-800 hover:bg-slate-700 text-amber-300 border-slate-700'
+                  : 'bg-purple-50 hover:bg-purple-100 text-purple-800 border-purple-200'
+              }`}
+            >
+              {theme === 'dark' ? (
+                <>
+                  <Sun className="w-4 h-4 text-amber-400" />
+                  <span className="hidden sm:inline">Aydınlık</span>
+                </>
+              ) : (
+                <>
+                  <Moon className="w-4 h-4 text-purple-700" />
+                  <span className="hidden sm:inline">Siyah Mod</span>
+                </>
+              )}
             </button>
 
             {/* Sesli Uyarı Aç/Kapat butonu (Masaüstü) */}
@@ -3419,6 +3502,29 @@ export default function App() {
             {currentUser.role === 'admin' && (
               <div className="space-y-2">
                 <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Yönetici İşlemleri</p>
+                
+                {/* Siyah Mod / Normal Mod Hızlı Geçiş */}
+                <div className="flex items-center justify-between p-3.5 bg-slate-100 dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700">
+                  <div className="flex items-center gap-2.5">
+                    {theme === 'dark' ? <Moon className="w-5 h-5 text-purple-400" /> : <Sun className="w-5 h-5 text-amber-500" />}
+                    <div>
+                      <span className="font-bold text-xs text-slate-800 dark:text-slate-100 block">
+                        {theme === 'dark' ? 'Siyah Mod (Aktif)' : 'Normal Mod (Aktif)'}
+                      </span>
+                      <span className="text-[10px] text-slate-500 dark:text-slate-400">
+                        {theme === 'dark' ? 'Göz yorgunluğunu azaltan siyah tema' : 'Klasik aydınlık tema'}
+                      </span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={toggleTheme}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-black transition cursor-pointer shadow-xs ${
+                      theme === 'dark' ? 'bg-purple-600 text-white' : 'bg-slate-200 text-slate-800'
+                    }`}
+                  >
+                    {theme === 'dark' ? 'Siyah Mod' : 'Normal'}
+                  </button>
+                </div>
                 <button
                   onClick={() => {
                     setShowMobileAdminMenu(false);

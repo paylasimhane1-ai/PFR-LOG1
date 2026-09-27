@@ -47,8 +47,8 @@ export const InAppNotificationBanner: React.FC<InAppNotificationBannerProps> = (
   return (
     <div className="fixed top-3 left-3 right-3 sm:left-auto sm:right-6 sm:max-w-md z-60 animate-in slide-in-from-top-4 duration-300 pointer-events-auto">
       <div className={`p-4 rounded-2xl border backdrop-blur-md shadow-2xl flex items-start gap-3 relative ${bgStyle}`}>
-        <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center shrink-0 mt-0.5">
-          <Bell className="w-5 h-5 text-white animate-bounce" />
+        <div className="w-10 h-10 rounded-xl bg-white p-1 flex items-center justify-center shrink-0 mt-0.5 shadow-md border border-purple-200">
+          <img src="/p-logo.png" alt="P" className="w-full h-full object-contain rounded-lg" />
         </div>
 
         <div className="flex-1 min-w-0 pr-6">

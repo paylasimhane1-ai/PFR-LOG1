@@ -104,6 +104,20 @@ export async function requestNotificationPermission(): Promise<NotificationPermi
           // ignore
         }
       }
+
+      // Arka plan senkronizasyonu için Service Worker periyodik sync kaydı (Android PWA)
+      if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+        try {
+          const reg: any = await navigator.serviceWorker.ready;
+          if (reg && 'periodicSync' in reg) {
+            await reg.periodicSync.register('pfr-check-notifications', {
+              minInterval: 12 * 60 * 1000 // 12 dakikada bir kontrol
+            });
+          }
+        } catch (e) {
+          // periodicSync desteklenmeyebilir, normal SW push fallback
+        }
+      }
     }
     return permission;
   } catch (err) {
@@ -154,8 +168,8 @@ export async function sendNativeNotification(options: SendNotificationOptions): 
   const tagId = options.tag || 'yms-notification-' + Date.now();
   const notifOptions: NotificationOptions & { renotify?: boolean; vibrate?: number[] } = {
     body: options.body,
-    icon: options.icon || '/favicon.svg',
-    badge: '/favicon.svg',
+    icon: options.icon || '/pwa-192x192.png',
+    badge: '/p-logo-64.png',
     tag: tagId,
     renotify: true,
     vibrate: [250, 100, 250, 100, 400],

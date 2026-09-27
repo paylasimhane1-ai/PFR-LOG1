@@ -150,7 +150,7 @@ export const WhatsAppSharePromptModal: React.FC<WhatsAppSharePromptModalProps> =
 
   return (
     <div className="fixed inset-0 bg-slate-950/75 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 z-50 animate-in fade-in duration-150">
-      <div className="bg-white rounded-3xl shadow-2xl max-w-lg w-full overflow-hidden border border-emerald-200 flex flex-col max-h-[92vh]">
+      <div className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-3xl shadow-2xl max-w-lg w-full overflow-hidden border border-emerald-200 dark:border-emerald-800 flex flex-col max-h-[92vh] transition-colors">
         {/* Header */}
         <div className="bg-emerald-600 px-5 py-4 text-white flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
