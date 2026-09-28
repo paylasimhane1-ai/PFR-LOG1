@@ -87,7 +87,7 @@ export const CustomerAutocomplete: React.FC<CustomerAutocompleteProps> = ({
           onFocus={() => setIsOpen(true)}
           required={required}
           placeholder={placeholder}
-          className="w-full pl-9 pr-16 py-2 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 text-xs md:text-sm bg-white font-medium text-slate-800 placeholder-slate-400"
+          className="w-full pl-9 pr-16 py-2 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 text-xs md:text-sm bg-white dark:bg-slate-800 font-medium text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-400"
         />
 
         <div className="absolute inset-y-0 right-0 pr-2 flex items-center gap-1">
@@ -99,7 +99,7 @@ export const CustomerAutocomplete: React.FC<CustomerAutocompleteProps> = ({
                 onChange('');
                 setIsOpen(true);
               }}
-              className="p-1 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-100 transition cursor-pointer"
+              className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700 transition cursor-pointer"
               title="Temizle"
             >
               <X className="w-3.5 h-3.5" />
@@ -109,7 +109,7 @@ export const CustomerAutocomplete: React.FC<CustomerAutocompleteProps> = ({
           <button
             type="button"
             onClick={() => setIsOpen(!isOpen)}
-            className="p-1 text-slate-400 hover:text-blue-600 rounded-full hover:bg-blue-50 transition cursor-pointer"
+            className="p-1 text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 rounded-full hover:bg-blue-50 dark:hover:bg-slate-700 transition cursor-pointer"
             title={isOpen ? 'Listeyi Kapat' : 'Kayıtlı Firmaları Listele'}
           >
             <Search className="w-3.5 h-3.5" />
@@ -119,10 +119,10 @@ export const CustomerAutocomplete: React.FC<CustomerAutocompleteProps> = ({
 
       {/* Autocomplete Dropdown */}
       {isOpen && (
-        <div className="absolute z-50 left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl max-h-60 overflow-y-auto custom-scroll animate-in fade-in-50 zoom-in-95 duration-150">
+        <div className="absolute z-50 left-0 right-0 mt-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl max-h-60 overflow-y-auto custom-scroll animate-in fade-in-50 zoom-in-95 duration-150">
           {/* Quick Add Option when typed firm is not in system */}
           {value.trim() && !exactMatchExists && (
-            <div className="p-2 border-b border-slate-100 bg-blue-50/70">
+            <div className="p-2 border-b border-slate-100 dark:border-slate-800 bg-blue-50/70 dark:bg-blue-950/40">
               <button
                 type="button"
                 onMouseDown={handleCreateNew}
@@ -144,7 +144,7 @@ export const CustomerAutocomplete: React.FC<CustomerAutocompleteProps> = ({
           {/* List of matching customers */}
           {filteredCustomers.length > 0 ? (
             <div className="py-1">
-              <div className="px-3 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider flex justify-between items-center border-b border-slate-100">
+              <div className="px-3 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider flex justify-between items-center border-b border-slate-100 dark:border-slate-800">
                 <span>Kayıtlı Firmalar ({filteredCustomers.length})</span>
                 {onOpenCustomerManagement && (
                   <button
@@ -154,7 +154,7 @@ export const CustomerAutocomplete: React.FC<CustomerAutocompleteProps> = ({
                       setIsOpen(false);
                       onOpenCustomerManagement();
                     }}
-                    className="text-blue-600 hover:underline flex items-center gap-1 cursor-pointer font-semibold"
+                    className="text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 cursor-pointer font-semibold"
                   >
                     <Briefcase className="w-2.5 h-2.5" /> Tümünü Yönet
                   </button>
@@ -169,8 +169,8 @@ export const CustomerAutocomplete: React.FC<CustomerAutocompleteProps> = ({
                     onMouseDown={() => handleSelect(cust.name)}
                     className={`px-3 py-2 text-xs flex items-center justify-between cursor-pointer transition ${
                       isSelected
-                        ? 'bg-blue-50 text-blue-900 font-bold'
-                        : 'text-slate-700 hover:bg-slate-50'
+                        ? 'bg-blue-50 dark:bg-blue-950/60 text-blue-900 dark:text-blue-200 font-bold'
+                        : 'text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800'
                     }`}
                   >
                     <div className="flex items-center gap-2 truncate">
@@ -192,7 +192,7 @@ export const CustomerAutocomplete: React.FC<CustomerAutocompleteProps> = ({
             </div>
           ) : (
             <div className="p-4 text-center">
-              <p className="text-xs text-slate-500 mb-2">
+              <p className="text-xs text-slate-500 dark:text-slate-400 mb-2">
                 "<b>{value}</b>" içeren kayıtlı firma bulunamadı.
               </p>
               {value.trim() && (

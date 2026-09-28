@@ -34,6 +34,26 @@ html.light {
   color: #0f172a;
 }
 
+/* Safe area helpers for iOS notch, Dynamic Island, and home indicator */
+.safe-top {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+.header-safe {
+  min-height: calc(4rem + env(safe-area-inset-top, 0px));
+  padding-top: env(safe-area-inset-top, 0px);
+}
+@media (min-width: 768px) {
+  .header-safe {
+    min-height: 4rem;
+    padding-top: 0px;
+  }
+}
+
+html.dark select option {
+  background-color: #0f172a;
+  color: #f8fafc;
+}
+
 /* iPhone Safari input focus auto-zoom prevention */
 @media screen and (max-width: 768px) {
   input, select, textarea {

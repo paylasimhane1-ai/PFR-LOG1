@@ -49,7 +49,7 @@ export const GuestPortal: React.FC<GuestPortalProps> = ({
 
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col">
-      <header className="h-16 bg-slate-950 border-b border-slate-800 px-6 flex items-center justify-between">
+      <header className="header-safe bg-slate-950 border-b border-slate-800 px-6 flex items-center justify-between">
         <div className="flex items-center gap-2.5">
           <PerformanceIcon className="w-8 h-8 shrink-0 drop-shadow" />
           <div>
@@ -122,16 +122,16 @@ export const GuestPortal: React.FC<GuestPortalProps> = ({
         </div>
 
         {searchResult && (
-          <div className="bg-white text-slate-800 rounded-2xl p-5 md:p-6 shadow-2xl space-y-4">
-            <div className="flex justify-between items-start border-b border-slate-100 pb-4">
+          <div className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-2xl p-5 md:p-6 shadow-2xl space-y-4 border border-slate-200 dark:border-slate-800">
+            <div className="flex justify-between items-start border-b border-slate-100 dark:border-slate-800 pb-4">
               <div>
-                <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wider">
+                <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider">
                   {searchResult.musteri}
                 </span>
-                <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2 mt-0.5">
-                  <Truck className="w-5 h-5 text-slate-500" /> {searchResult.dorsePlaka}
+                <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2 mt-0.5">
+                  <Truck className="w-5 h-5 text-slate-500 dark:text-slate-400" /> {searchResult.dorsePlaka}
                 </h3>
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-slate-500 dark:text-slate-400">
                   Çekici: {searchResult.cekiciPlaka || '-'} | Konteynır: {searchResult.konteynirNo || '-'}
                 </p>
               </div>
@@ -140,22 +140,22 @@ export const GuestPortal: React.FC<GuestPortalProps> = ({
               </span>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-slate-50 p-4 rounded-xl text-xs border border-slate-200">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-slate-50 dark:bg-slate-800/60 p-4 rounded-xl text-xs border border-slate-200 dark:border-slate-700/60">
               <div>
-                <span className="text-slate-400 font-semibold block text-[10px]">İşlem / Depo</span>
-                <span className="font-bold text-slate-800">
+                <span className="text-slate-400 dark:text-slate-400 font-semibold block text-[10px]">İşlem / Depo</span>
+                <span className="font-bold text-slate-800 dark:text-slate-100">
                   {searchResult.depoTuru} - {searchResult.islemTuru}
                 </span>
               </div>
               <div>
-                <span className="text-slate-400 font-semibold block text-[10px]">Atanan Rampa</span>
-                <span className="font-bold text-purple-700">{getRampName(searchResult.rampaId)}</span>
+                <span className="text-slate-400 dark:text-slate-400 font-semibold block text-[10px]">Atanan Rampa</span>
+                <span className="font-bold text-purple-700 dark:text-purple-400">{getRampName(searchResult.rampaId)}</span>
               </div>
-              <div className="bg-blue-100/60 p-2 rounded-lg border border-blue-200">
-                <span className="text-blue-900 font-bold block text-[10px]">
+              <div className="bg-blue-100/60 dark:bg-blue-950/40 p-2 rounded-lg border border-blue-200 dark:border-blue-800">
+                <span className="text-blue-900 dark:text-blue-200 font-bold block text-[10px]">
                   {getStatusDurationLabel(searchResult.durum)}
                 </span>
-                <span className="font-extrabold text-blue-700 text-sm">
+                <span className="font-extrabold text-blue-700 dark:text-blue-300 text-sm">
                   ⏱ {getSpecificStatusDuration(searchResult)}
                 </span>
               </div>
@@ -173,14 +173,14 @@ export const GuestPortal: React.FC<GuestPortalProps> = ({
 
             {searchResult.guvenlikNotlari && searchResult.guvenlikNotlari.length > 0 && (
               <div className="space-y-1 pt-2">
-                <h4 className="font-bold text-xs text-slate-700 flex items-center gap-1.5">
-                  <ShieldAlert className="w-4 h-4 text-amber-600" />
+                <h4 className="font-bold text-xs text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
+                  <ShieldAlert className="w-4 h-4 text-amber-600 dark:text-amber-400" />
                   Güvenlik Geri Bildirim Notları
                 </h4>
                 <div className="space-y-1">
                   {searchResult.guvenlikNotlari.map((n, idx) => (
-                    <div key={idx} className="p-2 bg-slate-100 rounded-lg text-[11px] text-slate-700">
-                      <b>{n.time}:</b> {n.note} <span className="text-slate-400 text-[9px]">({n.author})</span>
+                    <div key={idx} className="p-2 bg-slate-100 dark:bg-slate-800 rounded-lg text-[11px] text-slate-700 dark:text-slate-200 border border-slate-200/50 dark:border-slate-700/50">
+                      <b>{n.time}:</b> {n.note} <span className="text-slate-400 dark:text-slate-400 text-[9px]">({n.author})</span>
                     </div>
                   ))}
                 </div>
@@ -189,8 +189,8 @@ export const GuestPortal: React.FC<GuestPortalProps> = ({
 
             {searchResult.fotograflar && searchResult.fotograflar.length > 0 && (
               <div className="pt-2">
-                <h4 className="font-bold text-xs text-slate-700 mb-2 flex items-center gap-1.5">
-                  <Image className="w-4 h-4 text-blue-600" />
+                <h4 className="font-bold text-xs text-slate-700 dark:text-slate-200 mb-2 flex items-center gap-1.5">
+                  <Image className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                   Yüklenen Fotoğraflar
                 </h4>
                 <div className="flex gap-2 overflow-x-auto">
@@ -200,7 +200,7 @@ export const GuestPortal: React.FC<GuestPortalProps> = ({
                       src={img}
                       alt={`Araç fotoğrafı ${i + 1}`}
                       onClick={() => onOpenPhotoGallery(searchResult)}
-                      className="w-16 h-16 object-cover rounded-lg border cursor-pointer hover:opacity-90"
+                      className="w-16 h-16 object-cover rounded-lg border border-slate-200 dark:border-slate-700 cursor-pointer hover:opacity-90"
                     />
                   ))}
                 </div>

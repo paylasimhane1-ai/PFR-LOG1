@@ -292,15 +292,15 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
               </div>
 
               {/* Müşteri, Nakliye & Şoför Kompakt Bilgisi */}
-              <div className="bg-slate-50 p-2 rounded-xl text-xs space-y-1 border border-slate-100">
+              <div className="bg-slate-50 dark:bg-slate-800/80 p-2 rounded-xl text-xs space-y-1 border border-slate-100 dark:border-slate-700/60">
                 <div className="flex justify-between items-center text-xs">
-                  <span className="font-bold text-slate-800 truncate pr-2">{v.musteri}</span>
-                  <span className="text-[10px] text-blue-600 shrink-0 font-medium">{v.nakliyeFirmasi || 'Nakliye Yok'}</span>
+                  <span className="font-bold text-slate-800 dark:text-slate-100 truncate pr-2">{v.musteri}</span>
+                  <span className="text-[10px] text-blue-600 dark:text-blue-400 shrink-0 font-medium">{v.nakliyeFirmasi || 'Nakliye Yok'}</span>
                 </div>
 
-                <div className="flex items-center justify-between text-[11px] pt-0.5 text-slate-600">
+                <div className="flex items-center justify-between text-[11px] pt-0.5 text-slate-600 dark:text-slate-300">
                   <span className="truncate">
-                    <b>{v.soforAd}</b> {v.soforTel && <span className="text-slate-400">({v.soforTel})</span>}
+                    <b className="text-slate-800 dark:text-slate-100">{v.soforAd}</b> {v.soforTel && <span className="text-slate-400 dark:text-slate-400">({v.soforTel})</span>}
                   </span>
                   <div className="flex items-center gap-1 shrink-0">
                     <a
@@ -322,7 +322,7 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between text-[10px] text-slate-400 pt-0.5 border-t border-slate-200/50">
+                <div className="flex items-center justify-between text-[10px] text-slate-400 dark:text-slate-400 pt-0.5 border-t border-slate-200/50 dark:border-slate-700/50">
                   <span>{v.depoTuru} • {v.islemTuru}{v.konteynirNo ? ` • Kont: ${v.konteynirNo}` : ''}</span>
                   <span>Giriş: {v.girisTarihi}</span>
                 </div>
@@ -346,29 +346,29 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
               )}
 
               {/* 4 Eksenli Kompakt Aksiyon Butonları */}
-              <div className="grid grid-cols-4 gap-1 pt-1 border-t border-slate-100">
+              <div className="grid grid-cols-4 gap-1 pt-1 border-t border-slate-100 dark:border-slate-800">
                 <button
                   onClick={() => onOpenDetailModal(v)}
-                  className="py-1.5 px-1 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-xl text-[11px] font-bold flex items-center justify-center gap-1 transition active:scale-95 cursor-pointer shadow-2xs"
+                  className="py-1.5 px-1 bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/40 dark:hover:bg-blue-900/50 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 rounded-xl text-[11px] font-bold flex items-center justify-center gap-1 transition active:scale-95 cursor-pointer shadow-2xs"
                   title="Detay İncele"
                 >
-                  <Eye className="w-3 h-3 text-blue-600" />
+                  <Eye className="w-3 h-3 text-blue-600 dark:text-blue-400" />
                   <span>İncele</span>
                 </button>
 
                 <button
                   onClick={() => onOpenPhotoGallery(v)}
-                  className="py-1.5 px-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-[11px] font-semibold flex items-center justify-center gap-1 transition active:scale-95 cursor-pointer"
+                  className="py-1.5 px-1 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-[11px] font-semibold flex items-center justify-center gap-1 transition active:scale-95 cursor-pointer"
                   title="Fotoğraflar"
                 >
-                  <Camera className="w-3 h-3 text-blue-600" />
+                  <Camera className="w-3 h-3 text-blue-600 dark:text-blue-400" />
                   <span>Foto ({v.fotograflar?.length || 0})</span>
                 </button>
 
                 {currentUser?.role !== 'guest' ? (
                   <button
                     onClick={() => onOpenEditModal(v)}
-                    className="py-1.5 px-1 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-[11px] font-bold flex items-center justify-center gap-1 transition active:scale-95 cursor-pointer"
+                    className="py-1.5 px-1 bg-slate-800 hover:bg-slate-900 dark:bg-slate-700 dark:hover:bg-slate-600 text-white rounded-xl text-[11px] font-bold flex items-center justify-center gap-1 transition active:scale-95 cursor-pointer"
                     title="Düzenle"
                   >
                     <Edit3 className="w-3 h-3" />
@@ -379,7 +379,7 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                 {currentUser?.role !== 'guest' ? (
                   <button
                     onClick={() => handleConfirmExit(v)}
-                    className="py-1.5 px-1 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-xl text-[11px] font-bold flex items-center justify-center gap-1 transition active:scale-95 cursor-pointer"
+                    className="py-1.5 px-1 bg-red-50 hover:bg-red-100 dark:bg-red-950/40 dark:hover:bg-red-900/50 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800 rounded-xl text-[11px] font-bold flex items-center justify-center gap-1 transition active:scale-95 cursor-pointer"
                     title="Çıkış Ver"
                   >
                     <LogOut className="w-3 h-3" />
@@ -396,7 +396,7 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                     <select
                       value={v.durum}
                       onChange={(e) => onUpdateStatus(v, e.target.value as Vehicle['durum'])}
-                      className="w-full text-[11px] font-bold border border-slate-300 rounded-xl p-1.5 bg-slate-50 text-slate-800 outline-none focus:ring-1 focus:ring-blue-500"
+                      className="w-full text-[11px] font-bold border border-slate-300 dark:border-slate-700 rounded-xl p-1.5 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-100 outline-none focus:ring-1 focus:ring-blue-500"
                     >
                       <option value="BEKLEMEDE">BEKLEMEDE</option>
                       <option
@@ -424,8 +424,8 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                         disabled={(v.durum !== 'EVRAK HAZIR' && v.durum !== 'RAMPADA')}
                         className={`w-full text-[11px] font-bold border rounded-xl p-1.5 outline-none focus:ring-1 focus:ring-purple-500 ${
                           v.durum !== 'EVRAK HAZIR' && v.durum !== 'RAMPADA'
-                            ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed'
-                            : 'border-purple-300 bg-purple-50/70 text-purple-900'
+                            ? 'bg-slate-100 dark:bg-slate-800/60 text-slate-400 dark:text-slate-500 border-slate-200 dark:border-slate-700 cursor-not-allowed'
+                            : 'border-purple-300 dark:border-purple-700 bg-purple-50/70 dark:bg-purple-950/40 text-purple-900 dark:text-purple-200'
                         }`}
                       >
                         <option value="">Rampa: {v.rampaId ? getRampName(v.rampaId) : 'Seçilmedi'}</option>
@@ -506,7 +506,7 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                   className={`transition ${v.isAcik ? 'bg-red-50 dark:bg-red-950/20 border-l-4 border-red-600' : 'hover:bg-slate-50/80 dark:hover:bg-slate-800/60 text-slate-700 dark:text-slate-200'}`}
                 >
                   <td className="p-3">
-                    <div className="font-bold text-slate-800 flex items-center gap-1.5">
+                    <div className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
                       {v.musteri}
                       {v.isAcik && (
                         <span className="animate-pulse bg-red-600 text-white font-extrabold text-[9px] px-1.5 py-0.5 rounded shadow flex items-center gap-0.5">
@@ -517,17 +517,17 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                   </td>
 
                   <td className="p-3">
-                    <div className="font-bold text-slate-800">{v.dorsePlaka}</div>
-                    <div className="text-[11px] text-slate-500">{v.konteynirNo || 'Konteynır Yok'}</div>
-                    <div className="text-[10px] text-blue-600 font-medium">{v.nakliyeFirmasi}</div>
+                    <div className="font-bold text-slate-800 dark:text-slate-100">{v.dorsePlaka}</div>
+                    <div className="text-[11px] text-slate-500 dark:text-slate-400">{v.konteynirNo || 'Konteynır Yok'}</div>
+                    <div className="text-[10px] text-blue-600 dark:text-blue-400 font-medium">{v.nakliyeFirmasi}</div>
                   </td>
 
                   <td className="p-3">
-                    <div className="font-semibold text-slate-800">{v.soforAd}</div>
+                    <div className="font-semibold text-slate-800 dark:text-slate-200">{v.soforAd}</div>
                     <div className="flex items-center gap-1.5 mt-0.5">
                       <a
                         href={`tel:${cleanPhone(v.soforTel)}`}
-                        className="text-[10px] text-emerald-600 font-bold hover:underline flex items-center gap-1"
+                        className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold hover:underline flex items-center gap-1"
                         title="Şoförü Ara"
                       >
                         <Phone className="w-3 h-3" /> {v.soforTel}
@@ -545,8 +545,8 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                   </td>
 
                   <td className="p-3">
-                    <div className="font-semibold text-slate-700">{v.depoTuru}</div>
-                    <div className="text-slate-500 text-[11px]">{v.islemTuru}</div>
+                    <div className="font-semibold text-slate-700 dark:text-slate-200">{v.depoTuru}</div>
+                    <div className="text-slate-500 dark:text-slate-400 text-[11px]">{v.islemTuru}</div>
                   </td>
 
                   <td className="p-3 space-y-1">
@@ -554,7 +554,7 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                       value={v.durum}
                       onChange={(e) => onUpdateStatus(v, e.target.value as Vehicle['durum'])}
                       disabled={currentUser?.role === 'guest'}
-                      className="border border-slate-200 rounded-lg px-2 py-1 text-xs font-semibold outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                      className="border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1 text-xs font-semibold outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100"
                     >
                       <option value="BEKLEMEDE">BEKLEMEDE</option>
                       <option value="EVRAK HAZIR" disabled={currentUser?.role !== 'admin' && v.durum !== 'EVRAK HAZIR'}>
@@ -600,8 +600,8 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                         }
                         className={`border rounded-lg px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-blue-500 w-full ${
                           (v.durum !== 'EVRAK HAZIR' && v.durum !== 'RAMPADA') || currentUser?.role === 'guest'
-                            ? 'bg-slate-100 text-slate-400 cursor-not-allowed border-slate-200'
-                            : 'bg-white border-slate-200 font-semibold text-slate-700'
+                            ? 'bg-slate-100 dark:bg-slate-800/60 text-slate-400 dark:text-slate-500 cursor-not-allowed border-slate-200 dark:border-slate-700'
+                            : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 font-semibold text-slate-700 dark:text-slate-200'
                         }`}
                       >
                         <option value="">Rampa Atanmadı</option>
@@ -643,22 +643,22 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                   <td className="p-3 text-center">
                     <button
                       onClick={() => onOpenPhotoGallery(v)}
-                      className="p-2 text-slate-600 hover:text-blue-600 bg-slate-100 hover:bg-blue-50 rounded-lg transition cursor-pointer"
+                      className="p-2 text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 bg-slate-100 dark:bg-slate-800 hover:bg-blue-50 dark:hover:bg-blue-950/40 rounded-lg transition cursor-pointer"
                       title="Fotoğrafları İncele"
                     >
                       <Camera className="w-4 h-4 inline" />
                       {v.fotograflar && v.fotograflar.length > 0 && (
-                        <span className="ml-1 text-[10px] font-bold text-blue-600">({v.fotograflar.length})</span>
+                        <span className="ml-1 text-[10px] font-bold text-blue-600 dark:text-blue-400">({v.fotograflar.length})</span>
                       )}
                     </button>
                   </td>
 
                   <td className="p-3 text-[11px]">
-                    <div className="font-medium text-slate-700 font-mono flex items-center gap-1">
-                      <LogIn className="w-3 h-3 text-emerald-600" />
+                    <div className="font-medium text-slate-700 dark:text-slate-200 font-mono flex items-center gap-1">
+                      <LogIn className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
                       <span>{v.girisTarihi}</span>
                     </div>
-                    <div className="text-[10px] text-slate-400 mt-0.5">
+                    <div className="text-[10px] text-slate-400 dark:text-slate-400 mt-0.5">
                       {getDurationText(v)}
                     </div>
                   </td>
@@ -666,16 +666,16 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                   <td className="p-3 text-center space-y-1">
                     <button
                       onClick={() => onOpenDetailModal(v)}
-                      className="px-2.5 py-1 bg-blue-50 text-blue-700 border border-blue-200 text-[10px] font-bold rounded-lg hover:bg-blue-100 transition flex items-center gap-1 mx-auto cursor-pointer shadow-2xs w-full justify-center"
+                      className="px-2.5 py-1 bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 text-[10px] font-bold rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/50 transition flex items-center gap-1 mx-auto cursor-pointer shadow-2xs w-full justify-center"
                       title="Araç Detaylarını ve Fotoğraflarını İncele"
                     >
-                      <Eye className="w-3 h-3 text-blue-600" /> İncele
+                      <Eye className="w-3 h-3 text-blue-600 dark:text-blue-400" /> İncele
                     </button>
 
                     {currentUser?.role !== 'guest' && (
                       <button
                         onClick={() => onOpenEditModal(v)}
-                        className="px-2.5 py-1 bg-slate-800 text-white text-[10px] font-medium rounded-lg hover:bg-slate-700 transition flex items-center gap-1 mx-auto cursor-pointer w-full justify-center"
+                        className="px-2.5 py-1 bg-slate-800 dark:bg-slate-700 text-white text-[10px] font-medium rounded-lg hover:bg-slate-700 dark:hover:bg-slate-600 transition flex items-center gap-1 mx-auto cursor-pointer w-full justify-center"
                       >
                         <Edit3 className="w-3 h-3" /> Düzenle
                       </button>
@@ -686,7 +686,7 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                         onClick={() => onToggleAcil(v)}
                         className={`px-2 py-0.5 rounded text-[9px] font-extrabold transition block mx-auto cursor-pointer w-full ${
                           v.isAcik
-                            ? 'bg-slate-200 text-slate-700 hover:bg-slate-300'
+                            ? 'bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-700'
                             : 'bg-red-600 text-white hover:bg-red-700 shadow-xs'
                         }`}
                       >

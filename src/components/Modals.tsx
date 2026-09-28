@@ -100,6 +100,8 @@ export const AddExpectedVehicleModal: React.FC<AddExpectedVehicleModalProps> = (
     konteynirNo: '',
     soforAd: '',
     soforTel: '',
+    soforTc: '',
+    aciklama: '',
     musteri: '',
     depoTuru: 'Antrepo',
     islemTuru: 'Boşaltma',
@@ -121,6 +123,8 @@ export const AddExpectedVehicleModal: React.FC<AddExpectedVehicleModalProps> = (
       konteynirNo: form.konteynirNo.trim().toUpperCase(),
       soforAd: form.soforAd.trim(),
       soforTel: form.soforTel.trim(),
+      soforTc: form.soforTc.trim(),
+      aciklama: form.aciklama.trim(),
       musteri: form.musteri.trim(),
       depoTuru: form.depoTuru,
       islemTuru: form.islemTuru,
@@ -144,13 +148,13 @@ export const AddExpectedVehicleModal: React.FC<AddExpectedVehicleModalProps> = (
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-5 space-y-3 text-xs">
+        <form onSubmit={handleSubmit} className="p-5 space-y-3 text-xs max-h-[85vh] overflow-y-auto custom-scroll">
           <div>
-            <label className="block font-bold text-slate-700 mb-1">Hedef Depo / Tesis</label>
+            <label className="block font-bold text-slate-700 dark:text-slate-200 mb-1">Hedef Depo / Tesis</label>
             <select
               value={form.depoId}
               onChange={(e) => setForm({ ...form, depoId: Number(e.target.value) })}
-              className="w-full border border-slate-200 rounded-xl p-2.5 outline-none font-bold text-slate-800 bg-slate-50 focus:bg-white"
+              className="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 outline-none font-bold text-slate-800 dark:text-slate-100 bg-slate-50 dark:bg-slate-800 focus:bg-white dark:focus:bg-slate-800"
             >
               {warehouses.map((d) => (
                 <option key={d.id} value={d.id}>
@@ -162,37 +166,37 @@ export const AddExpectedVehicleModal: React.FC<AddExpectedVehicleModalProps> = (
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block font-semibold text-slate-600 mb-1">Dorse Plakası</label>
+              <label className="block font-semibold text-slate-600 dark:text-slate-300 mb-1">Dorse Plakası *</label>
               <input
                 type="text"
                 value={form.dorsePlaka}
                 onChange={(e) => setForm({ ...form, dorsePlaka: e.target.value })}
-                className="w-full border border-slate-200 rounded-xl p-2 outline-none uppercase font-bold"
+                className="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-2 outline-none uppercase font-bold bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100"
                 placeholder="34 TR 123"
               />
             </div>
             <div>
-              <label className="block font-semibold text-slate-600 mb-1">Çekici Plakası</label>
+              <label className="block font-semibold text-slate-600 dark:text-slate-300 mb-1">Çekici Plakası</label>
               <input
                 type="text"
                 value={form.cekiciPlaka}
                 onChange={(e) => setForm({ ...form, cekiciPlaka: e.target.value })}
-                className="w-full border border-slate-200 rounded-xl p-2 outline-none uppercase"
+                className="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-2 outline-none uppercase bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100"
                 placeholder="34 ABC 123"
               />
             </div>
             <div>
-              <label className="block font-semibold text-slate-600 mb-1">Konteynır No</label>
+              <label className="block font-semibold text-slate-600 dark:text-slate-300 mb-1">Konteynır No</label>
               <input
                 type="text"
                 value={form.konteynirNo}
                 onChange={(e) => setForm({ ...form, konteynirNo: e.target.value })}
-                className="w-full border border-slate-200 rounded-xl p-2 outline-none uppercase"
+                className="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-2 outline-none uppercase bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100"
                 placeholder="MSCU1234567"
               />
             </div>
             <div>
-              <label className="block font-semibold text-slate-600 mb-1">Müşteri / Firma</label>
+              <label className="block font-semibold text-slate-600 dark:text-slate-300 mb-1">Müşteri / Firma</label>
               <CustomerAutocomplete
                 value={form.musteri}
                 onChange={(val) => setForm({ ...form, musteri: val })}
@@ -202,42 +206,53 @@ export const AddExpectedVehicleModal: React.FC<AddExpectedVehicleModalProps> = (
               />
             </div>
             <div>
-              <label className="block font-semibold text-slate-600 mb-1">Şoför Ad Soyad</label>
+              <label className="block font-semibold text-slate-600 dark:text-slate-300 mb-1">Şoför Ad Soyad</label>
               <input
                 type="text"
                 value={form.soforAd}
                 onChange={(e) => setForm({ ...form, soforAd: e.target.value })}
-                className="w-full border border-slate-200 rounded-xl p-2 outline-none"
+                className="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-2 outline-none bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100"
                 placeholder="Şoför İsim"
               />
             </div>
             <div>
-              <label className="block font-semibold text-slate-600 mb-1">Şoför Telefon</label>
+              <label className="block font-semibold text-slate-600 dark:text-slate-300 mb-1">Şoför Telefon</label>
               <input
                 type="text"
                 value={form.soforTel}
                 onChange={(e) => setForm({ ...form, soforTel: e.target.value })}
-                className="w-full border border-slate-200 rounded-xl p-2 outline-none"
+                className="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-2 outline-none bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100"
                 placeholder="05XX XXX XX XX"
               />
             </div>
             <div>
-              <label className="block font-semibold text-slate-600 mb-1">Depo Türü</label>
+              <label className="block font-semibold text-slate-600 dark:text-slate-300 mb-1">TC Kimlik No (Opsiyonel)</label>
+              <input
+                type="text"
+                maxLength={11}
+                value={form.soforTc}
+                onChange={(e) => setForm({ ...form, soforTc: e.target.value.replace(/\D/g, '').slice(0, 11) })}
+                className="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-2 outline-none font-mono bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100"
+                placeholder="11 Haneli TC No"
+              />
+            </div>
+            <div>
+              <label className="block font-semibold text-slate-600 dark:text-slate-300 mb-1">Depo Türü</label>
               <select
                 value={form.depoTuru}
                 onChange={(e) => setForm({ ...form, depoTuru: e.target.value })}
-                className="w-full border border-slate-200 rounded-xl p-2 outline-none"
+                className="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-2 outline-none bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100"
               >
                 <option value="Antrepo">Antrepo</option>
                 <option value="Serbest Depo">Serbest Depo</option>
               </select>
             </div>
-            <div>
-              <label className="block font-semibold text-slate-600 mb-1">İşlem Türü</label>
+            <div className="col-span-2">
+              <label className="block font-semibold text-slate-600 dark:text-slate-300 mb-1">İşlem Türü</label>
               <select
                 value={form.islemTuru}
                 onChange={(e) => setForm({ ...form, islemTuru: e.target.value })}
-                className="w-full border border-slate-200 rounded-xl p-2 outline-none"
+                className="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-2 outline-none bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100"
               >
                 <option value="Boşaltma">Boşaltma</option>
                 <option value="Yükleme">Yükleme</option>
@@ -246,28 +261,264 @@ export const AddExpectedVehicleModal: React.FC<AddExpectedVehicleModalProps> = (
           </div>
 
           <div>
-            <label className="block font-semibold text-slate-600 mb-1">Tahmini Varış Tarihi ve Saati</label>
+            <label className="block font-semibold text-slate-600 dark:text-slate-300 mb-1">Açıklama / Özel Notlar (Opsiyonel)</label>
+            <textarea
+              rows={2}
+              value={form.aciklama}
+              onChange={(e) => setForm({ ...form, aciklama: e.target.value })}
+              className="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-2 outline-none bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100"
+              placeholder="Yük detayı, özel talimatlar veya araç notu..."
+            />
+          </div>
+
+          <div>
+            <label className="block font-semibold text-slate-600 dark:text-slate-300 mb-1">Tahmini Varış Tarihi ve Saati</label>
             <input
               type="datetime-local"
               value={form.beklenenTarih}
               onChange={(e) => setForm({ ...form, beklenenTarih: e.target.value })}
-              className="w-full border border-slate-200 rounded-xl p-2 outline-none font-semibold text-slate-800"
+              className="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-2 outline-none font-semibold text-slate-800 dark:text-slate-100 bg-white dark:bg-slate-800"
             />
           </div>
 
-          <div className="pt-3 flex justify-end gap-2">
+          <div className="pt-3 flex justify-end gap-2 border-t border-slate-100 dark:border-slate-800">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 bg-slate-100 text-slate-600 rounded-xl font-semibold cursor-pointer"
+              className="px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-xl font-semibold cursor-pointer hover:bg-slate-200 dark:hover:bg-slate-700"
             >
               İptal
             </button>
             <button
               type="submit"
-              className="px-5 py-2 bg-amber-500 hover:bg-amber-600 text-slate-900 font-extrabold rounded-xl shadow cursor-pointer"
+              className="px-5 py-2 bg-amber-500 hover:bg-amber-600 text-slate-900 font-extrabold rounded-xl shadow cursor-pointer transition active:scale-95"
             >
               Beklenen Araç Ekle
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+/* =========================================================
+   1.1 BEKLENEN ARAÇ DÜZENLEME MODALI
+   ========================================================= */
+interface EditExpectedVehicleModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  expectedVehicle: ExpectedVehicle | null;
+  warehouses: Warehouse[];
+  customers?: Customer[];
+  onAddNewCustomer?: (name: string) => void;
+  onSave: (updated: ExpectedVehicle) => void;
+}
+
+export const EditExpectedVehicleModal: React.FC<EditExpectedVehicleModalProps> = ({
+  isOpen,
+  onClose,
+  expectedVehicle,
+  warehouses,
+  customers = [],
+  onAddNewCustomer = () => {},
+  onSave
+}) => {
+  const [form, setForm] = useState<ExpectedVehicle | null>(null);
+
+  useEffect(() => {
+    if (expectedVehicle) {
+      setForm({ ...expectedVehicle });
+    }
+  }, [expectedVehicle]);
+
+  if (!isOpen || !form) return null;
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.dorsePlaka?.trim() && !form.musteri?.trim()) {
+      alert('Lütfen en az bir Plaka veya Müşteri bilgisi giriniz.');
+      return;
+    }
+    onSave({
+      ...form,
+      depoId: Number(form.depoId),
+      cekiciPlaka: (form.cekiciPlaka || '').trim().toUpperCase(),
+      dorsePlaka: (form.dorsePlaka || '').trim().toUpperCase(),
+      konteynirNo: (form.konteynirNo || '').trim().toUpperCase(),
+      soforAd: (form.soforAd || '').trim(),
+      soforTel: (form.soforTel || '').trim(),
+      soforTc: (form.soforTc || '').trim(),
+      aciklama: (form.aciklama || '').trim(),
+      musteri: (form.musteri || '').trim(),
+      depoTuru: form.depoTuru || 'Antrepo',
+      islemTuru: form.islemTuru === 'Tahliye' ? 'Boşaltma' : (form.islemTuru || 'Boşaltma'),
+      beklenenTarih: form.beklenenTarih || ''
+    });
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+      <div className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-2xl shadow-2xl max-w-xl w-full overflow-hidden flex flex-col border border-slate-200 dark:border-slate-800 transition-colors">
+        <div className="p-4 bg-slate-900 text-white flex items-center justify-between">
+          <div>
+            <h3 className="font-bold text-sm flex items-center gap-2">
+              <Edit3 className="w-4 h-4 text-amber-400" /> Beklenen Araç Bilgilerini Düzenle
+            </h3>
+            <p className="text-[10px] text-slate-400">Yanlış girilen bilgileri güncelleyip kaydedebilirsiniz</p>
+          </div>
+          <button onClick={onClose} className="text-slate-400 hover:text-white cursor-pointer">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-5 space-y-3 text-xs max-h-[85vh] overflow-y-auto custom-scroll">
+          <div>
+            <label className="block font-bold text-slate-700 dark:text-slate-200 mb-1">Hedef Depo / Tesis</label>
+            <select
+              value={form.depoId}
+              onChange={(e) => setForm({ ...form, depoId: Number(e.target.value) })}
+              className="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 outline-none font-bold text-slate-800 dark:text-slate-100 bg-slate-50 dark:bg-slate-800"
+            >
+              {warehouses.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.ad}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block font-semibold text-slate-600 dark:text-slate-300 mb-1">Dorse Plakası *</label>
+              <input
+                type="text"
+                value={form.dorsePlaka}
+                onChange={(e) => setForm({ ...form, dorsePlaka: e.target.value })}
+                className="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-2 outline-none uppercase font-bold bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100"
+                placeholder="34 TR 123"
+              />
+            </div>
+            <div>
+              <label className="block font-semibold text-slate-600 dark:text-slate-300 mb-1">Çekici Plakası</label>
+              <input
+                type="text"
+                value={form.cekiciPlaka || ''}
+                onChange={(e) => setForm({ ...form, cekiciPlaka: e.target.value })}
+                className="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-2 outline-none uppercase bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100"
+                placeholder="34 ABC 123"
+              />
+            </div>
+            <div>
+              <label className="block font-semibold text-slate-600 dark:text-slate-300 mb-1">Konteynır No</label>
+              <input
+                type="text"
+                value={form.konteynirNo || ''}
+                onChange={(e) => setForm({ ...form, konteynirNo: e.target.value })}
+                className="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-2 outline-none uppercase bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100"
+                placeholder="MSCU1234567"
+              />
+            </div>
+            <div>
+              <label className="block font-semibold text-slate-600 dark:text-slate-300 mb-1">Müşteri / Firma</label>
+              <CustomerAutocomplete
+                value={form.musteri || ''}
+                onChange={(val) => setForm({ ...form, musteri: val })}
+                customers={customers}
+                onAddNewCustomer={onAddNewCustomer}
+                placeholder="Firma / Müşteri Ara veya Yaz..."
+              />
+            </div>
+            <div>
+              <label className="block font-semibold text-slate-600 dark:text-slate-300 mb-1">Şoför Ad Soyad</label>
+              <input
+                type="text"
+                value={form.soforAd || ''}
+                onChange={(e) => setForm({ ...form, soforAd: e.target.value })}
+                className="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-2 outline-none bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100"
+                placeholder="Şoför İsim"
+              />
+            </div>
+            <div>
+              <label className="block font-semibold text-slate-600 dark:text-slate-300 mb-1">Şoför Telefon</label>
+              <input
+                type="text"
+                value={form.soforTel || ''}
+                onChange={(e) => setForm({ ...form, soforTel: e.target.value })}
+                className="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-2 outline-none bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100"
+                placeholder="05XX XXX XX XX"
+              />
+            </div>
+            <div>
+              <label className="block font-semibold text-slate-600 dark:text-slate-300 mb-1">TC Kimlik No (Opsiyonel)</label>
+              <input
+                type="text"
+                maxLength={11}
+                value={form.soforTc || ''}
+                onChange={(e) => setForm({ ...form, soforTc: e.target.value.replace(/\D/g, '').slice(0, 11) })}
+                className="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-2 outline-none font-mono bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100"
+                placeholder="11 Haneli TC No"
+              />
+            </div>
+            <div>
+              <label className="block font-semibold text-slate-600 dark:text-slate-300 mb-1">Depo Türü</label>
+              <select
+                value={form.depoTuru}
+                onChange={(e) => setForm({ ...form, depoTuru: e.target.value })}
+                className="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-2 outline-none bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100"
+              >
+                <option value="Antrepo">Antrepo</option>
+                <option value="Serbest Depo">Serbest Depo</option>
+              </select>
+            </div>
+            <div className="col-span-2">
+              <label className="block font-semibold text-slate-600 dark:text-slate-300 mb-1">İşlem Türü</label>
+              <select
+                value={form.islemTuru}
+                onChange={(e) => setForm({ ...form, islemTuru: e.target.value })}
+                className="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-2 outline-none bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100"
+              >
+                <option value="Boşaltma">Boşaltma</option>
+                <option value="Yükleme">Yükleme</option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label className="block font-semibold text-slate-600 dark:text-slate-300 mb-1">Açıklama / Özel Notlar (Opsiyonel)</label>
+            <textarea
+              rows={2}
+              value={form.aciklama || ''}
+              onChange={(e) => setForm({ ...form, aciklama: e.target.value })}
+              className="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-2 outline-none bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100"
+              placeholder="Yük detayı, özel talimatlar veya araç notu..."
+            />
+          </div>
+
+          <div>
+            <label className="block font-semibold text-slate-600 dark:text-slate-300 mb-1">Tahmini Varış Tarihi ve Saati</label>
+            <input
+              type="datetime-local"
+              value={form.beklenenTarih || ''}
+              onChange={(e) => setForm({ ...form, beklenenTarih: e.target.value })}
+              className="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-2 outline-none font-semibold text-slate-800 dark:text-slate-100 bg-white dark:bg-slate-800"
+            />
+          </div>
+
+          <div className="pt-3 flex justify-end gap-2 border-t border-slate-100 dark:border-slate-800">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-xl font-semibold cursor-pointer hover:bg-slate-200 dark:hover:bg-slate-700"
+            >
+              İptal
+            </button>
+            <button
+              type="submit"
+              className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-extrabold rounded-xl shadow cursor-pointer transition active:scale-95"
+            >
+              Değişiklikleri Kaydet
             </button>
           </div>
         </form>
@@ -1639,6 +1890,27 @@ export const NewVehicleModal: React.FC<NewVehicleModalProps> = ({
     isAcik: initialValues?.isAcik || false
   });
 
+  // Beklenen araçtan veya prop değişiminden gelen bilgileri forma anında senkronize et
+  useEffect(() => {
+    if (isOpen) {
+      setForm({
+        depoId: initialValues?.depoId || (selectedDepoId === 0 ? 1 : selectedDepoId),
+        cekiciPlaka: initialValues?.cekiciPlaka || '',
+        dorsePlaka: initialValues?.dorsePlaka || '',
+        konteynirNo: initialValues?.konteynirNo || '',
+        soforAd: initialValues?.soforAd || '',
+        soforTel: initialValues?.soforTel || '',
+        nakliyeFirmasi: initialValues?.nakliyeFirmasi || '',
+        musteri: initialValues?.musteri || '',
+        depoTuru: (initialValues?.depoTuru as 'Antrepo' | 'Serbest Depo') || 'Antrepo',
+        islemTuru: (initialValues?.islemTuru === 'Tahliye' ? 'Boşaltma' : initialValues?.islemTuru as 'Boşaltma' | 'Yükleme') || 'Boşaltma',
+        aciklama: initialValues?.aciklama || '',
+        fotograflar: initialValues?.fotograflar || [],
+        isAcik: initialValues?.isAcik || false
+      });
+    }
+  }, [isOpen, initialValues, selectedDepoId]);
+
   const [driverSuggestions, setDriverSuggestions] = useState<{ ad: string; tel: string }[]>([]);
 
   if (!isOpen) return null;
@@ -1714,12 +1986,12 @@ export const NewVehicleModal: React.FC<NewVehicleModalProps> = ({
         <form onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-4 custom-scroll text-xs">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block font-semibold text-slate-600 mb-1">Kayıt Yapılan Depo/Saha *</label>
+              <label className="block font-semibold text-slate-600 dark:text-slate-300 mb-1">Kayıt Yapılan Depo/Saha *</label>
               <select
                 value={form.depoId}
                 onChange={(e) => setForm({ ...form, depoId: Number(e.target.value) })}
                 required
-                className="w-full border border-slate-200 rounded-xl px-3 py-2 outline-none font-bold text-slate-800 bg-slate-50"
+                className="w-full border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 outline-none font-bold text-slate-800 dark:text-slate-100 bg-slate-50 dark:bg-slate-800"
               >
                 {warehouses.map((d) => (
                   <option key={d.id} value={d.id}>
@@ -1730,17 +2002,17 @@ export const NewVehicleModal: React.FC<NewVehicleModalProps> = ({
             </div>
 
             <div>
-              <label className="block font-semibold text-slate-600 mb-1">Araç Çekici Plakası</label>
+              <label className="block font-semibold text-slate-600 dark:text-slate-300 mb-1">Araç Çekici Plakası</label>
               <input
                 type="text"
                 value={form.cekiciPlaka}
                 onChange={(e) => setForm({ ...form, cekiciPlaka: e.target.value.toUpperCase() })}
-                className="w-full border border-slate-200 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 uppercase"
+                className="w-full border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 uppercase bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100"
                 placeholder="Örn: 34 ABC 123"
               />
             </div>
             <div>
-              <label className="block font-semibold text-slate-600 mb-1">
+              <label className="block font-semibold text-slate-600 dark:text-slate-300 mb-1">
                 Araç Dorse Plakası <span className="text-red-500">*</span>
               </label>
               <input
@@ -1748,23 +2020,23 @@ export const NewVehicleModal: React.FC<NewVehicleModalProps> = ({
                 value={form.dorsePlaka}
                 onChange={(e) => setForm({ ...form, dorsePlaka: e.target.value.toUpperCase() })}
                 required
-                className="w-full border border-slate-200 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 uppercase font-bold"
+                className="w-full border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 uppercase font-bold bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100"
                 placeholder="Örn: 34 TR 1234"
               />
             </div>
             <div>
-              <label className="block font-semibold text-slate-600 mb-1">Araç Konteynır Numarası (Opsiyonel)</label>
+              <label className="block font-semibold text-slate-600 dark:text-slate-300 mb-1">Araç Konteynır Numarası (Opsiyonel)</label>
               <input
                 type="text"
                 value={form.konteynirNo}
                 onChange={(e) => setForm({ ...form, konteynirNo: e.target.value.toUpperCase() })}
-                className="w-full border border-slate-200 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 uppercase"
+                className="w-full border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 uppercase bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100"
                 placeholder="Örn: MSCU1234567"
               />
             </div>
 
             <div className="relative">
-              <label className="block font-semibold text-slate-600 mb-1">
+              <label className="block font-semibold text-slate-600 dark:text-slate-300 mb-1">
                 Şoför Adı Soyadı <span className="text-red-500">*</span>
               </label>
               <input
@@ -1772,19 +2044,19 @@ export const NewVehicleModal: React.FC<NewVehicleModalProps> = ({
                 value={form.soforAd}
                 onChange={(e) => handleDriverInput(e.target.value)}
                 required
-                className="w-full border border-slate-200 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100"
                 placeholder="Şoför Adı Soyadı"
               />
               {driverSuggestions.length > 0 && (
-                <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-lg z-20 max-h-36 overflow-y-auto">
+                <div className="absolute left-0 right-0 top-full mt-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl shadow-lg z-20 max-h-36 overflow-y-auto">
                   {driverSuggestions.map((d) => (
                     <div
                       key={d.ad}
                       onClick={() => handleSelectDriver(d)}
-                      className="p-2 hover:bg-slate-100 cursor-pointer border-b border-slate-100 last:border-0"
+                      className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer border-b border-slate-100 dark:border-slate-800 last:border-0"
                     >
-                      <p className="font-bold text-slate-800">{d.ad}</p>
-                      <p className="text-[10px] text-slate-500">{d.tel}</p>
+                      <p className="font-bold text-slate-800 dark:text-slate-100">{d.ad}</p>
+                      <p className="text-[10px] text-slate-500 dark:text-slate-400">{d.tel}</p>
                     </div>
                   ))}
                 </div>
@@ -1792,7 +2064,7 @@ export const NewVehicleModal: React.FC<NewVehicleModalProps> = ({
             </div>
 
             <div>
-              <label className="block font-semibold text-slate-600 mb-1">
+              <label className="block font-semibold text-slate-600 dark:text-slate-300 mb-1">
                 Şoför Telefon Numarası <span className="text-red-500">*</span>
               </label>
               <input
@@ -1800,22 +2072,22 @@ export const NewVehicleModal: React.FC<NewVehicleModalProps> = ({
                 value={form.soforTel}
                 onChange={(e) => setForm({ ...form, soforTel: e.target.value })}
                 required
-                className="w-full border border-slate-200 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100"
                 placeholder="05XX XXX XX XX"
               />
             </div>
             <div>
-              <label className="block font-semibold text-slate-600 mb-1">Nakliye Firması</label>
+              <label className="block font-semibold text-slate-600 dark:text-slate-300 mb-1">Nakliye Firması</label>
               <input
                 type="text"
                 value={form.nakliyeFirmasi}
                 onChange={(e) => setForm({ ...form, nakliyeFirmasi: e.target.value })}
-                className="w-full border border-slate-200 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100"
                 placeholder="Nakliye Firması"
               />
             </div>
             <div>
-              <label className="block font-semibold text-slate-600 mb-1">
+              <label className="block font-semibold text-slate-600 dark:text-slate-300 mb-1">
                 Müşteri (Firma) <span className="text-red-500">*</span>
               </label>
               <CustomerAutocomplete
@@ -1828,18 +2100,18 @@ export const NewVehicleModal: React.FC<NewVehicleModalProps> = ({
               />
             </div>
             <div>
-              <label className="block font-semibold text-slate-600 mb-1">Depo Türü</label>
+              <label className="block font-semibold text-slate-600 dark:text-slate-300 mb-1">Depo Türü</label>
               <select
                 value={form.depoTuru}
                 onChange={(e) => setForm({ ...form, depoTuru: e.target.value as 'Antrepo' | 'Serbest Depo' })}
-                className="w-full border border-slate-200 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100"
               >
                 <option value="Antrepo">Antrepo</option>
                 <option value="Serbest Depo">Serbest Depo</option>
               </select>
             </div>
             <div>
-              <label className="block font-semibold text-slate-600 mb-1">
+              <label className="block font-semibold text-slate-600 dark:text-slate-300 mb-1">
                 İşlem Türü <span className="text-red-500">*</span>
               </label>
               <select
@@ -1848,7 +2120,7 @@ export const NewVehicleModal: React.FC<NewVehicleModalProps> = ({
                   setForm({ ...form, islemTuru: e.target.value as 'Boşaltma' | 'Yükleme' })
                 }
                 required
-                className="w-full border border-slate-200 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100"
               >
                 <option value="Boşaltma">Boşaltma</option>
                 <option value="Yükleme">Yükleme</option>
@@ -1864,8 +2136,8 @@ export const NewVehicleModal: React.FC<NewVehicleModalProps> = ({
                     onChange={(e) => setForm({ ...form, isAcik: e.target.checked })}
                     className="sr-only peer"
                   />
-                  <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-red-600" />
-                  <span className="ml-2 text-xs font-bold text-red-600 flex items-center gap-1">
+                  <div className="w-9 h-5 bg-slate-200 dark:bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-red-600" />
+                  <span className="ml-2 text-xs font-bold text-red-600 dark:text-red-400 flex items-center gap-1">
                     <Bolt className="w-3.5 h-3.5" /> ACİL ARAÇ
                   </span>
                 </label>
@@ -1874,18 +2146,18 @@ export const NewVehicleModal: React.FC<NewVehicleModalProps> = ({
           </div>
 
           <div>
-            <label className="block font-semibold text-slate-600 mb-1">Açıklama</label>
+            <label className="block font-semibold text-slate-600 dark:text-slate-300 mb-1">Açıklama</label>
             <textarea
               rows={2}
               value={form.aciklama}
               onChange={(e) => setForm({ ...form, aciklama: e.target.value })}
-              className="w-full border border-slate-200 rounded-xl p-3 outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-3 outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100"
               placeholder="Notlar veya özel talimatlar..."
             />
           </div>
 
           <div>
-            <label className="block font-semibold text-slate-600 mb-2">
+            <label className="block font-semibold text-slate-600 dark:text-slate-300 mb-2">
               Fotoğraflar (Çekici, Dorse veya Mühür)
             </label>
             <div className="flex flex-wrap items-center gap-2">
@@ -1900,7 +2172,7 @@ export const NewVehicleModal: React.FC<NewVehicleModalProps> = ({
                 />
               </label>
 
-              <label className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl cursor-pointer transition flex items-center gap-2 border border-slate-200">
+              <label className="px-4 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold rounded-xl cursor-pointer transition flex items-center gap-2 border border-slate-200 dark:border-slate-700">
                 <FolderOpen className="w-4 h-4" /> Galeriden Seç
                 <input type="file" accept="image/*" multiple onChange={handleFileUpload} className="hidden" />
               </label>
@@ -1911,7 +2183,7 @@ export const NewVehicleModal: React.FC<NewVehicleModalProps> = ({
                 {form.fotograflar.map((img, idx) => (
                   <div
                     key={idx}
-                    className="relative w-20 h-20 rounded-xl overflow-hidden border border-slate-200 group shadow-sm"
+                    className="relative w-20 h-20 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 group shadow-sm"
                   >
                     <img src={img} alt={`Kayıt Fotoğraf ${idx + 1}`} className="w-full h-full object-cover" />
                     <button
@@ -1927,11 +2199,11 @@ export const NewVehicleModal: React.FC<NewVehicleModalProps> = ({
             )}
           </div>
 
-          <div className="pt-4 border-t border-slate-100 flex justify-end gap-3">
+          <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-3">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-xl font-semibold cursor-pointer"
+              className="px-4 py-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl font-semibold cursor-pointer"
             >
               İptal
             </button>
@@ -1943,6 +2215,160 @@ export const NewVehicleModal: React.FC<NewVehicleModalProps> = ({
             </button>
           </div>
         </form>
+      </div>
+    </div>
+  );
+};
+
+/* =========================================================
+   6.1 BEKLENEN ARACI SAHAYA KABUL ET MODALI (TEK TIKLA GİRİŞ VEYA DÜZENLE)
+   ========================================================= */
+export interface ExpectedVehicleArrivalModalProps {
+  isOpen: boolean;
+  expectedVehicle: ExpectedVehicle | null;
+  getWarehouseNameById: (id: number) => string;
+  onClose: () => void;
+  onDirectAdmit: (exp: ExpectedVehicle) => void;
+  onOpenEditForm: (exp: ExpectedVehicle) => void;
+}
+
+export const ExpectedVehicleArrivalModal: React.FC<ExpectedVehicleArrivalModalProps> = ({
+  isOpen,
+  expectedVehicle,
+  getWarehouseNameById,
+  onClose,
+  onDirectAdmit,
+  onOpenEditForm
+}) => {
+  if (!isOpen || !expectedVehicle) return null;
+
+  return (
+    <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 z-50 animate-in fade-in duration-150">
+      <div className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-2xl shadow-2xl max-w-md w-full overflow-hidden flex flex-col border border-slate-200 dark:border-slate-800 transition-colors">
+        {/* Başlık */}
+        <div className="p-4 bg-emerald-700 text-white flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center">
+              <LogIn className="w-4 h-4 text-white" />
+            </div>
+            <div>
+              <h3 className="font-black text-sm">Sahaya Araç Kabul Onayı</h3>
+              <p className="text-[10px] text-emerald-100">Kayıtlı bilgilerle aracı doğrudan sahaya kabul edebilirsiniz</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="text-white/80 hover:text-white cursor-pointer">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Gövde: Önceden girilmiş tüm bilgilerin özeti */}
+        <div className="p-4 sm:p-5 space-y-3.5 text-xs">
+          <div className="bg-slate-50 dark:bg-slate-800/80 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700/60 space-y-2.5">
+            {/* Plaka & Tesis */}
+            <div className="flex items-center justify-between gap-2 border-b border-slate-200/60 dark:border-slate-700/60 pb-2">
+              <div className="inline-flex items-center border border-slate-800 rounded-lg overflow-hidden font-mono font-black text-xs bg-white shadow-2xs">
+                <span className="bg-blue-600 text-white px-1.5 py-0.5 text-[9px] font-bold">TR</span>
+                <span className="px-2 py-0.5 tracking-wider text-slate-900">{expectedVehicle.dorsePlaka || 'Plaka Yok'}</span>
+              </div>
+              <span className="text-[11px] font-bold text-blue-600 dark:text-blue-400">
+                {getWarehouseNameById(expectedVehicle.depoId)}
+              </span>
+            </div>
+
+            {/* Müşteri & Çekici */}
+            <div className="grid grid-cols-2 gap-2 text-[11px]">
+              <div>
+                <span className="text-slate-400 text-[10px] block">Müşteri / Firma:</span>
+                <span className="font-bold text-slate-800 dark:text-slate-100">{expectedVehicle.musteri || 'Belirtilmedi'}</span>
+              </div>
+              <div>
+                <span className="text-slate-400 text-[10px] block">Çekici Plaka:</span>
+                <span className="font-semibold text-slate-700 dark:text-slate-300 font-mono">{expectedVehicle.cekiciPlaka || '-'}</span>
+              </div>
+            </div>
+
+            {/* Şoför & Tel */}
+            <div className="grid grid-cols-2 gap-2 text-[11px]">
+              <div>
+                <span className="text-slate-400 text-[10px] block">Şoför:</span>
+                <span className="font-semibold text-slate-700 dark:text-slate-300">{expectedVehicle.soforAd || '-'}</span>
+              </div>
+              <div>
+                <span className="text-slate-400 text-[10px] block">Telefon:</span>
+                <span className="font-semibold text-slate-700 dark:text-slate-300">{expectedVehicle.soforTel || '-'}</span>
+              </div>
+            </div>
+
+            {/* TC Kimlik & Açıklama */}
+            {(expectedVehicle.soforTc || expectedVehicle.aciklama) && (
+              <div className="space-y-1.5 pt-1 border-t border-slate-200/60 dark:border-slate-700/60 text-[11px]">
+                {expectedVehicle.soforTc && (
+                  <div>
+                    <span className="text-slate-400 text-[10px] block">TC Kimlik No:</span>
+                    <span className="font-semibold font-mono text-slate-700 dark:text-slate-300">{expectedVehicle.soforTc}</span>
+                  </div>
+                )}
+                {expectedVehicle.aciklama && (
+                  <div>
+                    <span className="text-slate-400 text-[10px] block">Açıklama:</span>
+                    <span className="text-slate-700 dark:text-slate-300 italic">{expectedVehicle.aciklama}</span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Depo Türü & İşlem */}
+            <div className="grid grid-cols-2 gap-2 text-[11px] pt-1 border-t border-slate-200/60 dark:border-slate-700/60">
+              <div>
+                <span className="text-slate-400 text-[10px] block">Depo / İşlem:</span>
+                <span className="font-bold text-slate-700 dark:text-slate-200">
+                  {expectedVehicle.depoTuru} • {expectedVehicle.islemTuru}
+                </span>
+              </div>
+              <div>
+                <span className="text-slate-400 text-[10px] block">Konteynır No:</span>
+                <span className="font-semibold text-slate-700 dark:text-slate-300 font-mono">{expectedVehicle.konteynirNo || '-'}</span>
+              </div>
+            </div>
+          </div>
+
+          <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed text-center">
+            Bu bilgiler daha önce girilmiştir. Tekrar bilgi girmeden doğrudan sahaya almak için <b>"Hızlı Sahaya Al"</b> butonuna basabilirsiniz.
+          </p>
+
+          {/* Eylem Butonları */}
+          <div className="space-y-2 pt-1">
+            <button
+              type="button"
+              onClick={() => {
+                onDirectAdmit(expectedVehicle);
+                onClose();
+              }}
+              className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-xl text-xs flex items-center justify-center gap-2 shadow-md shadow-emerald-600/20 cursor-pointer transition active:scale-98"
+            >
+              <Check className="w-4 h-4" /> Tek Tıkla Sahaya Al (Hızlı Giriş)
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                onOpenEditForm(expectedVehicle);
+                onClose();
+              }}
+              className="w-full py-2 px-4 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold rounded-xl text-xs flex items-center justify-center gap-2 border border-slate-200 dark:border-slate-700 cursor-pointer transition active:scale-98"
+            >
+              <Camera className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" /> Fotoğraf Çek / Bilgileri Düzenle
+            </button>
+
+            <button
+              type="button"
+              onClick={onClose}
+              className="w-full py-1.5 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 text-xs font-semibold cursor-pointer text-center"
+            >
+              Vazgeç
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -2229,7 +2655,7 @@ export const EditVehicleModal: React.FC<EditVehicleModalProps> = ({
         <form onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-4 custom-scroll text-xs">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
-              <label className="block font-semibold text-slate-600 mb-1">Depo / Saha *</label>
+              <label className="block font-semibold text-slate-600 dark:text-slate-300 mb-1">Depo / Saha *</label>
               <select
                 value={form.depoId}
                 onChange={(e) => {
@@ -2241,7 +2667,7 @@ export const EditVehicleModal: React.FC<EditVehicleModalProps> = ({
                   });
                 }}
                 disabled={currentUser?.role !== 'admin'}
-                className="w-full border border-slate-200 rounded-xl px-3 py-2 outline-none font-bold text-slate-800 bg-slate-50"
+                className="w-full border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 outline-none font-bold text-slate-800 dark:text-slate-100 bg-slate-50 dark:bg-slate-800"
               >
                 {warehouses.map((d) => (
                   <option key={d.id} value={d.id}>
@@ -2252,18 +2678,18 @@ export const EditVehicleModal: React.FC<EditVehicleModalProps> = ({
             </div>
 
             <div>
-              <label className="block font-semibold text-slate-600 mb-1">Çekici Plakası</label>
+              <label className="block font-semibold text-slate-600 dark:text-slate-300 mb-1">Çekici Plakası</label>
               <input
                 type="text"
                 value={form.cekiciPlaka || ''}
                 onChange={(e) => setForm({ ...form, cekiciPlaka: e.target.value.toUpperCase() })}
-                className="w-full border border-slate-200 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 uppercase"
+                className="w-full border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 uppercase bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100"
                 placeholder="Örn: 34 ABC 123"
               />
             </div>
 
             <div>
-              <label className="block font-semibold text-slate-600 mb-1">
+              <label className="block font-semibold text-slate-600 dark:text-slate-300 mb-1">
                 Dorse Plakası <span className="text-red-500">*</span>
               </label>
               <input
@@ -2271,24 +2697,24 @@ export const EditVehicleModal: React.FC<EditVehicleModalProps> = ({
                 value={form.dorsePlaka || ''}
                 onChange={(e) => setForm({ ...form, dorsePlaka: e.target.value.toUpperCase() })}
                 required
-                className="w-full border border-slate-200 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 uppercase font-bold"
+                className="w-full border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 uppercase font-bold bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100"
                 placeholder="Örn: 34 TR 1234"
               />
             </div>
 
             <div>
-              <label className="block font-semibold text-slate-600 mb-1">Konteynır No</label>
+              <label className="block font-semibold text-slate-600 dark:text-slate-300 mb-1">Konteynır No</label>
               <input
                 type="text"
                 value={form.konteynirNo || ''}
                 onChange={(e) => setForm({ ...form, konteynirNo: e.target.value.toUpperCase() })}
-                className="w-full border border-slate-200 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 uppercase"
+                className="w-full border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 uppercase bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100"
                 placeholder="Örn: MSCU1234567"
               />
             </div>
 
             <div>
-              <label className="block font-semibold text-slate-600 mb-1">
+              <label className="block font-semibold text-slate-600 dark:text-slate-300 mb-1">
                 Şoför Adı Soyadı <span className="text-red-500">*</span>
               </label>
               <input
@@ -2296,13 +2722,13 @@ export const EditVehicleModal: React.FC<EditVehicleModalProps> = ({
                 value={form.soforAd || ''}
                 onChange={(e) => setForm({ ...form, soforAd: e.target.value })}
                 required
-                className="w-full border border-slate-200 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100"
                 placeholder="Şoför Adı Soyadı"
               />
             </div>
 
             <div>
-              <label className="block font-semibold text-slate-600 mb-1">
+              <label className="block font-semibold text-slate-600 dark:text-slate-300 mb-1">
                 Şoför Telefonu <span className="text-red-500">*</span>
               </label>
               <input
@@ -2310,24 +2736,24 @@ export const EditVehicleModal: React.FC<EditVehicleModalProps> = ({
                 value={form.soforTel || ''}
                 onChange={(e) => setForm({ ...form, soforTel: e.target.value })}
                 required
-                className="w-full border border-slate-200 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100"
                 placeholder="05XX XXX XX XX"
               />
             </div>
 
             <div>
-              <label className="block font-semibold text-slate-600 mb-1">Nakliye Firması</label>
+              <label className="block font-semibold text-slate-600 dark:text-slate-300 mb-1">Nakliye Firması</label>
               <input
                 type="text"
                 value={form.nakliyeFirmasi || ''}
                 onChange={(e) => setForm({ ...form, nakliyeFirmasi: e.target.value })}
-                className="w-full border border-slate-200 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100"
                 placeholder="Nakliye Firması"
               />
             </div>
 
             <div>
-              <label className="block font-semibold text-slate-600 mb-1">
+              <label className="block font-semibold text-slate-600 dark:text-slate-300 mb-1">
                 Müşteri Firması <span className="text-red-500">*</span>
               </label>
               <CustomerAutocomplete
@@ -2341,11 +2767,11 @@ export const EditVehicleModal: React.FC<EditVehicleModalProps> = ({
             </div>
 
             <div>
-              <label className="block font-semibold text-slate-600 mb-1">Depo Türü</label>
+              <label className="block font-semibold text-slate-600 dark:text-slate-300 mb-1">Depo Türü</label>
               <select
                 value={form.depoTuru}
                 onChange={(e) => setForm({ ...form, depoTuru: e.target.value as 'Antrepo' | 'Serbest Depo' })}
-                className="w-full border border-slate-200 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100"
               >
                 <option value="Antrepo">Antrepo</option>
                 <option value="Serbest Depo">Serbest Depo</option>
@@ -2353,13 +2779,13 @@ export const EditVehicleModal: React.FC<EditVehicleModalProps> = ({
             </div>
 
             <div>
-              <label className="block font-semibold text-slate-600 mb-1">İşlem Türü</label>
+              <label className="block font-semibold text-slate-600 dark:text-slate-300 mb-1">İşlem Türü</label>
               <select
                 value={form.islemTuru === 'Tahliye' ? 'Boşaltma' : form.islemTuru}
                 onChange={(e) =>
                   setForm({ ...form, islemTuru: e.target.value as 'Boşaltma' | 'Yükleme' })
                 }
-                className="w-full border border-slate-200 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100"
               >
                 <option value="Boşaltma">Boşaltma</option>
                 <option value="Yükleme">Yükleme</option>
@@ -2367,11 +2793,11 @@ export const EditVehicleModal: React.FC<EditVehicleModalProps> = ({
             </div>
 
             <div>
-              <label className="block font-semibold text-slate-600 mb-1">Araç Durumu</label>
+              <label className="block font-semibold text-slate-600 dark:text-slate-300 mb-1">Araç Durumu</label>
               <select
                 value={form.durum}
                 onChange={(e) => setForm({ ...form, durum: e.target.value as Vehicle['durum'] })}
-                className="w-full border border-slate-200 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 font-bold"
+                className="w-full border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 font-bold bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100"
               >
                 <option value="BEKLEMEDE">BEKLEMEDE</option>
                 <option value="EVRAK HAZIR" disabled={currentUser?.role !== 'admin' && form.durum !== 'EVRAK HAZIR'}>
@@ -2383,7 +2809,7 @@ export const EditVehicleModal: React.FC<EditVehicleModalProps> = ({
             </div>
 
             <div>
-              <label className="block font-semibold text-slate-600 mb-1">Rampa Ataması</label>
+              <label className="block font-semibold text-slate-600 dark:text-slate-300 mb-1">Rampa Ataması</label>
               <select
                 value={form.rampaId ?? ''}
                 onChange={(e) => {
@@ -2395,7 +2821,7 @@ export const EditVehicleModal: React.FC<EditVehicleModalProps> = ({
                   });
                 }}
                 disabled={form.durum !== 'EVRAK HAZIR' && form.durum !== 'RAMPADA'}
-                className="w-full border border-slate-200 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 disabled:bg-slate-100 dark:disabled:bg-slate-800/50 disabled:text-slate-400"
               >
                 <option value="">Rampa Atanmadı</option>
                 {getAvailableRampsForVehicle(form.rampaId).map((r) => (
@@ -2415,8 +2841,8 @@ export const EditVehicleModal: React.FC<EditVehicleModalProps> = ({
                     onChange={(e) => setForm({ ...form, isAcik: e.target.checked })}
                     className="sr-only peer"
                   />
-                  <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-red-600" />
-                  <span className="ml-2 text-xs font-bold text-red-600 flex items-center gap-1">
+                  <div className="w-9 h-5 bg-slate-200 dark:bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-red-600" />
+                  <span className="ml-2 text-xs font-bold text-red-600 dark:text-red-400 flex items-center gap-1">
                     <Bolt className="w-3.5 h-3.5" /> ACİL ARAÇ
                   </span>
                 </label>
@@ -2425,20 +2851,20 @@ export const EditVehicleModal: React.FC<EditVehicleModalProps> = ({
           </div>
 
           <div>
-            <label className="block font-semibold text-slate-600 mb-1">Açıklama & Notlar</label>
+            <label className="block font-semibold text-slate-600 dark:text-slate-300 mb-1">Açıklama & Notlar</label>
             <textarea
               rows={2}
               value={form.aciklama || ''}
               onChange={(e) => setForm({ ...form, aciklama: e.target.value })}
-              className="w-full border border-slate-200 rounded-xl p-3 outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-3 outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100"
               placeholder="Araç veya yük ile ilgili notlar..."
             />
           </div>
 
           <div>
-            <label className="block font-semibold text-slate-600 mb-2">Fotoğraflar</label>
+            <label className="block font-semibold text-slate-600 dark:text-slate-300 mb-2">Fotoğraflar</label>
             <div className="flex items-center gap-3 mb-2">
-              <label className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-lg cursor-pointer transition text-xs border border-slate-200 flex items-center gap-1">
+              <label className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold rounded-lg cursor-pointer transition text-xs border border-slate-200 dark:border-slate-700 flex items-center gap-1">
                 <Plus className="w-3.5 h-3.5" /> Yeni Fotoğraf Ekle
                 <input type="file" accept="image/*" multiple onChange={handleFileUpload} className="hidden" />
               </label>
@@ -2743,21 +3169,21 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
   return (
     <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
       <div className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-2xl shadow-2xl max-w-sm w-full p-5 space-y-3 border border-slate-100 dark:border-slate-800 transition-colors">
-        <div className="flex justify-between items-center border-b border-slate-100 pb-2.5">
-          <h3 className="font-bold text-slate-800 text-sm flex items-center gap-1.5">
+        <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-2.5">
+          <h3 className="font-bold text-slate-800 dark:text-slate-100 text-sm flex items-center gap-1.5">
             <AlertTriangle className={`w-4 h-4 ${variant === 'danger' ? 'text-red-600' : 'text-amber-500'}`} />
             {title}
           </h3>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 cursor-pointer">
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 cursor-pointer">
             <X className="w-4 h-4" />
           </button>
         </div>
-        <p className="text-xs text-slate-600 leading-relaxed whitespace-pre-line">{message}</p>
+        <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed whitespace-pre-line">{message}</p>
         <div className="flex justify-end gap-2 pt-2">
           <button
             type="button"
             onClick={onClose}
-            className="px-3.5 py-2 text-slate-600 hover:bg-slate-100 rounded-xl font-semibold text-xs cursor-pointer transition"
+            className="px-3.5 py-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl font-semibold text-xs cursor-pointer transition"
           >
             {cancelText}
           </button>

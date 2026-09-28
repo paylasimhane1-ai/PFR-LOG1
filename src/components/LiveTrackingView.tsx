@@ -153,7 +153,7 @@ export const LiveTrackingView: React.FC<LiveTrackingViewProps> = ({
                         </span>
                       )}
                     </div>
-                    <div className={`text-[10px] ${isExited ? 'text-slate-400' : 'text-slate-500'}`}>
+                    <div className={`text-[10px] ${isExited ? 'text-slate-400' : 'text-slate-500 dark:text-slate-400'}`}>
                       {v.nakliyeFirmasi || 'Özel Nakliye'}
                     </div>
                   </div>

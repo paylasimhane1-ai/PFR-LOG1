@@ -67,6 +67,7 @@ export interface Vehicle {
   konteynirNo?: string;
   soforAd: string;
   soforTel: string;
+  soforTc?: string;
   nakliyeFirmasi?: string;
   musteri: string;
   depoTuru: 'Antrepo' | 'Serbest Depo';
@@ -99,6 +100,8 @@ export interface ExpectedVehicle {
   konteynirNo?: string;
   soforAd?: string;
   soforTel?: string;
+  soforTc?: string;
+  aciklama?: string;
   musteri?: string;
   depoTuru?: string;
   islemTuru?: string;

@@ -67,6 +67,7 @@ import {
   DetailViewModal,
   RampAssignModal,
   NewVehicleModal,
+  ExpectedVehicleArrivalModal,
   PhotoGalleryModal,
   EditVehicleModal,
   PasswordModal,
@@ -238,6 +239,8 @@ export default function App() {
   const [selectedDetailVehicle, setSelectedDetailVehicle] = useState<Vehicle | null>(null);
   const [showRampAssignModal, setShowRampAssignModal] = useState(false);
   const [selectedRampForAssign, setSelectedRampForAssign] = useState<Ramp | null>(null);
+  const [showExpectedArrivalModal, setShowExpectedArrivalModal] = useState(false);
+  const [selectedExpectedVehicleForArrival, setSelectedExpectedVehicleForArrival] = useState<ExpectedVehicle | null>(null);
   const [showNewVehicleModal, setShowNewVehicleModal] = useState(false);
   const [newVehicleInitialValues, setNewVehicleInitialValues] = useState<Partial<Vehicle> | null>(null);
   const [processingExpectedVehicleId, setProcessingExpectedVehicleId] = useState<number | null>(null);
@@ -892,7 +895,94 @@ export default function App() {
     setShowNewVehicleModal(true);
   };
 
+  // Beklenen Aracı Sahaya Al butonuna basıldığında: Bilgileri tekrar girmeden doğrudan onay modalını aç
   const handleProcessExpectedArrival = (exp: ExpectedVehicle) => {
+    setSelectedExpectedVehicleForArrival(exp);
+    setShowExpectedArrivalModal(true);
+  };
+
+  // 1-Tıkla Doğrudan Sahaya Kabul Et (Zaten girilmiş bilgileri aynen aktarır, kullanıcıdan tekrar bilgi istemez)
+  const handleDirectAdmitExpectedVehicle = (exp: ExpectedVehicle) => {
+    const nowTs = Date.now();
+    const nowStr = new Date(nowTs).toLocaleString('tr-TR');
+    const nowIso = new Date(nowTs).toISOString().slice(0, 10);
+
+    const newRecord: Vehicle = {
+      id: Date.now(),
+      depoId: Number(exp.depoId || (selectedDepoId === 0 ? 1 : selectedDepoId)),
+      cekiciPlaka: exp.cekiciPlaka || '',
+      dorsePlaka: exp.dorsePlaka || '',
+      konteynirNo: exp.konteynirNo || '',
+      soforAd: exp.soforAd || '',
+      soforTel: exp.soforTel || '',
+      nakliyeFirmasi: '',
+      musteri: exp.musteri || '',
+      depoTuru: (exp.depoTuru as 'Antrepo' | 'Serbest Depo') || 'Antrepo',
+      islemTuru: (exp.islemTuru === 'Tahliye' ? 'Boşaltma' : exp.islemTuru as 'Boşaltma' | 'Yükleme') || 'Boşaltma',
+      aciklama: exp.beklenenTarih ? `Beklenen Geliş: ${exp.beklenenTarih}` : '',
+      fotograflar: [],
+      isAcik: false,
+      durum: 'BEKLEMEDE',
+      rampaId: null,
+      isRampayaCagrildi: false,
+      girisTarihi: nowStr,
+      girisTarihiIso: nowIso,
+      girisTimestamp: nowTs,
+      evrakHazirTimestamp: null,
+      rampadaTimestamp: null,
+      cikisTarihi: null,
+      cikisTimestamp: null,
+      guvenlikNotlari: []
+    };
+
+    if (newRecord.musteri && newRecord.musteri.trim()) {
+      handleAddNewCustomerByName(newRecord.musteri.trim());
+    }
+
+    setVehicles((prev) => [newRecord, ...prev]);
+    saveVehicleToFirestore(newRecord);
+
+    // Beklenen araç kaydını 'GİRİŞ YAPILDI' olarak güncelle
+    setExpectedVehicles((prev) =>
+      prev.map((e) => {
+        if (e.id === exp.id) {
+          const updatedExp: ExpectedVehicle = { ...e, durum: 'GİRİŞ YAPILDI', kabulTarihi: nowStr };
+          saveExpectedVehicleToFirestore(updatedExp);
+          return updatedExp;
+        }
+        return e;
+      })
+    );
+
+    setShowExpectedArrivalModal(false);
+    setSelectedExpectedVehicleForArrival(null);
+
+    playChime('success');
+    showToast(`${newRecord.dorsePlaka} sahaya başarıyla kabul edildi!`, 'success');
+
+    // WhatsApp Grubu Bildirimi
+    const shareOpts: FormatVehicleMessageOptions = {
+      vehicle: newRecord,
+      eventType: 'vehicle_added',
+      warehouseName: getWarehouseNameById(newRecord.depoId)
+    };
+    setWhatsappShareOptions(shareOpts);
+    setShowWhatsAppSharePrompt(true);
+
+    if (whatsappConfig.enabled && whatsappConfig.autoShareOnVehicleAdd) {
+      sendVehicleToWhatsAppGroup(shareOpts, whatsappConfig).then((res) => {
+        setWhatsappApiStatus(res);
+        if (res.success) {
+          showToast(`WhatsApp Grubuna Bildirildi: ${newRecord.dorsePlaka}`, 'info');
+        }
+      }).catch(console.error);
+    }
+  };
+
+  // İstenirse bilgileri düzenleyerek / fotoğraflayarak açma
+  const handleOpenEditExpectedForm = (exp: ExpectedVehicle) => {
+    setShowExpectedArrivalModal(false);
+    setSelectedExpectedVehicleForArrival(null);
     setProcessingExpectedVehicleId(exp.id);
     setNewVehicleInitialValues({
       depoId: exp.depoId || (selectedDepoId === 0 ? 1 : selectedDepoId),
@@ -2877,8 +2967,8 @@ export default function App() {
 
       {/* ================= Sağ İçerik Alanı ================= */}
       <main className="flex-1 flex flex-col overflow-hidden bg-slate-100 dark:bg-slate-950 relative transition-colors duration-200">
-        {/* Üst Header */}
-        <header className="h-16 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-3 md:px-6 flex items-center justify-between shrink-0 shadow-sm no-print transition-colors duration-200">
+        {/* Üst Header - iPhone Çentik / Dinamik Ada Güvenli Alanı Uyumlu */}
+        <header className="header-safe bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-3 md:px-6 flex items-center justify-between shrink-0 shadow-sm no-print transition-colors duration-200">
           <div className="flex items-center gap-1.5 sm:gap-2 md:gap-3 min-w-0">
             <h2 className="text-sm md:text-lg font-bold text-slate-800 dark:text-slate-100 capitalize truncate">
               {tabTitles[activeTab]}
@@ -3328,6 +3418,19 @@ export default function App() {
         }}
         onAssign={handleAssignVehicleDirectlyToRamp}
         onCall={handleCallVehicleToRamp}
+      />
+
+      {/* 5.1 Beklenen Aracı Sahaya Kabul Et Modalı (Tek Tıkla Giriş veya Düzenleme) */}
+      <ExpectedVehicleArrivalModal
+        isOpen={showExpectedArrivalModal}
+        expectedVehicle={selectedExpectedVehicleForArrival}
+        getWarehouseNameById={getWarehouseNameById}
+        onClose={() => {
+          setShowExpectedArrivalModal(false);
+          setSelectedExpectedVehicleForArrival(null);
+        }}
+        onDirectAdmit={handleDirectAdmitExpectedVehicle}
+        onOpenEditForm={handleOpenEditExpectedForm}
       />
 
       {/* 6. Güvenlik Araç Kayıt Ekranı Modalı */}

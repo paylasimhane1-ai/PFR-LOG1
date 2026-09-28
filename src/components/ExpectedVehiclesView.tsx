@@ -15,7 +15,8 @@ import {
   Warehouse as WarehouseIcon,
   CalendarCheck,
   Search,
-  X
+  X,
+  Edit3
 } from 'lucide-react';
 
 interface ExpectedVehiclesViewProps {
@@ -24,6 +25,7 @@ interface ExpectedVehiclesViewProps {
   currentUser: User | null;
   getWarehouseNameById: (id: number) => string;
   onOpenAddModal: () => void;
+  onOpenEditModal?: (exp: ExpectedVehicle) => void;
   onProcessArrival: (exp: ExpectedVehicle) => void;
   onDeleteSingle: (exp: ExpectedVehicle) => void;
   onDeleteBatch: (ids: number[]) => void;
@@ -36,6 +38,7 @@ export const ExpectedVehiclesView: React.FC<ExpectedVehiclesViewProps> = ({
   currentUser,
   getWarehouseNameById,
   onOpenAddModal,
+  onOpenEditModal,
   onProcessArrival,
   onDeleteSingle,
   onDeleteBatch,
@@ -228,9 +231,9 @@ export const ExpectedVehiclesView: React.FC<ExpectedVehiclesViewProps> = ({
 
             <button
               onClick={downloadExpectedTemplateCsv}
-              className="hidden sm:inline-flex px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition items-center gap-1.5 border border-slate-200 cursor-pointer"
+              className="hidden sm:inline-flex px-3 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs rounded-xl transition items-center gap-1.5 border border-slate-200 dark:border-slate-700 cursor-pointer"
             >
-              <Download className="w-3.5 h-3.5 text-blue-600" /> Şablon
+              <Download className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" /> Şablon
             </button>
 
             <label className="hidden sm:inline-flex px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow cursor-pointer transition items-center gap-1.5 active:scale-95">
@@ -260,8 +263,8 @@ export const ExpectedVehiclesView: React.FC<ExpectedVehiclesViewProps> = ({
             onClick={() => setStatusFilter('')}
             className={`px-3 py-1.5 rounded-xl font-bold transition shrink-0 flex items-center gap-1.5 cursor-pointer ${
               statusFilter === ''
-                ? 'bg-slate-900 text-white shadow-sm'
-                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                ? 'bg-slate-900 text-white dark:bg-blue-600 dark:text-white shadow-sm'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
             }`}
           >
             Tümü
@@ -275,11 +278,11 @@ export const ExpectedVehiclesView: React.FC<ExpectedVehiclesViewProps> = ({
             className={`px-3 py-1.5 rounded-xl font-bold transition shrink-0 flex items-center gap-1.5 cursor-pointer ${
               statusFilter === 'BEKLENİYOR'
                 ? 'bg-amber-500 text-slate-900 shadow-sm'
-                : 'bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200'
+                : 'bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800 dark:hover:bg-amber-900/50'
             }`}
           >
             Bekleyenler
-            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-amber-200 text-amber-900 font-extrabold">
+            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-amber-200 text-amber-900 dark:bg-amber-800 dark:text-amber-100 font-extrabold">
               {pendingCount}
             </span>
           </button>
@@ -289,11 +292,11 @@ export const ExpectedVehiclesView: React.FC<ExpectedVehiclesViewProps> = ({
             className={`px-3 py-1.5 rounded-xl font-bold transition shrink-0 flex items-center gap-1.5 cursor-pointer ${
               statusFilter === 'GİRİŞ YAPILDI'
                 ? 'bg-emerald-600 text-white shadow-sm'
-                : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200'
+                : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800 dark:hover:bg-emerald-900/50'
             }`}
           >
             Giriş Yapanlar
-            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-emerald-200 text-emerald-900 font-extrabold">
+            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-emerald-200 text-emerald-900 dark:bg-emerald-800 dark:text-emerald-100 font-extrabold">
               {arrivedCount}
             </span>
           </button>
@@ -360,8 +363,8 @@ export const ExpectedVehiclesView: React.FC<ExpectedVehiclesViewProps> = ({
             {/* Şoför & İletişim */}
             <div className="flex items-center justify-between gap-2 pt-0.5">
               <div className="min-w-0">
-                <p className="text-[11px] font-bold text-slate-800 truncate">{exp.soforAd || 'Şoför Belirtilmedi'}</p>
-                <p className="text-[10px] text-slate-400 truncate">{exp.soforTel || 'Telefon Yok'}</p>
+                <p className="text-[11px] font-bold text-slate-800 dark:text-slate-100 truncate">{exp.soforAd || 'Şoför Belirtilmedi'}</p>
+                <p className="text-[10px] text-slate-400 dark:text-slate-400 truncate">{exp.soforTel || 'Telefon Yok'}</p>
               </div>
 
               {exp.soforTel && (
@@ -387,7 +390,7 @@ export const ExpectedVehiclesView: React.FC<ExpectedVehiclesViewProps> = ({
             </div>
 
             {/* Güvenlik Aksiyon Butonu: Sahaya Al */}
-            <div className="pt-2 border-t border-slate-100 flex items-center gap-2">
+            <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center gap-2">
               {exp.durum === 'BEKLENİYOR' ? (
                 <button
                   onClick={() => onProcessArrival(exp)}
@@ -396,7 +399,7 @@ export const ExpectedVehiclesView: React.FC<ExpectedVehiclesViewProps> = ({
                   <LogIn className="w-4 h-4" /> Sahaya Al / Giriş Yap
                 </button>
               ) : (
-                <div className="flex-1 py-2 text-center text-xs font-bold text-emerald-700 bg-emerald-50 rounded-xl border border-emerald-200">
+                <div className="flex-1 py-2 text-center text-xs font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 rounded-xl border border-emerald-200 dark:border-emerald-800">
                   ✓ Sahaya Kabul Edildi
                 </div>
               )}
@@ -404,7 +407,7 @@ export const ExpectedVehiclesView: React.FC<ExpectedVehiclesViewProps> = ({
               {currentUser?.role !== 'guest' && (
                 <button
                   onClick={() => onDeleteSingle(exp)}
-                  className="p-2.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl transition active:scale-95 cursor-pointer border border-red-200 shrink-0"
+                  className="p-2.5 bg-red-50 hover:bg-red-100 dark:bg-red-950/40 dark:hover:bg-red-900/50 text-red-600 dark:text-red-300 rounded-xl transition active:scale-95 cursor-pointer border border-red-200 dark:border-red-800 shrink-0"
                   title="Kaydı Sil"
                 >
                   <Trash2 className="w-4 h-4" />
@@ -458,25 +461,25 @@ export const ExpectedVehiclesView: React.FC<ExpectedVehiclesViewProps> = ({
                       className="rounded cursor-pointer accent-blue-600"
                     />
                   </td>
-                  <td className="p-3 font-bold text-blue-700">
+                  <td className="p-3 font-bold text-blue-700 dark:text-blue-400">
                     <span className="inline-flex items-center gap-1">
                       <WarehouseIcon className="w-3.5 h-3.5" />
                       {getWarehouseNameById(exp.depoId)}
                     </span>
                   </td>
-                  <td className="p-3 font-bold text-slate-800">{exp.musteri || '-'}</td>
+                  <td className="p-3 font-bold text-slate-800 dark:text-slate-100">{exp.musteri || '-'}</td>
                   <td className="p-3">
-                    <div className="font-extrabold text-slate-900">{exp.dorsePlaka || '-'}</div>
-                    <div className="text-[10px] text-slate-500 font-medium">{exp.cekiciPlaka || '-'}</div>
+                    <div className="font-extrabold text-slate-900 dark:text-slate-100">{exp.dorsePlaka || '-'}</div>
+                    <div className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">{exp.cekiciPlaka || '-'}</div>
                   </td>
 
                   <td className="p-3">
-                    <div className="font-semibold text-slate-800">{exp.soforAd || '-'}</div>
+                    <div className="font-semibold text-slate-800 dark:text-slate-200">{exp.soforAd || '-'}</div>
                     {exp.soforTel ? (
                       <div className="flex items-center gap-1.5 mt-0.5">
                         <a
                           href={`tel:${cleanPhone(exp.soforTel)}`}
-                          className="text-[10px] text-emerald-600 font-bold hover:underline flex items-center gap-1"
+                          className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold hover:underline flex items-center gap-1"
                           title="Arama Yap"
                         >
                           <Phone className="w-3 h-3" /> {exp.soforTel}
@@ -496,11 +499,11 @@ export const ExpectedVehiclesView: React.FC<ExpectedVehiclesViewProps> = ({
                     )}
                   </td>
 
-                  <td className="p-3">
+                  <td className="p-3 text-slate-700 dark:text-slate-300">
                     {exp.depoTuru || '-'} / {exp.islemTuru || '-'}
                   </td>
 
-                  <td className="p-3 font-bold text-purple-700">
+                  <td className="p-3 font-bold text-purple-700 dark:text-purple-400">
                     <span className="inline-flex items-center gap-1">
                       <CalendarCheck className="w-3.5 h-3.5" />
                       {formatExpectedDate(exp.beklenenTarih)}
@@ -511,15 +514,15 @@ export const ExpectedVehiclesView: React.FC<ExpectedVehiclesViewProps> = ({
                     <span
                       className={`px-2.5 py-1 rounded-md text-[10px] font-extrabold block w-fit ${
                         exp.durum === 'BEKLENİYOR'
-                          ? 'bg-amber-100 text-amber-800 border border-amber-300'
-                          : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                          ? 'bg-amber-100 text-amber-800 border border-amber-300 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800'
+                          : 'bg-emerald-100 text-emerald-800 border border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800'
                       }`}
                     >
                       {exp.durum}
                     </span>
                     {exp.kabulTarihi && (
-                      <div className="text-[9px] font-bold text-slate-500 mt-1 flex items-center gap-1">
-                        <Clock className="w-3 h-3 text-blue-600" /> Giriş: {exp.kabulTarihi}
+                      <div className="text-[9px] font-bold text-slate-500 dark:text-slate-400 mt-1 flex items-center gap-1">
+                        <Clock className="w-3 h-3 text-blue-600 dark:text-blue-400" /> Giriş: {exp.kabulTarihi}
                       </div>
                     )}
                   </td>
@@ -530,17 +533,17 @@ export const ExpectedVehiclesView: React.FC<ExpectedVehiclesViewProps> = ({
                         onClick={() => onProcessArrival(exp)}
                         className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-[11px] rounded-xl shadow transition flex items-center gap-1.5 mx-auto cursor-pointer"
                       >
-                        <LogIn className="w-3.5 h-3.5" /> Kayıt Ekle & Sahaya Al
+                        <LogIn className="w-3.5 h-3.5" /> Sahaya Al / Giriş Yap
                       </button>
                     ) : (
-                      <span className="text-slate-400 text-[10px] italic">Sahaya Kabul Edildi</span>
+                      <span className="text-slate-400 dark:text-slate-500 text-[10px] italic">Sahaya Kabul Edildi</span>
                     )}
                   </td>
 
                   <td className="p-3 text-center">
                     <button
                       onClick={() => onDeleteSingle(exp)}
-                      className="p-1.5 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg text-xs font-bold transition cursor-pointer"
+                      className="p-1.5 bg-red-100 hover:bg-red-200 dark:bg-red-950/40 dark:hover:bg-red-900/50 text-red-700 dark:text-red-300 rounded-lg text-xs font-bold transition cursor-pointer"
                       title="Sil"
                     >
                       <Trash2 className="w-3.5 h-3.5" />

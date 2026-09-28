@@ -132,9 +132,7 @@ const getVehicleDateStr = (v: Vehicle, type: 'giris' | 'cikis' = 'giris'): strin
     if (v.girisTarihiIso) return parseIsoDate(v.girisTarihiIso);
     if (v.girisTimestamp) return parseIsoDate(v.girisTimestamp);
     if (v.girisTarihi) return parseIsoDate(v.girisTarihi);
-    if (v.kayitTarihi) return parseIsoDate(v.kayitTarihi);
   } else {
-    if (v.cikisTarihiIso) return parseIsoDate(v.cikisTarihiIso);
     if (v.cikisTimestamp) return parseIsoDate(v.cikisTimestamp);
     if (v.cikisTarihi) return parseIsoDate(v.cikisTarihi);
   }
