@@ -263,9 +263,9 @@ export function exportVehiclesToCsv(
 
 export function downloadExpectedTemplateCsv(): void {
   const data = [
-    ['Dorse Plaka', 'Çekici Plaka', 'Konteynır No', 'Müşteri / Firma', 'Şoför Ad Soyad', 'Şoför Telefon', 'Depo Türü', 'İşlem Türü', 'Tahmini Varış Tarihi'],
-    ['34 ABC 123', '34 XYZ 789', 'MSCU1234567', 'Örnek Lojistik A.Ş.', 'Ahmet Yılmaz', '05551112233', 'Antrepo', 'Boşaltma', '2026-07-28T16:00'],
-    ['35 DEF 456', '', '', 'Test Firması', 'Mehmet Demir', '05320000000', 'Serbest Depo', 'Yükleme', '2026-07-29T09:30']
+    ['Dorse Plaka', 'Çekici Plaka', 'Konteynır No', 'Müşteri / Firma', 'Şoför Ad Soyad', 'Şoför Telefon', 'TC Kimlik No', 'Açıklama', 'Depo Türü', 'İşlem Türü', 'Tahmini Varış Tarihi'],
+    ['34 ABC 123', '34 XYZ 789', 'MSCU1234567', 'Örnek Lojistik A.Ş.', 'Ahmet Yılmaz', '05551112233', '12345678901', 'Öncelikli tahliye', 'Antrepo', 'Boşaltma', '2026-07-28T16:00'],
+    ['35 DEF 456', '', '', 'Test Firması', 'Mehmet Demir', '05320000000', '', 'Randevulu araç', 'Serbest Depo', 'Yükleme', '2026-07-29T09:30']
   ];
 
   let csvContent = '\uFEFF';

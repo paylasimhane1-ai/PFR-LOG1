@@ -48,6 +48,7 @@ import {
   Key,
   Trash2,
   Edit,
+  Edit3,
   Bolt,
   Building,
   UserCheck,

@@ -144,6 +144,8 @@ export interface ChatMessage {
   mentions?: string[];
   readBy?: string[];
   timestamp?: number;
+  isEdited?: boolean;
+  editedAt?: string;
 }
 
 export type WhatsAppProvider = 'webhook' | 'greenapi' | 'ultramsg' | 'twilio' | 'sharelink';

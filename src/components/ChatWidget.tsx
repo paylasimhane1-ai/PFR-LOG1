@@ -14,7 +14,9 @@ import {
   Maximize2,
   Minimize2,
   CheckCheck,
-  ArrowDown
+  ArrowDown,
+  Edit2,
+  Check
 } from 'lucide-react';
 import { playChime } from '../utils/audio';
 import { sendNativeNotification, loadPushSettings } from '../utils/notifications';
@@ -24,6 +26,7 @@ interface ChatWidgetProps {
   currentUser: User | null;
   users?: User[];
   onSendMessage: (text: string, replyTo?: ChatReply | null, mentions?: string[]) => void;
+  onEditMessage?: (id: number, newText: string) => void;
   onDeleteMessage?: (id: number) => void;
   onClearMessages?: () => void;
   onMarkMessagesAsRead?: (messageIds: number[]) => void;
@@ -34,6 +37,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
   currentUser,
   users = [],
   onSendMessage,
+  onEditMessage,
   onDeleteMessage,
   onClearMessages,
   onMarkMessagesAsRead
@@ -42,6 +46,8 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
   const [isMaximized, setIsMaximized] = useState(false);
   const [text, setText] = useState('');
   const [replyingTo, setReplyingTo] = useState<ChatMessage | null>(null);
+  const [editingMessage, setEditingMessage] = useState<ChatMessage | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
   const [highlightedMessageId, setHighlightedMessageId] = useState<number | null>(null);
 
   // Kullanıcı bazlı okunmamış mesaj hesaplama:
@@ -298,9 +304,30 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
     }
   };
 
+  const handleStartEdit = (m: ChatMessage) => {
+    setReplyingTo(null);
+    setEditingMessage(m);
+    setText(m.text);
+    inputRef.current?.focus();
+  };
+
+  const handleCancelEdit = () => {
+    setEditingMessage(null);
+    setText('');
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!text.trim()) return;
+
+    if (editingMessage) {
+      if (onEditMessage) {
+        onEditMessage(editingMessage.id, text.trim());
+      }
+      setEditingMessage(null);
+      setText('');
+      return;
+    }
 
     // Extract @mentions from text
     const mentionRegex = /@([a-zA-Z0-9ğüşıöçĞÜŞİÖÇ_]+)/g;
@@ -498,7 +525,11 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
             )}
 
             {chatMessages.map((m) => {
-              const isMine = m.sender === currentUser.username;
+              const isMine = Boolean(
+                currentUser &&
+                m.sender &&
+                m.sender.trim().toLowerCase() === currentUser.username.trim().toLowerCase()
+              );
               const isHighlighted = highlightedMessageId === m.id;
               const isFirstUnread = firstUnreadMsgId === m.id;
 
@@ -561,32 +592,83 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
                         {/* Cevapla Butonu */}
                         <button
                           type="button"
-                          onClick={() => setReplyingTo(m)}
+                          onClick={() => {
+                            setEditingMessage(null);
+                            setReplyingTo(m);
+                          }}
                           title="Bu mesaja cevap ver"
                           className="opacity-70 hover:opacity-100 hover:text-amber-300 transition cursor-pointer flex items-center gap-0.5 text-[8px]"
                         >
                           <CornerUpLeft className="w-2.5 h-2.5" />
-                          <span className="hidden group-hover:inline">Cevapla</span>
+                          <span className="hidden sm:inline">Cevapla</span>
                         </button>
 
-                        {/* Admin Mesaj Silme */}
-                        {currentUser.role === 'admin' && onDeleteMessage && (
+                        {/* Mesajı Gönderen Kullanıcı İçin Düzenleme Butonu (Bütün kullanıcılarda aktif) */}
+                        {isMine && onEditMessage && (
                           <button
                             type="button"
-                            onClick={() => onDeleteMessage(m.id)}
-                            title="Mesajı Sil (Admin)"
-                            className="text-red-400 hover:text-red-300 opacity-60 hover:opacity-100 transition cursor-pointer ml-1"
+                            onClick={() => handleStartEdit(m)}
+                            title="Mesajı Düzenle"
+                            className="p-0.5 rounded text-amber-300 hover:text-amber-100 opacity-90 hover:opacity-100 transition cursor-pointer flex items-center gap-0.5 text-[8px] ml-0.5 bg-black/10 dark:bg-white/10"
                           >
-                            <Trash2 className="w-3 h-3" />
+                            <Edit2 className="w-2.5 h-2.5" />
+                            <span>Düzenle</span>
                           </button>
+                        )}
+
+                        {/* Mesaj Silme: Kendi mesajını tüm kullanıcılar silebilir, admin tüm mesajları silebilir */}
+                        {(isMine || currentUser?.role === 'admin') && onDeleteMessage && (
+                          confirmDeleteId === m.id ? (
+                            <div className="flex items-center gap-1 bg-red-900/90 text-white px-1.5 py-0.5 rounded text-[8px] font-bold shadow-xs">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  onDeleteMessage(m.id);
+                                  setConfirmDeleteId(null);
+                                }}
+                                className="text-white hover:text-red-200 cursor-pointer underline"
+                                title="Onayla ve Sil"
+                              >
+                                Sil
+                              </button>
+                              <span className="opacity-50">•</span>
+                              <button
+                                type="button"
+                                onClick={() => setConfirmDeleteId(null)}
+                                className="text-slate-300 hover:text-white cursor-pointer"
+                              >
+                                Vazgeç
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setConfirmDeleteId(m.id)}
+                              title={isMine ? 'Mesajımı Sil' : 'Mesajı Sil (Admin)'}
+                              className="p-0.5 rounded text-red-300 hover:text-red-100 opacity-80 hover:opacity-100 transition cursor-pointer flex items-center gap-0.5 text-[8px] ml-0.5 bg-black/10 dark:bg-white/10"
+                            >
+                              <Trash2 className="w-2.5 h-2.5" />
+                              <span>Sil</span>
+                            </button>
+                          )
                         )}
                       </div>
                     </div>
 
-                    {/* Message Body with Mentions */}
-                    <p className="leading-relaxed whitespace-pre-wrap text-[11px]">
-                      {renderMessageContent(m.text, isMine)}
-                    </p>
+                    {/* Message Body with Mentions & WhatsApp-style Düzenlendi notice */}
+                    <div className="leading-relaxed whitespace-pre-wrap text-[11px] flex flex-wrap items-baseline gap-1">
+                      <span>{renderMessageContent(m.text, isMine)}</span>
+                      {m.isEdited && (
+                        <span
+                          className={`text-[9px] font-normal italic select-none inline-flex items-center gap-0.5 ${
+                            isMine ? 'text-blue-200/80' : 'text-slate-400 dark:text-slate-400'
+                          }`}
+                          title={m.editedAt ? `Düzenlenme: ${m.editedAt}` : 'Düzenlendi'}
+                        >
+                          • düzenlendi
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
               </React.Fragment>
@@ -594,6 +676,29 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
           })}
           <div ref={messagesEndRef} />
           </div>
+
+          {/* Düzenleniyor Barı (Edit Mode Preview) */}
+          {editingMessage && (
+            <div className="p-2 bg-amber-50 dark:bg-amber-950/40 border-t border-b border-amber-200 dark:border-amber-800 flex items-center justify-between text-xs text-amber-900 dark:text-amber-200 shrink-0">
+              <div className="flex items-center gap-2 overflow-hidden">
+                <Edit2 className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                <div className="truncate">
+                  <span className="font-bold text-[11px] text-amber-700 dark:text-amber-300">Mesajı Düzenliyorsunuz:</span>
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 ml-1 truncate">
+                    "{editingMessage.text.slice(0, 45)}"
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleCancelEdit}
+                className="p-1 text-slate-400 hover:text-red-600 transition cursor-pointer"
+                title="Düzenlemekten vazgeç"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
 
           {/* Cevap Veriliyor Barı (Reply Preview) */}
           {replyingTo && (
@@ -666,8 +771,18 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
                 value={text}
                 onChange={handleInputChange}
                 onKeyDown={handleKeyDown}
-                placeholder={replyingTo ? 'Cevabınızı yazın (@ ile bahset)...' : 'Mesajınızı yazın (@ ile bahset)...'}
-                className="w-full border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-base sm:text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 pr-9"
+                placeholder={
+                  editingMessage
+                    ? 'Mesajınızı düzenleyin (Esc ile iptal)...'
+                    : replyingTo
+                    ? 'Cevabınızı yazın (@ ile bahset)...'
+                    : 'Mesajınızı yazın (@ ile bahset)...'
+                }
+                className={`w-full border rounded-xl px-3.5 py-2.5 text-base sm:text-sm outline-none focus:ring-2 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 pr-9 ${
+                  editingMessage
+                    ? 'border-amber-400 dark:border-amber-600 focus:ring-amber-500'
+                    : 'border-slate-200 dark:border-slate-700 focus:ring-blue-500'
+                }`}
               />
               <button
                 type="button"
@@ -687,9 +802,14 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
             <button
               type="submit"
               disabled={!text.trim()}
-              className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white font-bold text-xs sm:text-sm rounded-xl shadow transition cursor-pointer flex items-center justify-center shrink-0"
+              className={`px-4 py-2.5 disabled:opacity-40 text-white font-bold text-xs sm:text-sm rounded-xl shadow transition cursor-pointer flex items-center justify-center shrink-0 ${
+                editingMessage
+                  ? 'bg-amber-600 hover:bg-amber-700'
+                  : 'bg-blue-600 hover:bg-blue-700'
+              }`}
+              title={editingMessage ? 'Değişikliği Kaydet' : 'Gönder'}
             >
-              <Send className="w-4 h-4" />
+              {editingMessage ? <Check className="w-4 h-4" /> : <Send className="w-4 h-4" />}
             </button>
           </form>
         </div>

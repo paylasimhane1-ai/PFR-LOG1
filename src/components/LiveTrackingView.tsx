@@ -126,13 +126,13 @@ export const LiveTrackingView: React.FC<LiveTrackingViewProps> = ({
 
       <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden p-3 md:p-0 transition-colors">
         {/* Mobil Kart Görünümü (md:hidden) */}
-        <div className="md:hidden space-y-3">
+        <div className="md:hidden space-y-2">
           {sortedList.map((v) => {
             const isExited = v.durum === 'ÇIKIŞ YAPTI';
             return (
               <div
                 key={v.id}
-                className={`p-3.5 rounded-2xl border transition shadow-xs space-y-2.5 ${
+                className={`p-2.5 rounded-xl border transition shadow-2xs space-y-1.5 ${
                   isExited
                     ? 'bg-slate-900 text-white border-slate-800'
                     : v.isAcik
@@ -141,87 +141,87 @@ export const LiveTrackingView: React.FC<LiveTrackingViewProps> = ({
                 }`}
               >
                 {/* Üst Başlık: Müşteri & Durum */}
-                <div className="flex items-start justify-between gap-2">
+                <div className="flex items-center justify-between gap-1.5">
                   <div className="min-w-0">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className={`font-black text-xs truncate ${isExited ? 'text-white' : 'text-slate-900 dark:text-slate-100'}`}>
+                    <div className="flex items-center gap-1 flex-wrap">
+                      <span className={`font-black text-[11px] truncate ${isExited ? 'text-white' : 'text-slate-900 dark:text-slate-100'}`}>
                         {v.musteri}
                       </span>
                       {v.isAcik && (
-                        <span className="px-1.5 py-0.2 bg-red-600 text-white font-black text-[9px] rounded shadow animate-pulse">
+                        <span className="px-1.5 py-0.2 bg-red-600 text-white font-black text-[8px] rounded shadow animate-pulse">
                           ACİL
                         </span>
                       )}
                     </div>
-                    <div className={`text-[10px] ${isExited ? 'text-slate-400' : 'text-slate-500 dark:text-slate-400'}`}>
+                    <div className={`text-[9px] ${isExited ? 'text-slate-400' : 'text-slate-500 dark:text-slate-400'}`}>
                       {v.nakliyeFirmasi || 'Özel Nakliye'}
                     </div>
                   </div>
 
-                  <span className={`px-2 py-0.5 rounded-lg text-[10px] font-extrabold shrink-0 shadow-xs ${getStatusBadgeClass(v.durum)}`}>
+                  <span className={`px-1.5 py-0.2 rounded text-[8px] font-extrabold uppercase shrink-0 tracking-tight shadow-2xs ${getStatusBadgeClass(v.durum)}`}>
                     {v.durum}
                   </span>
                 </div>
 
                 {/* Plaka & Konteynır */}
-                <div className="flex items-center justify-between gap-2 bg-slate-50 dark:bg-slate-800/60 p-2.5 rounded-xl border border-slate-100 dark:border-slate-700/50">
+                <div className="flex items-center justify-between gap-1.5 bg-slate-50 dark:bg-slate-800/60 p-1.5 rounded-lg border border-slate-100 dark:border-slate-700/50">
                   <div>
-                    <div className="flex items-center gap-1 font-mono font-bold text-xs text-slate-800 dark:text-slate-100">
-                      <Truck className="w-3.5 h-3.5 text-blue-500" />
+                    <div className="flex items-center gap-1 font-mono font-black text-[11px] text-slate-800 dark:text-slate-100">
+                      <Truck className="w-3 h-3 text-blue-500" />
                       {v.dorsePlaka}
                     </div>
                     {v.cekiciPlaka && (
-                      <div className="text-[10px] text-slate-500 dark:text-slate-400">
+                      <div className="text-[9px] text-slate-500 dark:text-slate-400 font-mono">
                         Çekici: {v.cekiciPlaka}
                       </div>
                     )}
                   </div>
                   {v.konteynirNo ? (
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-bold border border-blue-200/50">
+                    <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-bold border border-blue-200/50">
                       {v.konteynirNo}
                     </span>
                   ) : (
-                    <span className="text-[10px] text-slate-400">Konteynır Yok</span>
+                    <span className="text-[9px] text-slate-400">Konteynır Yok</span>
                   )}
                 </div>
 
                 {/* Şoför & İletişim */}
-                <div className="flex items-center justify-between text-xs">
-                  <div className="font-semibold text-slate-800 dark:text-slate-200">
+                <div className="flex items-center justify-between text-[10px]">
+                  <div className="font-semibold text-slate-800 dark:text-slate-200 truncate">
                     {v.soforAd}
                   </div>
                   {v.soforTel && (
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1 shrink-0">
                       <a
                         href={`tel:${cleanPhone(v.soforTel)}`}
-                        className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-[10px] flex items-center gap-1 shadow-xs"
+                        className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded font-bold text-[9px] flex items-center gap-0.5 shadow-2xs"
                       >
-                        <Phone className="w-3 h-3" /> Ara
+                        <Phone className="w-2.5 h-2.5" /> Ara
                       </a>
                       <a
                         href={`https://wa.me/${cleanPhoneForWa(v.soforTel)}`}
                         target="_blank"
                         rel="noreferrer"
-                        className="px-2 py-1 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg font-bold text-[10px] flex items-center gap-1 shadow-xs"
+                        className="px-2 py-0.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded font-bold text-[9px] flex items-center gap-0.5 shadow-2xs"
                       >
-                        <MessageSquare className="w-3 h-3" /> WhatsApp
+                        <MessageSquare className="w-2.5 h-2.5" /> WhatsApp
                       </a>
                     </div>
                   )}
                 </div>
 
                 {/* Rampa, Süre & Depo */}
-                <div className="grid grid-cols-2 gap-2 text-[11px] pt-2 border-t border-slate-100 dark:border-slate-800 text-slate-600 dark:text-slate-300">
+                <div className="grid grid-cols-2 gap-1.5 text-[10px] pt-1 border-t border-slate-100 dark:border-slate-800 text-slate-600 dark:text-slate-300">
                   <div>
-                    <span className="text-[10px] text-slate-400 block">Rampa</span>
+                    <span className="text-[9px] text-slate-400 block">Rampa</span>
                     <span className="font-bold text-blue-600 dark:text-blue-400">
                       {getRampName(v.rampaId) || 'Rampa Bekliyor'}
                     </span>
                   </div>
                   <div>
-                    <span className="text-[10px] text-slate-400 block">Süre / İşlem</span>
-                    <span className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-1">
-                      <Clock className="w-3 h-3 text-purple-500" />
+                    <span className="text-[9px] text-slate-400 block">Süre / İşlem</span>
+                    <span className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-0.5">
+                      <Clock className="w-2.5 h-2.5 text-purple-500" />
                       {getDurationText(v)}
                     </span>
                   </div>

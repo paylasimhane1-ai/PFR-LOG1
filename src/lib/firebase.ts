@@ -60,17 +60,19 @@ export const app =
 // Bind to configured database ID or default
 export const db = getFirestore(app, firestoreDbId);
 
-// Connection test
+// Connection test (Server-authoritative check)
 export async function testFirebaseConnection(): Promise<boolean> {
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    return false;
+  }
   try {
     await getDocFromServer(doc(db, 'test', 'connection'));
     return true;
   } catch (error) {
-    if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.warn('Firebase client is offline, using offline persistence cache.');
+    if (error instanceof Error && (error.message.includes('offline') || error.message.includes('unavailable') || error.message.includes('network'))) {
       return false;
     }
-    // If doc doesn't exist, it still contacted server successfully
+    // If doc doesn't exist on server, it still successfully contacted Firestore server
     return true;
   }
 }

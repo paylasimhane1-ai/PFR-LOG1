@@ -61,6 +61,7 @@ import {
 } from './utils/notifications';
 import {
   AddExpectedVehicleModal,
+  EditExpectedVehicleModal,
   SecurityActionModal,
   UserManagementModal,
   WarehouseManagementModal,
@@ -232,6 +233,8 @@ export default function App() {
 
   // Modal Visibility States
   const [showAddExpectedModal, setShowAddExpectedModal] = useState(false);
+  const [showEditExpectedModal, setShowEditExpectedModal] = useState(false);
+  const [selectedExpectedVehicleForEdit, setSelectedExpectedVehicleForEdit] = useState<ExpectedVehicle | null>(null);
   const [showSecurityActionModal, setShowSecurityActionModal] = useState(false);
   const [selectedSecurityNotification, setSelectedSecurityNotification] = useState<AppNotification | null>(null);
   const [showUserManagementModal, setShowUserManagementModal] = useState(false);
@@ -454,13 +457,34 @@ export default function App() {
 
   // Firebase Firestore Canlı Eşzamanlama (Real-time Subscriptions)
   useEffect(() => {
-    testFirebaseConnection()
-      .then((connected) => {
-        setIsFirebaseConnected(connected);
-      })
-      .catch(() => {
+    const checkConnection = () => {
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
         setIsFirebaseConnected(false);
-      });
+        return;
+      }
+      testFirebaseConnection()
+        .then((connected) => {
+          setIsFirebaseConnected(connected);
+        })
+        .catch(() => {
+          setIsFirebaseConnected(false);
+        });
+    };
+
+    checkConnection();
+
+    const handleOnline = () => {
+      checkConnection();
+    };
+
+    const handleOffline = () => {
+      setIsFirebaseConnected(false);
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    const pingInterval = setInterval(checkConnection, 30000);
 
     const unsubUsers = subscribeToUsers((remoteUsers) => {
       if (remoteUsers && remoteUsers.length > 0) {
@@ -555,6 +579,9 @@ export default function App() {
     });
 
     return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+      clearInterval(pingInterval);
       unsubUsers();
       unsubWarehouses();
       unsubVehicles();
@@ -915,11 +942,12 @@ export default function App() {
       konteynirNo: exp.konteynirNo || '',
       soforAd: exp.soforAd || '',
       soforTel: exp.soforTel || '',
+      soforTc: exp.soforTc || '',
       nakliyeFirmasi: '',
       musteri: exp.musteri || '',
       depoTuru: (exp.depoTuru as 'Antrepo' | 'Serbest Depo') || 'Antrepo',
       islemTuru: (exp.islemTuru === 'Tahliye' ? 'Boşaltma' : exp.islemTuru as 'Boşaltma' | 'Yükleme') || 'Boşaltma',
-      aciklama: exp.beklenenTarih ? `Beklenen Geliş: ${exp.beklenenTarih}` : '',
+      aciklama: exp.aciklama ? exp.aciklama : (exp.beklenenTarih ? `Beklenen Geliş: ${exp.beklenenTarih}` : ''),
       fotograflar: [],
       isAcik: false,
       durum: 'BEKLEMEDE',
@@ -991,10 +1019,11 @@ export default function App() {
       konteynirNo: exp.konteynirNo || '',
       soforAd: exp.soforAd || '',
       soforTel: exp.soforTel || '',
+      soforTc: exp.soforTc || '',
       musteri: exp.musteri || '',
       depoTuru: (exp.depoTuru as 'Antrepo' | 'Serbest Depo') || 'Antrepo',
       islemTuru: (exp.islemTuru === 'Tahliye' ? 'Boşaltma' : exp.islemTuru as 'Boşaltma' | 'Yükleme') || 'Boşaltma',
-      aciklama: exp.beklenenTarih ? `Beklenen Geliş: ${exp.beklenenTarih}` : '',
+      aciklama: exp.aciklama ? exp.aciklama : (exp.beklenenTarih ? `Beklenen Geliş: ${exp.beklenenTarih}` : ''),
       fotograflar: [],
       isAcik: false
     });
@@ -1014,6 +1043,7 @@ export default function App() {
       konteynirNo: vehicleData.konteynirNo || '',
       soforAd: vehicleData.soforAd || '',
       soforTel: vehicleData.soforTel || '',
+      soforTc: vehicleData.soforTc || '',
       nakliyeFirmasi: vehicleData.nakliyeFirmasi || '',
       musteri: vehicleData.musteri || '',
       depoTuru: vehicleData.depoTuru || 'Antrepo',
@@ -1188,6 +1218,20 @@ export default function App() {
     saveExpectedVehicleToFirestore(newExp);
     playChime('success');
     showToast('Beklenen araç kaydı başarıyla oluşturuldu.', 'success');
+  };
+
+  const handleUpdateExpectedVehicle = (updated: ExpectedVehicle) => {
+    if (updated.musteri && updated.musteri.trim()) {
+      handleAddNewCustomerByName(updated.musteri.trim());
+    }
+
+    setExpectedVehicles((prev) =>
+      prev.map((e) => (e.id === updated.id ? updated : e))
+    );
+    saveExpectedVehicleToFirestore(updated);
+    setShowEditExpectedModal(false);
+    setSelectedExpectedVehicleForEdit(null);
+    showToast(`${updated.dorsePlaka} beklenen araç bilgileri güncellendi.`, 'success');
   };
 
   const handleDeleteExpectedSingle = (exp: ExpectedVehicle) => {
@@ -2552,6 +2596,26 @@ export default function App() {
     showToast('Mesaj silindi.', 'info');
   };
 
+  const handleEditChatMessage = (id: number, newText: string) => {
+    const nowTime = new Date().toLocaleTimeString('tr-TR').slice(0, 5);
+    setChatMessages((prev) =>
+      prev.map((m) => {
+        if (m.id === id) {
+          const updated: ChatMessage = {
+            ...m,
+            text: newText.trim(),
+            isEdited: true,
+            editedAt: nowTime
+          };
+          saveChatMessageToFirestore(updated);
+          return updated;
+        }
+        return m;
+      })
+    );
+    showToast('Mesaj güncellendi.', 'success');
+  };
+
   const handleClearChatMessages = () => {
     askConfirm(
       'Sohbet Geçmişini Temizle',
@@ -2969,17 +3033,24 @@ export default function App() {
       <main className="flex-1 flex flex-col overflow-hidden bg-slate-100 dark:bg-slate-950 relative transition-colors duration-200">
         {/* Üst Header - iPhone Çentik / Dinamik Ada Güvenli Alanı Uyumlu */}
         <header className="header-safe bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-3 md:px-6 flex items-center justify-between shrink-0 shadow-sm no-print transition-colors duration-200">
-          <div className="flex items-center gap-1.5 sm:gap-2 md:gap-3 min-w-0">
-            <h2 className="text-sm md:text-lg font-bold text-slate-800 dark:text-slate-100 capitalize truncate">
+          <div className="flex items-center gap-2 md:gap-3 min-w-0">
+            {/* Mobil Ekranlarda Temiz Alan: Başlık ve Depo İsmi Gizlenir, Sadece Kompakt Logo Gösterilir */}
+            <div className="md:hidden flex items-center gap-1.5 shrink-0">
+              <PerformanceIcon className="w-6 h-6 shrink-0 drop-shadow-xs" />
+            </div>
+
+            {/* Panel İsmi Başlığı (Mobilde Gizli, Sadece Masaüstünde Gösterilir) */}
+            <h2 className="hidden md:block text-base lg:text-lg font-bold text-slate-800 dark:text-slate-100 capitalize truncate">
               {tabTitles[activeTab]}
             </h2>
 
-            <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 sm:p-1.5 rounded-xl border border-slate-200 dark:border-slate-700 max-w-[130px] sm:max-w-none">
+            {/* Depo Seçici (Mobilde Üst Başlıkta Gizli, Sadece Masaüstünde Gösterilir) */}
+            <div className="hidden md:flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 sm:p-1.5 rounded-xl border border-slate-200 dark:border-slate-700">
               <WarehouseIcon className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 ml-1 shrink-0" />
               <select
                 value={selectedDepoId}
                 onChange={(e) => setSelectedDepoId(Number(e.target.value))}
-                className="bg-transparent font-bold text-xs text-slate-700 dark:text-slate-200 outline-none cursor-pointer truncate max-w-[100px] sm:max-w-none"
+                className="bg-transparent font-bold text-xs text-slate-700 dark:text-slate-200 outline-none cursor-pointer truncate"
               >
                 {currentUser.role === 'admin' && (
                   <option value={0}>🌐 Tüm Depolar</option>
@@ -3234,6 +3305,27 @@ export default function App() {
 
         {/* Sekme İçerikleri */}
         <div className="flex-1 overflow-y-auto p-3 sm:p-4 md:p-6 pb-24 md:pb-6 custom-scroll">
+          {/* İnternet veya Veritabanı Bağlantısı Kesildiğinde Anlık Canlı Uyarı Banner'ı */}
+          {!isFirebaseConnected && (
+            <div className="mb-3 p-3 bg-red-600 text-white rounded-2xl shadow-lg flex items-center justify-between gap-3 text-xs animate-pulse">
+              <div className="flex items-center gap-2">
+                <CloudOff className="w-5 h-5 shrink-0 text-white" />
+                <div>
+                  <p className="font-black text-sm">İnternet / Veritabanı Bağlantısı Kesildi!</p>
+                  <p className="text-[11px] text-red-100">
+                    Canlı sunucu bağlantısı bekleniyor. Veri çakışmasını önlemek için bağlantı yeniden sağlandığında canlı akış devam edecektir.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={handleRefreshData}
+                className="px-3 py-1.5 bg-white text-red-700 font-extrabold rounded-xl hover:bg-red-50 transition cursor-pointer shrink-0 shadow-sm text-xs"
+              >
+                Yeniden Bağlan
+              </button>
+            </div>
+          )}
+
           {/* Mobil & Web Push Bildirimlerini Aktif Etme Banner'ı (Notification.permission !== 'granted' olduğunda şık ve zorunlu olmayan uyarı) */}
           <PushNotificationPromptBanner
             permission={pushPermission}
@@ -3262,6 +3354,10 @@ export default function App() {
               currentUser={currentUser}
               getWarehouseNameById={getWarehouseNameById}
               onOpenAddModal={() => setShowAddExpectedModal(true)}
+              onOpenEditModal={(exp) => {
+                setSelectedExpectedVehicleForEdit(exp);
+                setShowEditExpectedModal(true);
+              }}
               onProcessArrival={handleProcessExpectedArrival}
               onDeleteSingle={handleDeleteExpectedSingle}
               onDeleteBatch={handleDeleteExpectedBatch}
@@ -3349,6 +3445,7 @@ export default function App() {
         currentUser={currentUser}
         users={users}
         onSendMessage={handleSendChatMessage}
+        onEditMessage={handleEditChatMessage}
         onDeleteMessage={handleDeleteChatMessage}
         onClearMessages={handleClearChatMessages}
         onMarkMessagesAsRead={handleMarkChatMessagesAsRead}
@@ -3364,6 +3461,20 @@ export default function App() {
         customers={customers}
         onAddNewCustomer={handleAddNewCustomerByName}
         onSave={handleSaveExpectedVehicle}
+      />
+
+      {/* 1.1 Beklenen Araç Bilgilerini Düzenleme Modalı */}
+      <EditExpectedVehicleModal
+        isOpen={showEditExpectedModal}
+        onClose={() => {
+          setShowEditExpectedModal(false);
+          setSelectedExpectedVehicleForEdit(null);
+        }}
+        expectedVehicle={selectedExpectedVehicleForEdit}
+        warehouses={warehouses}
+        customers={customers}
+        onAddNewCustomer={handleAddNewCustomerByName}
+        onSave={handleUpdateExpectedVehicle}
       />
 
       {/* 2. Güvenlik Bildirim İşlem Modalı */}

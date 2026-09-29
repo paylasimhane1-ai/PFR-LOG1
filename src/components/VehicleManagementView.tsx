@@ -235,35 +235,35 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
         </div>
       </div>
 
-      {/* ================= TELEFON / MOBİL GÖRÜNÜM (KART DÜZENİ) ================= */}
-      <div className="block md:hidden space-y-3">
+      {/* ================= TELEFON / MOBİL GÖRÜNÜM (KOMPAKT KART DÜZENİ) ================= */}
+      <div className="block md:hidden space-y-2">
         {filtered.map((v) => {
           const rampName = getRampName(v.rampaId);
           return (
             <div
               key={v.id}
-              className={`bg-white dark:bg-slate-900 rounded-2xl border p-3 shadow-xs space-y-2.5 transition-colors ${
+              className={`bg-white dark:bg-slate-900 rounded-xl border p-2 shadow-2xs space-y-1 transition-colors ${
                 v.isAcik
                   ? 'border-red-500 bg-red-50/40 dark:bg-red-950/20 ring-1 ring-red-400'
                   : 'border-slate-200 dark:border-slate-800'
               }`}
             >
-              {/* Kart Başlığı: Plaka, Acil Rozeti, Durum ve Rampa */}
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-1.5 flex-wrap min-w-0">
-                  <div className="inline-flex items-center border border-slate-800 rounded-md overflow-hidden font-mono font-black text-xs bg-white shadow-2xs">
-                    <span className="bg-blue-600 text-white px-1 py-0.2 text-[8px] font-bold">TR</span>
-                    <span className="px-1.5 py-0.2 tracking-wider text-slate-900">{v.dorsePlaka}</span>
+              {/* Kart Başlığı: Plaka, Acil Rozeti, Durum ve Rampa (Kompakt ve Dengeli) */}
+              <div className="flex items-center justify-between gap-1">
+                <div className="flex items-center gap-1 flex-wrap min-w-0">
+                  <div className="inline-flex items-center border border-slate-800 rounded overflow-hidden font-mono font-black text-[10px] bg-white shadow-2xs">
+                    <span className="bg-blue-600 text-white px-1 py-0.2 text-[6px] font-bold">TR</span>
+                    <span className="px-1 py-0.2 tracking-wider text-slate-900">{v.dorsePlaka}</span>
                   </div>
 
                   {v.cekiciPlaka && (
-                    <span className="text-[10px] text-slate-500 font-mono">
+                    <span className="text-[8px] text-slate-500 font-mono truncate max-w-[85px]">
                       ({v.cekiciPlaka})
                     </span>
                   )}
 
                   {v.isAcik && (
-                    <span className="px-1.5 py-0.2 rounded-full bg-red-600 text-white text-[9px] font-black animate-pulse shadow-2xs">
+                    <span className="px-1 py-0.2 rounded-full bg-red-600 text-white text-[7px] font-black animate-pulse shadow-2xs">
                       ACİL
                     </span>
                   )}
@@ -271,19 +271,20 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
 
                 <div className="flex items-center gap-1 shrink-0">
                   {rampName && (
-                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-purple-100 text-purple-800 border border-purple-200 flex items-center gap-0.5">
+                    <span className="text-[8px] font-bold px-1.5 py-0.2 rounded bg-purple-100 dark:bg-purple-950/60 text-purple-800 dark:text-purple-300 border border-purple-200 dark:border-purple-800 flex items-center gap-0.5">
                       <WarehouseIcon className="w-2.5 h-2.5" /> {rampName}
                     </span>
                   )}
+                  {/* Araç Durumu Yazısı (Küçültülmüş, Ferah Tipografi) */}
                   <span
-                    className={`px-2 py-0.5 rounded-lg text-[10px] font-extrabold uppercase border ${
+                    className={`px-1.5 py-0.2 rounded text-[8px] font-extrabold uppercase border tracking-tight ${
                       v.durum === 'BEKLEMEDE'
-                        ? 'bg-amber-100 text-amber-900 border-amber-300'
+                        ? 'bg-amber-100 text-amber-900 border-amber-300 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-800'
                         : v.durum === 'EVRAK HAZIR'
-                        ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
+                        ? 'bg-emerald-100 text-emerald-900 border-emerald-300 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800'
                         : v.durum === 'RAMPADA'
-                        ? 'bg-blue-100 text-blue-900 border-blue-300'
-                        : 'bg-slate-100 text-slate-700 border-slate-300'
+                        ? 'bg-blue-100 text-blue-900 border-blue-300 dark:bg-blue-950/50 dark:text-blue-300 dark:border-blue-800'
+                        : 'bg-slate-100 text-slate-700 border-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700'
                     }`}
                   >
                     {v.durum}
@@ -292,52 +293,52 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
               </div>
 
               {/* Müşteri, Nakliye & Şoför Kompakt Bilgisi */}
-              <div className="bg-slate-50 dark:bg-slate-800/80 p-2 rounded-xl text-xs space-y-1 border border-slate-100 dark:border-slate-700/60">
-                <div className="flex justify-between items-center text-xs">
-                  <span className="font-bold text-slate-800 dark:text-slate-100 truncate pr-2">{v.musteri}</span>
-                  <span className="text-[10px] text-blue-600 dark:text-blue-400 shrink-0 font-medium">{v.nakliyeFirmasi || 'Nakliye Yok'}</span>
+              <div className="bg-slate-50 dark:bg-slate-800/70 p-1.5 rounded-lg text-[10px] space-y-0.5 border border-slate-100 dark:border-slate-700/50 leading-tight">
+                <div className="flex justify-between items-center">
+                  <span className="font-bold text-slate-800 dark:text-slate-100 truncate pr-1 text-[10px]">{v.musteri}</span>
+                  <span className="text-[8px] text-blue-600 dark:text-blue-400 shrink-0 font-medium truncate max-w-[100px]">{v.nakliyeFirmasi || 'Nakliye Yok'}</span>
                 </div>
 
-                <div className="flex items-center justify-between text-[11px] pt-0.5 text-slate-600 dark:text-slate-300">
+                <div className="flex items-center justify-between text-[9px] text-slate-600 dark:text-slate-300">
                   <span className="truncate">
-                    <b className="text-slate-800 dark:text-slate-100">{v.soforAd}</b> {v.soforTel && <span className="text-slate-400 dark:text-slate-400">({v.soforTel})</span>}
+                    <b className="text-slate-800 dark:text-slate-100 font-semibold">{v.soforAd}</b> {v.soforTel && <span className="text-slate-400">({v.soforTel})</span>}
                   </span>
                   <div className="flex items-center gap-1 shrink-0">
                     <a
                       href={`tel:${cleanPhone(v.soforTel)}`}
-                      className="p-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition"
+                      className="p-0.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded transition"
                       title="Ara"
                     >
-                      <Phone className="w-3 h-3" />
+                      <Phone className="w-2.5 h-2.5" />
                     </a>
                     <a
                       href={`https://wa.me/${cleanPhoneForWa(v.soforTel)}`}
                       target="_blank"
                       rel="noreferrer"
-                      className="p-1 bg-emerald-100 hover:bg-emerald-200 text-emerald-800 rounded-lg border border-emerald-300 transition"
+                      className="p-0.5 bg-emerald-100 hover:bg-emerald-200 text-emerald-800 rounded border border-emerald-300 transition"
                       title="WhatsApp"
                     >
-                      <MessageSquare className="w-3 h-3 text-emerald-700" />
+                      <MessageSquare className="w-2.5 h-2.5 text-emerald-700" />
                     </a>
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between text-[10px] text-slate-400 dark:text-slate-400 pt-0.5 border-t border-slate-200/50 dark:border-slate-700/50">
-                  <span>{v.depoTuru} • {v.islemTuru}{v.konteynirNo ? ` • Kont: ${v.konteynirNo}` : ''}</span>
-                  <span>Giriş: {v.girisTarihi}</span>
+                <div className="flex items-center justify-between text-[8px] text-slate-400 dark:text-slate-400 pt-0.5 border-t border-slate-200/50 dark:border-slate-700/50">
+                  <span className="truncate">{v.depoTuru} • {v.islemTuru}{v.konteynirNo ? ` • Kont: ${v.konteynirNo}` : ''}</span>
+                  <span className="shrink-0">Giriş: {v.girisTarihi}</span>
                 </div>
               </div>
 
               {/* Rampa Çağrısı Notu / Alarmı */}
               {v.isRampayaCagrildi && (
-                <div className="bg-amber-500 text-slate-900 font-black p-1.5 rounded-xl text-[11px] flex items-center justify-between shadow-2xs animate-pulse">
+                <div className="bg-amber-500 text-slate-900 font-black p-1 rounded-md text-[9px] flex items-center justify-between shadow-2xs animate-pulse">
                   <span className="flex items-center gap-1">
-                    <Megaphone className="w-3.5 h-3.5" /> Rampaya Çağrıldı!
+                    <Megaphone className="w-2.5 h-2.5" /> Rampaya Çağrıldı!
                   </span>
                   {currentUser?.role === 'admin' && (
                     <button
                       onClick={() => onCancelRampCall(v)}
-                      className="px-2 py-0.5 bg-red-800 text-white text-[9px] font-bold rounded cursor-pointer"
+                      className="px-1.5 py-0.2 bg-red-800 text-white text-[7px] font-bold rounded cursor-pointer"
                     >
                       İptal
                     </button>
@@ -345,33 +346,33 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                 </div>
               )}
 
-              {/* 4 Eksenli Kompakt Aksiyon Butonları */}
-              <div className="grid grid-cols-4 gap-1 pt-1 border-t border-slate-100 dark:border-slate-800">
+              {/* 4 Eksenli Kompakt Hızlı Aksiyon Butonları */}
+              <div className="grid grid-cols-4 gap-1 pt-0.5 border-t border-slate-100 dark:border-slate-800">
                 <button
                   onClick={() => onOpenDetailModal(v)}
-                  className="py-1.5 px-1 bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/40 dark:hover:bg-blue-900/50 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 rounded-xl text-[11px] font-bold flex items-center justify-center gap-1 transition active:scale-95 cursor-pointer shadow-2xs"
+                  className="h-6 py-0.5 px-0.5 bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/40 dark:hover:bg-blue-900/50 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 rounded text-[9px] font-bold flex items-center justify-center gap-0.5 transition active:scale-95 cursor-pointer shadow-2xs"
                   title="Detay İncele"
                 >
-                  <Eye className="w-3 h-3 text-blue-600 dark:text-blue-400" />
+                  <Eye className="w-2 h-2 text-blue-600 dark:text-blue-400" />
                   <span>İncele</span>
                 </button>
 
                 <button
                   onClick={() => onOpenPhotoGallery(v)}
-                  className="py-1.5 px-1 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-[11px] font-semibold flex items-center justify-center gap-1 transition active:scale-95 cursor-pointer"
+                  className="h-6 py-0.5 px-0.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded text-[9px] font-semibold flex items-center justify-center gap-0.5 transition active:scale-95 cursor-pointer"
                   title="Fotoğraflar"
                 >
-                  <Camera className="w-3 h-3 text-blue-600 dark:text-blue-400" />
+                  <Camera className="w-2 h-2 text-blue-600 dark:text-blue-400" />
                   <span>Foto ({v.fotograflar?.length || 0})</span>
                 </button>
 
                 {currentUser?.role !== 'guest' ? (
                   <button
                     onClick={() => onOpenEditModal(v)}
-                    className="py-1.5 px-1 bg-slate-800 hover:bg-slate-900 dark:bg-slate-700 dark:hover:bg-slate-600 text-white rounded-xl text-[11px] font-bold flex items-center justify-center gap-1 transition active:scale-95 cursor-pointer"
+                    className="h-6 py-0.5 px-0.5 bg-slate-800 hover:bg-slate-900 dark:bg-slate-700 dark:hover:bg-slate-600 text-white rounded text-[9px] font-bold flex items-center justify-center gap-0.5 transition active:scale-95 cursor-pointer"
                     title="Düzenle"
                   >
-                    <Edit3 className="w-3 h-3" />
+                    <Edit3 className="w-2 h-2" />
                     <span>Düzenle</span>
                   </button>
                 ) : <div />}
@@ -379,24 +380,24 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                 {currentUser?.role !== 'guest' ? (
                   <button
                     onClick={() => handleConfirmExit(v)}
-                    className="py-1.5 px-1 bg-red-50 hover:bg-red-100 dark:bg-red-950/40 dark:hover:bg-red-900/50 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800 rounded-xl text-[11px] font-bold flex items-center justify-center gap-1 transition active:scale-95 cursor-pointer"
+                    className="h-6 py-0.5 px-0.5 bg-red-50 hover:bg-red-100 dark:bg-red-950/40 dark:hover:bg-red-900/50 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800 rounded text-[9px] font-bold flex items-center justify-center gap-0.5 transition active:scale-95 cursor-pointer"
                     title="Çıkış Ver"
                   >
-                    <LogOut className="w-3 h-3" />
+                    <LogOut className="w-2 h-2" />
                     <span>Çıkış</span>
                   </button>
                 ) : <div />}
               </div>
 
-              {/* Durum & Rampa Seçimi: Yan Yana 2 Kolon Grid (Mobilde Az Yer Kaplar) */}
+              {/* Evrak Durumu ve Rampa Bilgisi Seçimi (Küçültülmüş, Kompakt Butonlar) */}
               {currentUser?.role !== 'guest' && (
-                <div className="space-y-1.5 pt-1">
-                  <div className="grid grid-cols-2 gap-1.5">
-                    {/* Durum Dropdown */}
+                <div className="space-y-0.5 pt-0.5">
+                  <div className="grid grid-cols-2 gap-1">
+                    {/* Evrak Durumu Dropdown (Küçültülmüş) */}
                     <select
                       value={v.durum}
                       onChange={(e) => onUpdateStatus(v, e.target.value as Vehicle['durum'])}
-                      className="w-full text-[11px] font-bold border border-slate-300 dark:border-slate-700 rounded-xl p-1.5 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-100 outline-none focus:ring-1 focus:ring-blue-500"
+                      className="w-full h-6.5 text-[9px] font-bold border border-slate-300 dark:border-slate-700 rounded-md px-1 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-100 outline-none focus:ring-1 focus:ring-blue-500"
                     >
                       <option value="BEKLEMEDE">BEKLEMEDE</option>
                       <option
@@ -409,8 +410,8 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                       <option value="ÇIKIŞ YAPTI">ÇIKIŞ YAPTI</option>
                     </select>
 
-                    {/* Rampa Dropdown */}
-                    <div className="flex items-center gap-1">
+                    {/* Rampa Bilgisi Dropdown (Küçültülmüş) */}
+                    <div className="flex items-center gap-0.5">
                       <select
                         value={v.rampaId ?? ''}
                         onChange={(e) => {
@@ -422,7 +423,7 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                           onAssignRamp(v, val);
                         }}
                         disabled={(v.durum !== 'EVRAK HAZIR' && v.durum !== 'RAMPADA')}
-                        className={`w-full text-[11px] font-bold border rounded-xl p-1.5 outline-none focus:ring-1 focus:ring-purple-500 ${
+                        className={`w-full h-6.5 text-[9px] font-bold border rounded-md px-1 outline-none focus:ring-1 focus:ring-purple-500 truncate ${
                           v.durum !== 'EVRAK HAZIR' && v.durum !== 'RAMPADA'
                             ? 'bg-slate-100 dark:bg-slate-800/60 text-slate-400 dark:text-slate-500 border-slate-200 dark:border-slate-700 cursor-not-allowed'
                             : 'border-purple-300 dark:border-purple-700 bg-purple-50/70 dark:bg-purple-950/40 text-purple-900 dark:text-purple-200'
@@ -448,7 +449,7 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                         <button
                           type="button"
                           onClick={() => onAssignRamp(v, null)}
-                          className="px-2 py-1.5 text-[10px] font-bold text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 rounded-xl shrink-0 cursor-pointer"
+                          className="h-6.5 px-1.5 text-[8px] font-bold text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 rounded-md shrink-0 cursor-pointer"
                           title="Rampa Atamasını Kaldır"
                         >
                           X
@@ -457,14 +458,14 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                     </div>
                   </div>
 
-                  {/* EVRAK HAZIR ise Hızlı Rampa Ata Butonu */}
+                  {/* EVRAK HAZIR ise Kompakt Hızlı Rampa Ata Butonu */}
                   {v.durum === 'EVRAK HAZIR' && !v.rampaId && (
                     <button
                       type="button"
                       onClick={() => handleQuickAssignRamp(v)}
-                      className="w-full py-1.5 px-2 font-bold rounded-xl text-[11px] flex items-center justify-center gap-1 transition active:scale-98 cursor-pointer bg-linear-to-r from-purple-600 to-indigo-600 text-white shadow-xs"
+                      className="w-full h-6 py-0.5 px-2 font-bold rounded-md text-[9px] flex items-center justify-center gap-1 transition active:scale-98 cursor-pointer bg-linear-to-r from-purple-600 to-indigo-600 text-white shadow-2xs"
                     >
-                      <Zap className="w-3 h-3 text-amber-300 fill-amber-300" />
+                      <Zap className="w-2.5 h-2.5 text-amber-300 fill-amber-300" />
                       <span>Boş Rampaya Hızlı Ata</span>
                     </button>
                   )}
