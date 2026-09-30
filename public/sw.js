@@ -1,4 +1,4 @@
-// Service Worker for Performance Logistics (PFR NOVA) Web Push & Background Notifications
+// Service Worker for LogiPortal Web Push & Background Notifications
 self.addEventListener('install', (event) => {
   self.skipWaiting();
 });
@@ -9,7 +9,7 @@ self.addEventListener('activate', (event) => {
 
 // 1. Web Push Bildirimi (Uygulama tamamen kapalı olsa bile işletim sisteminden gelen sinyal)
 self.addEventListener('push', (event) => {
-  let title = 'Performance Logistics | Saha Bildirimi';
+  let title = 'LogiPortal | Saha Bildirimi';
   let options = {
     body: 'Yeni bir rampa / araç operasyon bildirimi var.',
     icon: '/pwa-192x192.png',

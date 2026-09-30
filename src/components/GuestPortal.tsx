@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Vehicle } from '../types';
 import { getStatusBadgeClass, getStatusDurationLabel, getSpecificStatusDuration } from '../utils/helpers';
 import { Truck, LogOut, Search, Megaphone, ShieldAlert, Image, HelpCircle } from 'lucide-react';
-import { PerformanceIcon } from './PerformanceLogo';
+import { LogiPortalIcon } from './LogiPortalLogo';
 
 interface GuestPortalProps {
   vehicles: Vehicle[];
@@ -51,13 +51,12 @@ export const GuestPortal: React.FC<GuestPortalProps> = ({
     <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col">
       <header className="header-safe bg-slate-950 border-b border-slate-800 px-6 flex items-center justify-between">
         <div className="flex items-center gap-2.5">
-          <PerformanceIcon className="w-8 h-8 shrink-0 drop-shadow" />
+          <LogiPortalIcon className="w-9 h-9 shrink-0 drop-shadow-md rounded-xl" />
           <div>
-            <div className="flex items-center gap-1.5">
-              <span className="font-black text-sm text-white tracking-wider uppercase font-sans">Performance</span>
-              <span className="text-[11px] font-bold text-fuchsia-400 tracking-wider uppercase">Logistics</span>
+            <div className="flex items-center gap-1">
+              <span className="font-black text-base text-white tracking-tight font-sans">Logi<span className="text-purple-400">Portal</span></span>
             </div>
-            <p className="text-[10px] text-slate-400">Misafir Araç Takip Portalı</p>
+            <p className="text-[10px] text-slate-400 font-medium">Lojistik & Misafir Araç Takip Portalı</p>
           </div>
         </div>
         <button

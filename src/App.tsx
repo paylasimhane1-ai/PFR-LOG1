@@ -42,7 +42,7 @@ import { PushNotificationSettingsModal } from './components/PushNotificationSett
 import { WhatsAppSharePromptModal } from './components/WhatsAppSharePromptModal';
 import { InAppNotificationBanner, InAppAlert } from './components/InAppNotificationBanner';
 import { PushNotificationPromptBanner } from './components/PushNotificationPromptBanner';
-import { PerformanceIcon } from './components/PerformanceLogo';
+import { LogiPortalIcon } from './components/LogiPortalLogo';
 import {
   loadWhatsAppConfig,
   saveWhatsAppConfig,
@@ -2737,13 +2737,13 @@ export default function App() {
       <aside className="hidden md:flex w-64 bg-slate-900 dark:bg-black text-slate-300 flex-col justify-between shrink-0 shadow-xl no-print border-r border-slate-800 dark:border-slate-850">
         <div>
           <div className="p-4 sm:p-5 border-b border-slate-800 flex items-center gap-3">
-            <PerformanceIcon className="w-10 h-10 shrink-0 drop-shadow-md rounded-lg" />
+            <LogiPortalIcon className="w-10 h-10 shrink-0 drop-shadow-md rounded-xl" />
             <div className="truncate">
-              <h1 className="font-black text-white text-base tracking-wider leading-tight uppercase font-sans">
-                Performance
+              <h1 className="font-black text-white text-base tracking-tight leading-tight font-sans">
+                Logi<span className="text-purple-400">Portal</span>
               </h1>
               <div className="flex items-center gap-1.5 mt-0.5">
-                <span className="text-[10px] text-fuchsia-300 font-bold tracking-wider uppercase">
+                <span className="text-[10px] text-purple-300 font-bold tracking-wider uppercase">
                   Logistics
                 </span>
                 <span className="text-slate-600 text-[10px]">•</span>
@@ -3036,7 +3036,7 @@ export default function App() {
           <div className="flex items-center gap-2 md:gap-3 min-w-0">
             {/* Mobil Ekranlarda Temiz Alan: Başlık ve Depo İsmi Gizlenir, Sadece Kompakt Logo Gösterilir */}
             <div className="md:hidden flex items-center gap-1.5 shrink-0">
-              <PerformanceIcon className="w-6 h-6 shrink-0 drop-shadow-xs" />
+              <LogiPortalIcon className="w-6 h-6 shrink-0 drop-shadow-xs" />
             </div>
 
             {/* Panel İsmi Başlığı (Mobilde Gizli, Sadece Masaüstünde Gösterilir) */}

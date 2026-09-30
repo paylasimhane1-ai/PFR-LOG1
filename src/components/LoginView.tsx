@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { Warehouse, User } from '../types';
 import { Warehouse as WarehouseIcon, AlertCircle, Clock } from 'lucide-react';
-import { PerformanceIcon } from './PerformanceLogo';
 
 interface LoginViewProps {
   warehouses: Warehouse[];
@@ -41,11 +40,11 @@ export const LoginView: React.FC<LoginViewProps> = ({
     <div className="min-h-screen flex items-center justify-center bg-slate-900 px-4">
       <div className="max-w-md w-full bg-white rounded-2xl shadow-2xl p-8 border border-slate-200">
         <div className="text-center mb-6">
-          <div className="flex justify-center mb-2">
+          <div className="flex justify-center mb-3">
             <img
-              src="/logo.png"
-              alt="Performance Logistics"
-              className="w-44 h-44 object-contain rounded-2xl select-none"
+              src="/logiportal.png"
+              alt="LogiPortal"
+              className="w-48 h-36 object-contain rounded-2xl select-none drop-shadow-md"
             />
           </div>
           <p className="text-xs text-slate-500 mt-1">İşlem yapacağınız depoyu seçip giriş yapınız</p>

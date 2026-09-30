@@ -1,8 +1,8 @@
 {
   "id": "/",
-  "name": "PERFORMANCE - PFR NOVA | Araç & Depo Rampa Yönetim Sistemi",
-  "short_name": "PFR NOVA",
-  "description": "PERFORMANCE - PFR NOVA. Depo, rampa, araç kabul, beklenen araçlar, canlı izleme ve saha yönetim sistemi.",
+  "name": "LogiPortal | Araç & Depo Rampa Yönetim Sistemi",
+  "short_name": "LogiPortal",
+  "description": "LogiPortal - Lojistik & Depo Rampa Yönetim Sistemi. Depo, rampa, araç kabul, beklenen araçlar, canlı izleme ve saha yönetim platformu.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
