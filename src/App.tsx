@@ -27,6 +27,7 @@ import {
   cleanPhone,
   exportVehiclesToCsv
 } from './utils/helpers';
+import { hasPermission } from './utils/permissions';
 import { LoginView } from './components/LoginView';
 import { GuestPortal } from './components/GuestPortal';
 import { DashboardView } from './components/DashboardView';
@@ -1301,10 +1302,11 @@ export default function App() {
     const nowTs = Date.now();
     const nowStr = new Date(nowTs).toLocaleString('tr-TR');
 
-    // EVRAK HAZIR yetkisi sadece Admin'dedir
+    // EVRAK HAZIR yetkisi: Admin veya canMakeReady özel yetkisine sahip kullanıcılar (operasyon / personel)
     if (newStatus === 'EVRAK HAZIR') {
-      if (currentUser?.role !== 'admin') {
-        alert("Bir aracın durumunu 'EVRAK HAZIR' yapma yetkisi sadece Yöneticiye (Admin) aittir.");
+      const canMakeReady = currentUser?.role === 'admin' || hasPermission(currentUser, 'canMakeReady');
+      if (!canMakeReady) {
+        alert("Araç durumunu 'EVRAK HAZIR' yapma yetkiniz bulunmamaktadır. Bu yetki Yönetici (Admin) tarafından 'Özel Yetki Alanı' üzerinden tanımlanır.");
         return;
       }
 
@@ -1636,8 +1638,9 @@ export default function App() {
     } else {
       // Araç rampadan çıkarılıp EVRAK HAZIR durumuna getirilmek isteniyorsa
       if (vehicle.durum === 'RAMPADA' || oldRampId) {
-        if (currentUser?.role !== 'admin') {
-          alert("Rampadaki aracı rampa atamasından çıkarıp 'EVRAK HAZIR' durumuna geri alma yetkisi sadece Yöneticidedir (Admin).");
+        const canReleaseToReady = currentUser?.role === 'admin' || hasPermission(currentUser, 'canMakeReady') || hasPermission(currentUser, 'canReleaseRamp');
+        if (!canReleaseToReady) {
+          alert("Rampadaki aracı rampa atamasından çıkarıp 'EVRAK HAZIR' durumuna geri alma yetkiniz bulunmamaktadır. Bu yetki Yönetici (Admin) tarafından 'Özel Yetkiler' alanından verilebilir.");
           return;
         }
 
@@ -1921,8 +1924,9 @@ export default function App() {
 
   // Sadece rampadan çıkar, sahada EVRAK HAZIR durumunda beklet
   const handleConfirmRampReleaseOnly = (vehicle: Vehicle) => {
-    if (currentUser?.role !== 'admin') {
-      alert("Rampadaki aracı 'EVRAK HAZIR' durumuna geri alma yetkisi sadece Yöneticidedir (Admin).");
+    const canReleaseToReady = currentUser?.role === 'admin' || hasPermission(currentUser, 'canMakeReady') || hasPermission(currentUser, 'canReleaseRamp');
+    if (!canReleaseToReady) {
+      alert("Rampadaki aracı 'EVRAK HAZIR' durumuna geri alma yetkiniz bulunmamaktadır. Bu yetki Yönetici (Admin) tarafından 'Özel Yetkiler' alanından verilebilir.");
       return;
     }
 
@@ -2348,8 +2352,9 @@ export default function App() {
 
     // 1. Evrak hazır yetki kontrolü
     if (updated.durum === 'EVRAK HAZIR' && originalVehicle?.durum !== 'EVRAK HAZIR') {
-      if (currentUser?.role !== 'admin') {
-        alert("Bir aracın durumunu 'EVRAK HAZIR' yapma yetkisi sadece Yöneticiye (Admin) aittir.");
+      const canMakeReady = currentUser?.role === 'admin' || hasPermission(currentUser, 'canMakeReady');
+      if (!canMakeReady) {
+        alert("Araç durumunu 'EVRAK HAZIR' yapma yetkiniz bulunmamaktadır. Bu yetki Yönetici (Admin) tarafından 'Özel Yetki Alanı' üzerinden tanımlanır.");
         return;
       }
     }
@@ -2452,8 +2457,9 @@ export default function App() {
 
     // 3. Rampadaki aracı EVRAK HAZIR durumuna getirme onay sorgusu
     if (originalVehicle && (originalVehicle.durum === 'RAMPADA' || originalVehicle.rampaId) && updated.durum === 'EVRAK HAZIR') {
-      if (currentUser?.role !== 'admin') {
-        alert("Rampadaki aracı 'EVRAK HAZIR' durumuna alma yetkisi sadece Yöneticidedir (Admin).");
+      const canReleaseToReady = currentUser?.role === 'admin' || hasPermission(currentUser, 'canMakeReady') || hasPermission(currentUser, 'canReleaseRamp');
+      if (!canReleaseToReady) {
+        alert("Rampadaki aracı 'EVRAK HAZIR' durumuna alma yetkiniz bulunmamaktadır. Bu yetki Yönetici (Admin) tarafından 'Özel Yetkiler' alanından verilebilir.");
         return;
       }
       const rampName = getRampName(originalVehicle.rampaId);

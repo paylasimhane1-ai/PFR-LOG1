@@ -41,7 +41,7 @@ export const PERMISSIONS_LIST: PermissionMeta[] = [
     key: 'canMakeReady',
     title: "Evrak Durumunu 'EVRAK HAZIR' Yapma",
     category: 'Araç İşlemleri',
-    description: 'Bekleme sahasındaki araçların evrak onayını verip rampaya hazır edebilir.'
+    description: "Operasyon / Personel rolündeki kullanıcıların araçları evrak hazır durumuna getirmesini sağlar. Yetkiyi Yönetici (Admin) verir."
   },
   {
     key: 'canToggleAcil',

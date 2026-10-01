@@ -705,6 +705,21 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
   });
 
   const [expandedUserPerms, setExpandedUserPerms] = useState<string | null>(null);
+  const [modalTab, setModalTab] = useState<'users' | 'special_permissions'>('users');
+
+  const handleDirectToggleUserPermission = (targetUser: User, permissionKey: keyof UserPermissions) => {
+    if (targetUser.role === 'admin' || targetUser.role === 'guest') return;
+    const currentPerms = targetUser.permissions || getDefaultPermissionsForRole(targetUser.role);
+    const updatedPerms: UserPermissions = {
+      ...currentPerms,
+      [permissionKey]: !currentPerms[permissionKey]
+    };
+    const updatedUser: User = {
+      ...targetUser,
+      permissions: updatedPerms
+    };
+    onEditUser(updatedUser);
+  };
 
   if (!isOpen) return null;
 
@@ -871,13 +886,13 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
             </div>
             <div>
               <h3 className="font-bold text-sm text-white flex items-center gap-2">
-                Kullanıcı & Kutucuklu İzin Yönetimi
+                Kullanıcı & Özel Yetki Yönetimi
                 <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-400/30">
                   Granular RBAC
                 </span>
               </h3>
               <p className="text-[11px] text-slate-400">
-                Admin dışındaki kullanıcılara özel yetki kutucuklarını açıp kapatarak hassas yetkilendirme tanımlayabilirsiniz.
+                Operasyon / Personel kullanıcılarına araçları &apos;EVRAK HAZIR&apos; durumuna getirme yetkisi ve diğer saha izinlerini buradan verip yönetebilirsiniz.
               </p>
             </div>
           </div>
@@ -889,408 +904,686 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
           </button>
         </div>
 
-        {/* Scrollable Content */}
-        <div className="p-5 overflow-y-auto space-y-6 custom-scroll text-xs">
-          {/* User Form */}
-          <form
-            onSubmit={handleSubmit}
-            className="bg-slate-50/70 p-4 border border-slate-200 rounded-2xl space-y-4 shadow-sm"
+        {/* Tab Seçimi: Kullanıcılar ve Özel Yetki Alanları */}
+        <div className="flex items-center gap-2 px-5 pt-2.5 bg-slate-900 border-b border-slate-800">
+          <button
+            type="button"
+            onClick={() => setModalTab('users')}
+            className={`pb-2.5 px-3 font-bold text-xs flex items-center gap-1.5 transition cursor-pointer border-b-2 ${
+              modalTab === 'users'
+                ? 'text-white border-blue-500'
+                : 'text-slate-400 border-transparent hover:text-slate-200'
+            }`}
           >
-            <div className="flex items-center justify-between font-bold text-slate-800 pb-2 border-b border-slate-200">
-              <span className="flex items-center gap-1.5 text-sm">
-                {editingUser ? (
-                  <>
-                    <Edit className="w-4 h-4 text-amber-600" />
-                    <span className="text-amber-700">Kullanıcı Yetkilerini Düzenle:</span>
-                    <span className="font-mono bg-amber-100 text-amber-900 px-2 py-0.5 rounded text-xs">
-                      {editingUser.username}
-                    </span>
-                  </>
-                ) : (
-                  <>
-                    <Plus className="w-4 h-4 text-blue-600" />
-                    Yeni Kullanıcı & Yetki Tanımla
-                  </>
-                )}
-              </span>
-              {editingUser && (
-                <button
-                  type="button"
-                  onClick={handleCancelEdit}
-                  className="px-2.5 py-1 text-[11px] text-red-600 hover:bg-red-50 rounded-lg font-bold transition cursor-pointer"
-                >
-                  Düzenlemeden Vazgeç
-                </button>
-              )}
-            </div>
+            <Users className="w-3.5 h-3.5" />
+            <span>Kullanıcı Listesi & Ekleme</span>
+            <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-slate-800 text-slate-300 font-semibold border border-slate-700">
+              {users.length}
+            </span>
+          </button>
 
-            {/* Basic Info Inputs */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
-              <div>
-                <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                  Kullanıcı Adı *
-                </label>
-                <input
-                  type="text"
-                  placeholder="örn: ahmet.operasyon"
-                  value={form.username}
-                  onChange={(e) => setForm({ ...form, username: e.target.value })}
-                  required
-                  className="w-full border border-slate-300 rounded-xl p-2 font-semibold bg-white outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
+          <button
+            type="button"
+            onClick={() => setModalTab('special_permissions')}
+            className={`pb-2.5 px-3 font-bold text-xs flex items-center gap-1.5 transition cursor-pointer border-b-2 ${
+              modalTab === 'special_permissions'
+                ? 'text-emerald-300 border-emerald-400'
+                : 'text-slate-400 border-transparent hover:text-slate-200'
+            }`}
+          >
+            <CheckSquare className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Özel Yetki Alanı & İzin Butonları</span>
+            <span className="text-[9px] px-2 py-0.2 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-black">
+              Evrak Hazır Butonları
+            </span>
+          </button>
+        </div>
 
-              <div>
-                <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                  Giriş Şifresi *
-                </label>
-                <input
-                  type="text"
-                  placeholder="Giriş Şifresi"
-                  value={form.password}
-                  onChange={(e) => setForm({ ...form, password: e.target.value })}
-                  required
-                  className="w-full border border-slate-300 rounded-xl p-2 font-semibold bg-white outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                  Kullanıcı Rolü *
-                </label>
-                <select
-                  value={form.role}
-                  onChange={(e) => handleRoleChange(e.target.value as UserRole)}
-                  className="w-full border border-slate-300 rounded-xl p-2 font-semibold bg-white outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="admin">Yönetici (Tüm Yetkiler Açık)</option>
-                  <option value="personel">Operasyon / Personel (Özel Yetkili)</option>
-                  <option value="security">Güvenlik Görevlisi</option>
-                  <option value="guest">Misafir (Yalnızca İzleme)</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                  Yetkili Saha / Depo
-                </label>
-                <select
-                  value={form.depoId}
-                  onChange={(e) => setForm({ ...form, depoId: Number(e.target.value) })}
-                  className="w-full border border-slate-300 rounded-xl p-2 font-semibold bg-white outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value={0}>Tüm Sahalara / Depolara Yetkili</option>
-                  {warehouses.map((d) => (
-                    <option key={d.id} value={d.id}>
-                      {d.ad}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            {/* Checkbox-based Permissions Section */}
-            <div className="pt-2">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 mb-3 border-b border-slate-200">
+        {/* Scrollable Content */}
+        {modalTab === 'special_permissions' ? (
+          /* =========================================================
+             ÖZEL YETKİ ALANI & İZİN BUTONLARI (OPERASYON / PERSONEL)
+             ========================================================= */
+          <div className="p-5 overflow-y-auto space-y-5 custom-scroll text-xs">
+            {/* Bilgilendirme Bannerı */}
+            <div className="bg-gradient-to-r from-emerald-500/10 via-blue-500/10 to-indigo-500/10 border border-emerald-300 dark:border-emerald-800 p-4 rounded-2xl shadow-sm">
+              <div className="flex items-start gap-3">
+                <div className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-sm">
+                  <CheckSquare className="w-5 h-5" />
+                </div>
                 <div>
-                  <h4 className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
-                    <CheckSquare className="w-4 h-4 text-blue-600" />
-                    Kutucuklu Özel Yetki İzinleri
-                    <span className="font-normal text-slate-500 text-[11px]">
-                      ({form.role === 'admin' ? 'Yönetici Tüm Yetkilere Sahiptir' : `${countActivePermissions(form.permissions, form.role)} / ${ALL_PERMISSIONS_KEYS.length} Seçili`})
+                  <h4 className="font-black text-sm text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                    Operasyon / Personel Özel Yetki Masası
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-600 text-white font-extrabold">
+                      Admin Kontrollü İzinler
                     </span>
                   </h4>
-                  <p className="text-[10px] text-slate-500">
-                    Kullanıcının yapabileceği eylemleri kutucukları işaretleyerek veya kaldırarak belirleyiniz.
+                  <p className="text-[11px] text-slate-600 dark:text-slate-300 mt-1">
+                    Operasyon ve personel kullanıcılarının araçları <b>&apos;EVRAK HAZIR&apos;</b> durumuna getirebilmesi için yetkiyi buradan açıp kapatabilirsiniz.
+                    Aşağıdaki izin butonlarına tıklayarak anlık yetkilendirme sağlayabilirsiniz.
                   </p>
                 </div>
+              </div>
+            </div>
 
-                {form.role !== 'admin' && form.role !== 'guest' && (
-                  <div className="flex items-center gap-1.5 text-[10px]">
-                    <button
-                      type="button"
-                      onClick={handleSelectAll}
-                      className="px-2 py-1 bg-blue-50 text-blue-700 hover:bg-blue-100 font-bold rounded-lg transition border border-blue-200 cursor-pointer"
+            {/* Personel Kullanıcı Kartları ve İzin Butonları */}
+            <div className="space-y-3">
+              {users
+                .filter((u) => u.role !== 'admin' && u.role !== 'guest')
+                .map((u) => {
+                  const hasMakeReady = hasPermission(u, 'canMakeReady');
+                  return (
+                    <div
+                      key={u.username}
+                      className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-4 shadow-sm space-y-3 transition hover:border-slate-300"
                     >
-                      Tümünü Seç
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleDeselectAll}
-                      className="px-2 py-1 bg-slate-100 text-slate-600 hover:bg-slate-200 font-semibold rounded-lg transition border border-slate-200 cursor-pointer"
-                    >
-                      Tümünü Kaldır
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleResetToRoleDefault}
-                      className="px-2 py-1 bg-amber-50 text-amber-800 hover:bg-amber-100 font-bold rounded-lg transition border border-amber-200 cursor-pointer"
-                    >
-                      Role Göre Varsayılan
-                    </button>
-                  </div>
+                      {/* Kullanıcı Başlığı ve Ana Evrak Hazır İzin Butonu */}
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-700">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-9 h-9 rounded-xl bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 font-black text-sm flex items-center justify-center shrink-0">
+                            {u.username[0]?.toUpperCase()}
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h5 className="font-extrabold text-sm text-slate-900 dark:text-slate-100">
+                                {u.username}
+                              </h5>
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
+                                {u.role === 'personel' ? 'Operasyon / Personel' : 'Güvenlik Görevlisi'}
+                              </span>
+                            </div>
+                            <p className="text-[10px] text-slate-400">
+                              Saha: {getWarehouseNameById(u.depoId)} • Şifre: {u.password}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Ana EVRAK HAZIR İzin Butonu (Büyük & Vurgulu) */}
+                        <button
+                          type="button"
+                          onClick={() => handleDirectToggleUserPermission(u, 'canMakeReady')}
+                          className={`px-4 py-2 rounded-xl text-xs font-black flex items-center justify-center gap-2 transition active:scale-95 cursor-pointer shadow-md ${
+                            hasMakeReady
+                              ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/30'
+                              : 'bg-slate-100 hover:bg-amber-100 text-slate-700 hover:text-amber-900 border border-slate-300'
+                          }`}
+                          title={
+                            hasMakeReady
+                              ? "Yetkiyi Kaldır: Kullanıcı artık araçları EVRAK HAZIR durumuna getiremez"
+                              : "Yetki Ver: Kullanıcı araçları EVRAK HAZIR durumuna getirebilir"
+                          }
+                        >
+                          {hasMakeReady ? (
+                            <>
+                              <Check className="w-4 h-4 text-white" />
+                              <span>Evrak Hazır Yetkisi: AÇIK</span>
+                            </>
+                          ) : (
+                            <>
+                              <X className="w-4 h-4 text-slate-400" />
+                              <span>Evrak Hazır Yetkisi: KAPALI (İzin Ver)</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+
+                      {/* Durum Açıklama Kutusu */}
+                      <div
+                        className={`p-2.5 rounded-xl border text-[11px] flex items-center justify-between ${
+                          hasMakeReady
+                            ? 'bg-emerald-50/70 border-emerald-200 text-emerald-900'
+                            : 'bg-amber-50/70 border-amber-200 text-amber-900'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className={`w-2.5 h-2.5 rounded-full ${hasMakeReady ? 'bg-emerald-500 animate-pulse' : 'bg-amber-400'}`}></span>
+                          <span>
+                            {hasMakeReady
+                              ? "Bu kullanıcı sahada beklemedeki araçları 'EVRAK HAZIR' durumuna getirme yetkisine sahiptir."
+                              : "Bu kullanıcının araçları 'EVRAK HAZIR' durumuna getirme yetkisi kapalıdır."}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleDirectToggleUserPermission(u, 'canMakeReady')}
+                          className="font-bold underline text-[10px] cursor-pointer"
+                        >
+                          {hasMakeReady ? 'Yetkiyi Kapat' : 'Hemen Yetki Ver'}
+                        </button>
+                      </div>
+
+                      {/* Diğer Operasyonel İzin Butonları */}
+                      <div>
+                        <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400 mb-1.5">
+                          Diğer Saha Yetkileri (İzin Butonları ile Tek Tıkla Aç / Kapat):
+                        </p>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-1.5">
+                          {PERMISSIONS_LIST.filter((p) => p.key !== 'canMakeReady').map((p) => {
+                            const isPermitted = u.permissions?.[p.key] ?? false;
+                            return (
+                              <button
+                                type="button"
+                                key={p.key}
+                                onClick={() => handleDirectToggleUserPermission(u, p.key)}
+                                className={`p-1.5 rounded-lg border text-left flex items-center justify-between gap-1 transition active:scale-95 cursor-pointer ${
+                                  isPermitted
+                                    ? 'bg-blue-50/80 border-blue-200 text-blue-900 font-semibold'
+                                    : 'bg-slate-50 border-slate-200 text-slate-400 line-through'
+                                }`}
+                                title={`${p.title}: Tıklayarak izin durumunu değiştir`}
+                              >
+                                <div className="flex items-center gap-1 min-w-0">
+                                  {isPermitted ? (
+                                    <Check className="w-3 h-3 text-blue-600 shrink-0" />
+                                  ) : (
+                                    <X className="w-3 h-3 text-slate-400 shrink-0" />
+                                  )}
+                                  <span className="truncate text-[10px]">{p.title || p.label}</span>
+                                </div>
+                                <span
+                                  className={`text-[8px] px-1 py-0.2 rounded font-extrabold shrink-0 ${
+                                    isPermitted ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-600'
+                                  }`}
+                                >
+                                  {isPermitted ? 'Açık' : 'Kapalı'}
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+
+              {users.filter((u) => u.role !== 'admin' && u.role !== 'guest').length === 0 && (
+                <div className="p-8 text-center bg-slate-50 rounded-2xl border border-slate-200 text-slate-400 text-xs">
+                  Sistemde tanımlı operasyon veya güvenlik personeli bulunmamaktadır.
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          /* =========================================================
+             KULLANICI LİSTESİ & EKLEME FORMU
+             ========================================================= */
+          <div className="p-5 overflow-y-auto space-y-6 custom-scroll text-xs">
+            {/* User Form */}
+            <form
+              onSubmit={handleSubmit}
+              className="bg-slate-50/70 p-4 border border-slate-200 rounded-2xl space-y-4 shadow-sm"
+            >
+              <div className="flex items-center justify-between font-bold text-slate-800 pb-2 border-b border-slate-200">
+                <span className="flex items-center gap-1.5 text-sm">
+                  {editingUser ? (
+                    <>
+                      <Edit className="w-4 h-4 text-amber-600" />
+                      <span className="text-amber-700">Kullanıcı Yetkilerini Düzenle:</span>
+                      <span className="font-mono bg-amber-100 text-amber-900 px-2 py-0.5 rounded text-xs">
+                        {editingUser.username}
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="w-4 h-4 text-blue-600" />
+                      Yeni Kullanıcı & Yetki Tanımla
+                    </>
+                  )}
+                </span>
+                {editingUser && (
+                  <button
+                    type="button"
+                    onClick={handleCancelEdit}
+                    className="px-2.5 py-1 text-[11px] text-red-600 hover:bg-red-50 rounded-lg font-bold transition cursor-pointer"
+                  >
+                    Düzenlemeden Vazgeç
+                  </button>
                 )}
               </div>
 
-              {/* Role-specific Banners */}
-              {form.role === 'admin' && (
-                <div className="p-3 bg-purple-50 border border-purple-200 rounded-xl flex items-center gap-3 text-purple-900 mb-3">
-                  <div className="w-8 h-8 rounded-lg bg-purple-600 text-white flex items-center justify-center shrink-0">
-                    <Lock className="w-4 h-4" />
-                  </div>
+              {/* Basic Info Inputs */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                    Kullanıcı Adı *
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="örn: ahmet.operasyon"
+                    value={form.username}
+                    onChange={(e) => setForm({ ...form, username: e.target.value })}
+                    required
+                    className="w-full border border-slate-300 rounded-xl p-2 font-semibold bg-white outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                    Giriş Şifresi *
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Giriş Şifresi"
+                    value={form.password}
+                    onChange={(e) => setForm({ ...form, password: e.target.value })}
+                    required
+                    className="w-full border border-slate-300 rounded-xl p-2 font-semibold bg-white outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                    Kullanıcı Rolü *
+                  </label>
+                  <select
+                    value={form.role}
+                    onChange={(e) => handleRoleChange(e.target.value as UserRole)}
+                    className="w-full border border-slate-300 rounded-xl p-2 font-semibold bg-white outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="admin">Yönetici (Tüm Yetkiler Açık)</option>
+                    <option value="personel">Operasyon / Personel (Özel Yetkili)</option>
+                    <option value="security">Güvenlik Görevlisi</option>
+                    <option value="guest">Misafir (Yalnızca İzleme)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                    Yetkili Saha / Depo
+                  </label>
+                  <select
+                    value={form.depoId}
+                    onChange={(e) => setForm({ ...form, depoId: Number(e.target.value) })}
+                    className="w-full border border-slate-300 rounded-xl p-2 font-semibold bg-white outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value={0}>Tüm Sahalara / Depolara Yetkili</option>
+                    {warehouses.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.ad}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Checkbox-based Permissions Section */}
+              <div className="pt-2">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 mb-3 border-b border-slate-200">
                   <div>
-                    <p className="font-bold text-xs">Yönetici (Admin) Tam Erişim Modu</p>
-                    <p className="text-[11px] text-purple-700">
-                      Yöneticiler sistemdeki tüm araç girişleri, evrak onayları, rampa yönetimi, kullanıcı tanımlama ve anons işlemlerine sınırsız tam yetkilidir.
+                    <h4 className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
+                      <CheckSquare className="w-4 h-4 text-blue-600" />
+                      Kutucuklu Özel Yetki İzinleri
+                      <span className="font-normal text-slate-500 text-[11px]">
+                        ({form.role === 'admin' ? 'Yönetici Tüm Yetkilere Sahiptir' : `${countActivePermissions(form.permissions, form.role)} / ${ALL_PERMISSIONS_KEYS.length} Seçili`})
+                      </span>
+                    </h4>
+                    <p className="text-[10px] text-slate-500">
+                      Operasyon / Personel kullanıcılarına kutucukları işaretleyerek veya butonlarla özel yetki tanımlayınız.
                     </p>
                   </div>
-                </div>
-              )}
 
-              {form.role === 'guest' && (
-                <div className="p-3 bg-slate-100 border border-slate-300 rounded-xl flex items-center gap-3 text-slate-800 mb-3">
-                  <div className="w-8 h-8 rounded-lg bg-slate-700 text-white flex items-center justify-center shrink-0">
-                    <ShieldAlert className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <p className="font-bold text-xs">Misafir (Salt Okunur) Modu</p>
-                    <p className="text-[11px] text-slate-600">
-                      Misafir kullanıcılar panoları ve araç durumlarını sadece izleyebilir; veri ekleme, düzenleme veya silme yapamazlar.
-                    </p>
-                  </div>
+                  {form.role !== 'admin' && form.role !== 'guest' && (
+                    <div className="flex items-center gap-1.5 text-[10px]">
+                      <button
+                        type="button"
+                        onClick={handleSelectAll}
+                        className="px-2 py-1 bg-blue-50 text-blue-700 hover:bg-blue-100 font-bold rounded-lg transition border border-blue-200 cursor-pointer"
+                      >
+                        Tümünü Seç
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleDeselectAll}
+                        className="px-2 py-1 bg-slate-100 text-slate-600 hover:bg-slate-200 font-semibold rounded-lg transition border border-slate-200 cursor-pointer"
+                      >
+                        Tümünü Kaldır
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleResetToRoleDefault}
+                        className="px-2 py-1 bg-amber-50 text-amber-800 hover:bg-amber-100 font-bold rounded-lg transition border border-amber-200 cursor-pointer"
+                      >
+                        Role Göre Varsayılan
+                      </button>
+                    </div>
+                  )}
                 </div>
-              )}
 
-              {/* Categorized Permissions Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {categories.map((cat) => {
-                  const CatIcon = cat.icon;
+                {/* Role-specific Banners */}
+                {form.role === 'admin' && (
+                  <div className="p-3 bg-purple-50 border border-purple-200 rounded-xl flex items-center gap-3 text-purple-900 mb-3">
+                    <div className="w-8 h-8 rounded-lg bg-purple-600 text-white flex items-center justify-center shrink-0">
+                      <Lock className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <p className="font-bold text-xs">Yönetici (Admin) Tam Erişim Modu</p>
+                      <p className="text-[11px] text-purple-700">
+                        Yöneticiler sistemdeki tüm araç girişleri, evrak onayları, rampa yönetimi, kullanıcı tanımlama ve anons işlemlerine sınırsız tam yetkilidir.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {form.role === 'guest' && (
+                  <div className="p-3 bg-slate-100 border border-slate-300 rounded-xl flex items-center gap-3 text-slate-800 mb-3">
+                    <div className="w-8 h-8 rounded-lg bg-slate-700 text-white flex items-center justify-center shrink-0">
+                      <ShieldAlert className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <p className="font-bold text-xs">Misafir (Salt Okunur) Modu</p>
+                      <p className="text-[11px] text-slate-600">
+                        Misafir kullanıcılar panoları ve araç durumlarını sadece izleyebilir; veri ekleme, düzenleme veya silme yapamazlar.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Categorized Permissions Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {categories.map((cat) => {
+                    const CatIcon = cat.icon;
+                    return (
+                      <div
+                        key={cat.id}
+                        className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm space-y-2.5"
+                      >
+                        <div className="flex items-center gap-2 pb-1.5 border-b border-slate-100">
+                          <CatIcon className={`w-4 h-4 ${cat.color} shrink-0`} />
+                          <div>
+                            <h5 className="font-bold text-slate-800 text-[11px]">{cat.title}</h5>
+                            <p className="text-[9px] text-slate-400">{cat.desc}</p>
+                          </div>
+                        </div>
+
+                        <div className="space-y-1.5">
+                          {cat.keys.map((p) => {
+                            const isChecked =
+                              form.role === 'admin'
+                                ? true
+                                : form.role === 'guest'
+                                ? false
+                                : !!form.permissions[p.key];
+                            const isDisabled = form.role === 'admin' || form.role === 'guest';
+                            const isMakeReady = p.key === 'canMakeReady';
+
+                            return (
+                              <label
+                                key={p.key}
+                                onClick={() => handleTogglePermission(p.key)}
+                                className={`flex items-start gap-2.5 p-2 rounded-lg border transition select-none cursor-pointer ${
+                                  isDisabled
+                                    ? 'opacity-70 bg-slate-50 border-slate-200 cursor-not-allowed'
+                                    : isChecked
+                                    ? isMakeReady
+                                      ? 'bg-emerald-50/90 border-emerald-400 text-slate-900 shadow-xs ring-1 ring-emerald-400'
+                                      : 'bg-blue-50/70 border-blue-200 text-slate-900 shadow-xs'
+                                    : isMakeReady
+                                    ? 'bg-amber-50/40 border-amber-300 text-slate-700'
+                                    : 'bg-white border-slate-200 hover:bg-slate-50 text-slate-700'
+                                }`}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={isChecked}
+                                  onChange={() => {}}
+                                  disabled={isDisabled}
+                                  className={`mt-0.5 rounded border-slate-300 ${isMakeReady ? 'text-emerald-600 focus:ring-emerald-500 accent-emerald-600' : 'text-blue-600 focus:ring-blue-500 accent-blue-600'} cursor-pointer`}
+                                />
+                                <div className="flex-1 min-w-0">
+                                  <div className="font-bold text-[11px] flex items-center justify-between">
+                                    <span className="flex items-center gap-1">
+                                      {isMakeReady && <span className="text-amber-500">⭐</span>}
+                                      {p.title || p.label}
+                                    </span>
+                                    {isChecked ? (
+                                      <span className={`text-[9px] font-extrabold px-1.5 py-0.2 rounded shrink-0 ${isMakeReady ? 'bg-emerald-100 text-emerald-800' : 'bg-blue-100 text-blue-700'}`}>
+                                        İzinli
+                                      </span>
+                                    ) : (
+                                      <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-slate-100 text-slate-500 shrink-0">
+                                        İzinsiz
+                                      </span>
+                                    )}
+                                  </div>
+                                  <p className="text-[10px] text-slate-500 mt-0.5 leading-tight">
+                                    {p.description}
+                                  </p>
+                                </div>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Submit Button */}
+              <div className="pt-2">
+                <button
+                  type="submit"
+                  className={`w-full py-2.5 text-white font-bold rounded-xl transition shadow-md flex items-center justify-center gap-2 cursor-pointer ${
+                    editingUser
+                      ? 'bg-amber-600 hover:bg-amber-700 shadow-amber-600/20'
+                      : 'bg-blue-600 hover:bg-blue-700 shadow-blue-600/20'
+                  }`}
+                >
+                  {editingUser ? (
+                    <>
+                      <Edit className="w-4 h-4" />
+                      Kullanıcı Bilgilerini & Kutucuk Yetkilerini Kaydet
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="w-4 h-4" />
+                      Sisteme Yetkilendirilmiş Kullanıcı Ekle
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+
+            {/* User List with Permissions Inspection & Direct Toggle Buttons */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
+                  <Users className="w-4 h-4 text-slate-600" />
+                  Mevcut Sistem Kullanıcıları & İzin Durumları ({users.length})
+                </h4>
+                <span className="text-[10px] text-slate-500">
+                  Her kullanıcının kutucuk yetkilerini inceleyebilir ve izin butonlarıyla değiştirebilirsiniz
+                </span>
+              </div>
+
+              <div className="divide-y border border-slate-200 rounded-2xl overflow-hidden bg-white shadow-sm">
+                {users.map((u) => {
+                  const isExpanded = expandedUserPerms === u.username;
+                  const activePermsCount = countActivePermissions(u.permissions, u.role);
+                  const hasMakeReady = hasPermission(u, 'canMakeReady');
+
                   return (
-                    <div
-                      key={cat.id}
-                      className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm space-y-2.5"
-                    >
-                      <div className="flex items-center gap-2 pb-1.5 border-b border-slate-100">
-                        <CatIcon className={`w-4 h-4 ${cat.color} shrink-0`} />
-                        <div>
-                          <h5 className="font-bold text-slate-800 text-[11px]">{cat.title}</h5>
-                          <p className="text-[9px] text-slate-400">{cat.desc}</p>
+                    <div key={u.username} className="bg-white hover:bg-slate-50/50 transition">
+                      <div className="p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-bold text-slate-800 text-xs">{u.username}</span>
+                          <span
+                            className={`text-[10px] px-2 py-0.5 rounded font-bold capitalize ${
+                              u.role === 'admin'
+                                ? 'bg-purple-100 text-purple-700 border border-purple-200'
+                                : u.role === 'personel'
+                                ? 'bg-blue-100 text-blue-700 border border-blue-200'
+                                : u.role === 'security'
+                                ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                                : 'bg-slate-100 text-slate-700 border border-slate-200'
+                            }`}
+                          >
+                            {u.role === 'personel'
+                              ? 'Operasyon / Personel'
+                              : u.role === 'admin'
+                              ? 'Admin'
+                              : u.role === 'security'
+                              ? 'Güvenlik'
+                              : 'Misafir'}
+                          </span>
+
+                          <span className="text-[9px] px-1.5 py-0.5 bg-slate-100 text-slate-700 font-semibold rounded border border-slate-200">
+                            {getWarehouseNameById(u.depoId)}
+                          </span>
+
+                          {/* Tek Tıkla Evrak Hazır İzin Butonu (Admin Tarafından Kontrol Edilir) */}
+                          {u.role !== 'admin' && u.role !== 'guest' && (
+                            <button
+                              type="button"
+                              onClick={() => handleDirectToggleUserPermission(u, 'canMakeReady')}
+                              className={`px-2 py-0.5 rounded-lg text-[10px] font-extrabold flex items-center gap-1.5 transition cursor-pointer border ${
+                                hasMakeReady
+                                  ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-300 shadow-2xs'
+                                  : 'bg-slate-100 hover:bg-amber-50 text-slate-600 hover:text-amber-800 border-slate-300'
+                              }`}
+                              title={
+                                hasMakeReady
+                                  ? "Evrak Hazır yetkisi açık. Tıklayarak yetkiyi kaldırabilirsiniz."
+                                  : "Evrak Hazır yetkisi kapalı. Tıklayarak personele Evrak Hazır yapma yetkisi verebilirsiniz."
+                              }
+                            >
+                              {hasMakeReady ? (
+                                <>
+                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                                  <Check className="w-3 h-3 text-emerald-600" />
+                                  <span>Evrak Hazır: İzinli</span>
+                                </>
+                              ) : (
+                                <>
+                                  <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
+                                  <X className="w-3 h-3 text-slate-400" />
+                                  <span>Evrak Hazır: İzin Ver</span>
+                                </>
+                              )}
+                            </button>
+                          )}
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setExpandedUserPerms(isExpanded ? null : u.username)
+                            }
+                            className="text-[10px] px-2 py-0.5 bg-slate-100 hover:bg-blue-50 text-blue-700 font-bold rounded-lg border border-slate-200 transition flex items-center gap-1 cursor-pointer"
+                          >
+                            <span>
+                              {u.role === 'admin'
+                                ? 'Tüm Yetkiler Açık'
+                                : `${activePermsCount}/${ALL_PERMISSIONS_KEYS.length} Yetki`}
+                            </span>
+                            {isExpanded ? (
+                              <ChevronUp className="w-3 h-3" />
+                            ) : (
+                              <ChevronDown className="w-3 h-3" />
+                            )}
+                          </button>
+                        </div>
+
+                        <div className="flex items-center gap-2 self-end sm:self-auto">
+                          <span className="text-slate-400 font-mono text-[10px] mr-1">
+                            Şifre: {u.password}
+                          </span>
+                          <button
+                            onClick={() => handleStartEdit(u)}
+                            className="px-2.5 py-1 bg-amber-100 hover:bg-amber-200 text-amber-900 rounded-lg font-bold text-[10px] transition flex items-center gap-1 cursor-pointer"
+                            title="Kullanıcıyı ve Yetkilerini Düzenle"
+                          >
+                            <Edit className="w-3 h-3" /> Yetkileri Düzenle
+                          </button>
+                          <button
+                            onClick={() => {
+                              if (currentUser?.username === u.username) {
+                                alert('Şu an oturum açmış olduğunuz kendi kullanıcınızı silemezsiniz.');
+                                return;
+                              }
+                              onDeleteUser(u);
+                            }}
+                            className="p-1.5 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg font-bold text-[10px] transition cursor-pointer"
+                            title="Kullanıcıyı Sil"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
                         </div>
                       </div>
 
-                      <div className="space-y-1.5">
-                        {cat.keys.map((p) => {
-                          const isChecked =
-                            form.role === 'admin'
-                              ? true
-                              : form.role === 'guest'
-                              ? false
-                              : !!form.permissions[p.key];
-                          const isDisabled = form.role === 'admin' || form.role === 'guest';
+                      {/* Expanded Permissions Overview with Interactive Toggle Buttons */}
+                      {isExpanded && (
+                        <div className="p-3 bg-slate-50/80 border-t border-slate-200 text-[10px]">
+                          <p className="font-bold text-slate-700 mb-2 flex items-center justify-between">
+                            <span className="flex items-center gap-1.5">
+                              <CheckSquare className="w-3.5 h-3.5 text-blue-600" />
+                              {u.username} Kullanıcısının Tanımlı İzin Durumu:
+                            </span>
+                            <span className="text-[9px] text-slate-400">
+                              (Yetkileri değiştirmek için kutulara tıklayabilirsiniz)
+                            </span>
+                          </p>
+                          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                            {PERMISSIONS_LIST.map((p) => {
+                              const isPermitted =
+                                u.role === 'admin'
+                                  ? true
+                                  : u.role === 'guest'
+                                  ? false
+                                  : u.permissions?.[p.key] ?? false;
+                              const isMakeReady = p.key === 'canMakeReady';
+                              const canToggle = u.role !== 'admin' && u.role !== 'guest';
 
-                          return (
-                            <label
-                              key={p.key}
-                              onClick={() => handleTogglePermission(p.key)}
-                              className={`flex items-start gap-2.5 p-2 rounded-lg border transition select-none cursor-pointer ${
-                                isDisabled
-                                  ? 'opacity-70 bg-slate-50 border-slate-200 cursor-not-allowed'
-                                  : isChecked
-                                  ? 'bg-blue-50/70 border-blue-200 text-slate-900 shadow-xs'
-                                  : 'bg-white border-slate-200 hover:bg-slate-50 text-slate-700'
-                              }`}
-                            >
-                              <input
-                                type="checkbox"
-                                checked={isChecked}
-                                onChange={() => {}}
-                                disabled={isDisabled}
-                                className="mt-0.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 accent-blue-600 cursor-pointer"
-                              />
-                              <div className="flex-1 min-w-0">
-                                <div className="font-bold text-[11px] flex items-center justify-between">
-                                  <span>{p.title || p.label}</span>
-                                  {isChecked && (
-                                    <span className="text-[9px] font-extrabold px-1.5 py-0.2 rounded bg-blue-100 text-blue-700 shrink-0">
-                                      İzinli
+                              return (
+                                <button
+                                  type="button"
+                                  key={p.key}
+                                  disabled={!canToggle}
+                                  onClick={() => canToggle && handleDirectToggleUserPermission(u, p.key)}
+                                  className={`p-1.5 rounded-lg border flex items-center justify-between gap-1.5 text-left transition select-none ${
+                                    canToggle ? 'cursor-pointer hover:shadow-xs active:scale-[0.98]' : 'cursor-default'
+                                  } ${
+                                    isPermitted
+                                      ? isMakeReady
+                                        ? 'bg-emerald-100/90 border-emerald-500 text-emerald-950 font-black shadow-xs ring-1 ring-emerald-400'
+                                        : 'bg-emerald-50 border-emerald-200 text-emerald-900 font-bold'
+                                      : isMakeReady
+                                      ? 'bg-amber-50/80 border-amber-300 text-amber-900 font-semibold'
+                                      : 'bg-slate-100/70 border-slate-200 text-slate-400 line-through'
+                                  }`}
+                                  title={canToggle ? `${p.title}: Tıklayarak izin durumunu anında değiştirin` : p.title}
+                                >
+                                  <div className="flex items-center gap-1 min-w-0">
+                                    {isPermitted ? (
+                                      <Check className="w-3 h-3 text-emerald-600 shrink-0" />
+                                    ) : (
+                                      <X className="w-3 h-3 text-slate-400 shrink-0" />
+                                    )}
+                                    <span className="truncate">{isMakeReady ? `⭐ ${p.title || p.label}` : (p.title || p.label)}</span>
+                                  </div>
+                                  {canToggle && (
+                                    <span
+                                      className={`text-[8px] px-1 py-0.2 rounded font-extrabold shrink-0 ${
+                                        isPermitted
+                                          ? 'bg-emerald-600 text-white'
+                                          : 'bg-slate-200 text-slate-600'
+                                      }`}
+                                    >
+                                      {isPermitted ? 'Açık' : 'Kapalı'}
                                     </span>
                                   )}
-                                </div>
-                                <p className="text-[10px] text-slate-500 mt-0.5 leading-tight">
-                                  {p.description}
-                                </p>
-                              </div>
-                            </label>
-                          );
-                        })}
-                      </div>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   );
                 })}
               </div>
             </div>
-
-            {/* Submit Button */}
-            <div className="pt-2">
-              <button
-                type="submit"
-                className={`w-full py-2.5 text-white font-bold rounded-xl transition shadow-md flex items-center justify-center gap-2 cursor-pointer ${
-                  editingUser
-                    ? 'bg-amber-600 hover:bg-amber-700 shadow-amber-600/20'
-                    : 'bg-blue-600 hover:bg-blue-700 shadow-blue-600/20'
-                }`}
-              >
-                {editingUser ? (
-                  <>
-                    <Edit className="w-4 h-4" />
-                    Kullanıcı Bilgilerini & Kutucuk Yetkilerini Kaydet
-                  </>
-                ) : (
-                  <>
-                    <Plus className="w-4 h-4" />
-                    Sisteme Yetkilendirilmiş Kullanıcı Ekle
-                  </>
-                )}
-              </button>
-            </div>
-          </form>
-
-          {/* User List with Permissions Inspection */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <h4 className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
-                <Users className="w-4 h-4 text-slate-600" />
-                Mevcut Sistem Kullanıcıları & İzin Durumları ({users.length})
-              </h4>
-              <span className="text-[10px] text-slate-500">
-                Her kullanıcının kutucuk yetkilerini inceleyebilirsiniz
-              </span>
-            </div>
-
-            <div className="divide-y border border-slate-200 rounded-2xl overflow-hidden bg-white shadow-sm">
-              {users.map((u) => {
-                const isExpanded = expandedUserPerms === u.username;
-                const activePermsCount = countActivePermissions(u.permissions, u.role);
-
-                return (
-                  <div key={u.username} className="bg-white hover:bg-slate-50/50 transition">
-                    <div className="p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-bold text-slate-800 text-xs">{u.username}</span>
-                        <span
-                          className={`text-[10px] px-2 py-0.5 rounded font-bold capitalize ${
-                            u.role === 'admin'
-                              ? 'bg-purple-100 text-purple-700 border border-purple-200'
-                              : u.role === 'personel'
-                              ? 'bg-blue-100 text-blue-700 border border-blue-200'
-                              : u.role === 'security'
-                              ? 'bg-amber-100 text-amber-800 border border-amber-200'
-                              : 'bg-slate-100 text-slate-700 border border-slate-200'
-                          }`}
-                        >
-                          {u.role === 'personel'
-                            ? 'Operasyon / Personel'
-                            : u.role === 'admin'
-                            ? 'Admin'
-                            : u.role === 'security'
-                            ? 'Güvenlik'
-                            : 'Misafir'}
-                        </span>
-
-                        <span className="text-[9px] px-1.5 py-0.5 bg-slate-100 text-slate-700 font-semibold rounded border border-slate-200">
-                          {getWarehouseNameById(u.depoId)}
-                        </span>
-
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setExpandedUserPerms(isExpanded ? null : u.username)
-                          }
-                          className="text-[10px] px-2 py-0.5 bg-slate-100 hover:bg-blue-50 text-blue-700 font-bold rounded-lg border border-slate-200 transition flex items-center gap-1 cursor-pointer"
-                        >
-                          <span>
-                            {u.role === 'admin'
-                              ? 'Tüm Yetkiler Açık'
-                              : `${activePermsCount}/${ALL_PERMISSIONS_KEYS.length} Yetki`}
-                          </span>
-                          {isExpanded ? (
-                            <ChevronUp className="w-3 h-3" />
-                          ) : (
-                            <ChevronDown className="w-3 h-3" />
-                          )}
-                        </button>
-                      </div>
-
-                      <div className="flex items-center gap-2 self-end sm:self-auto">
-                        <span className="text-slate-400 font-mono text-[10px] mr-1">
-                          Şifre: {u.password}
-                        </span>
-                        <button
-                          onClick={() => handleStartEdit(u)}
-                          className="px-2.5 py-1 bg-amber-100 hover:bg-amber-200 text-amber-900 rounded-lg font-bold text-[10px] transition flex items-center gap-1 cursor-pointer"
-                          title="Kullanıcıyı ve Yetkilerini Düzenle"
-                        >
-                          <Edit className="w-3 h-3" /> Yetkileri Düzenle
-                        </button>
-                        <button
-                          onClick={() => {
-                            if (currentUser?.username === u.username) {
-                              alert('Şu an oturum açmış olduğunuz kendi kullanıcınızı silemezsiniz.');
-                              return;
-                            }
-                            onDeleteUser(u);
-                          }}
-                          className="p-1.5 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg font-bold text-[10px] transition cursor-pointer"
-                          title="Kullanıcıyı Sil"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Expanded Permissions Overview */}
-                    {isExpanded && (
-                      <div className="p-3 bg-slate-50/80 border-t border-slate-200 text-[10px]">
-                        <p className="font-bold text-slate-700 mb-2 flex items-center gap-1.5">
-                          <CheckSquare className="w-3.5 h-3.5 text-blue-600" />
-                          {u.username} Kullanıcısının Tanımlı İzin Durumu:
-                        </p>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-                          {PERMISSIONS_LIST.map((p) => {
-                            const isPermitted =
-                              u.role === 'admin'
-                                ? true
-                                : u.role === 'guest'
-                                ? false
-                                : u.permissions?.[p.key] ?? false;
-
-                            return (
-                              <div
-                                key={p.key}
-                                className={`p-1.5 rounded-lg border flex items-center gap-1.5 ${
-                                  isPermitted
-                                    ? 'bg-emerald-50 border-emerald-200 text-emerald-900 font-bold'
-                                    : 'bg-slate-100/70 border-slate-200 text-slate-400 line-through'
-                                }`}
-                              >
-                                {isPermitted ? (
-                                  <Check className="w-3 h-3 text-emerald-600 shrink-0" />
-                                ) : (
-                                  <X className="w-3 h-3 text-slate-400 shrink-0" />
-                                )}
-                                <span className="truncate">{p.title || p.label}</span>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
           </div>
-        </div>
+        )}
 
         {/* Footer */}
         <div className="p-3 bg-slate-50 border-t border-slate-200 flex justify-end">
@@ -1733,11 +2026,22 @@ export const RampAssignModal: React.FC<RampAssignModalProps> = ({
 
   if (!ramp) return null;
 
-  const eligibleVehicles = vehicles.filter(
-    (v) =>
-      v.durum?.trim().toUpperCase() === 'EVRAK HAZIR' &&
-      (!ramp.depoId || (v.depoId || 1) === ramp.depoId)
-  );
+  const eligibleVehicles = vehicles.filter((v) => {
+    const matchesDepo = !ramp.depoId || (v.depoId || 1) === ramp.depoId;
+    if (!matchesDepo) return false;
+
+    const status = v.durum?.trim().toUpperCase();
+    if (status === 'EVRAK HAZIR') return true;
+
+    // Depo Türü "Serbest Depo" olan araçlarda güvenlik veya admin evrak hazır olmadan da doğrudan rampaya yönlendirebilir
+    const isSerbest = (v.depoTuru || '').toLowerCase().includes('serbest');
+    const isSecurityOrAdmin = currentUser?.role === 'security' || currentUser?.role === 'admin';
+    if (isSerbest && isSecurityOrAdmin && status === 'BEKLEMEDE') {
+      return true;
+    }
+
+    return false;
+  });
 
   const filtered = eligibleVehicles.filter((v) => {
     const q = search.trim().toLowerCase();
@@ -1765,7 +2069,7 @@ export const RampAssignModal: React.FC<RampAssignModalProps> = ({
               <WarehouseIcon className="w-4 h-4 text-blue-400" /> {ramp.ad} - Araç Atama / Çağırma
             </h3>
             <p className="text-[10px] text-slate-400">
-              Evrakı hazır aracı doğrudan atayabilir veya güvenlik için çağırabilirsiniz
+              Evrakı hazır aracı veya Serbest Depo araçlarını doğrudan atayabilir veya güvenlik için çağırabilirsiniz
             </p>
           </div>
           <button onClick={onClose} className="text-slate-400 hover:text-white cursor-pointer">
@@ -1799,6 +2103,11 @@ export const RampAssignModal: React.FC<RampAssignModalProps> = ({
                   <span className="text-[10px] px-1.5 py-0.5 bg-blue-100 text-blue-700 font-bold rounded">
                     {v.islemTuru}
                   </span>
+                  {(v.depoTuru || '').toLowerCase().includes('serbest') && v.durum !== 'EVRAK HAZIR' && (
+                    <span className="text-[9px] px-1.5 py-0.5 bg-emerald-100 text-emerald-800 font-extrabold rounded border border-emerald-300">
+                      Serbest Depo (Doğrudan Atanabilir)
+                    </span>
+                  )}
                   {v.isAcik && (
                     <span className="animate-pulse text-[9px] bg-red-600 text-white font-extrabold px-1.5 py-0.5 rounded shadow flex items-center gap-0.5">
                       <Bolt className="w-2.5 h-2.5" /> ACİL ARAÇ
@@ -2674,14 +2983,16 @@ export const EditVehicleModal: React.FC<EditVehicleModalProps> = ({
     );
   };
 
+  const canMakeReady = currentUser?.role === 'admin' || hasPermission(currentUser, 'canMakeReady');
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.dorsePlaka.trim()) {
       alert('Dorse Plakası zorunludur.');
       return;
     }
-    if (form.durum === 'EVRAK HAZIR' && vehicle.durum !== 'EVRAK HAZIR' && currentUser?.role !== 'admin') {
-      alert("Bir aracın durumunu 'EVRAK HAZIR' yapma yetkisi sadece Yöneticiye (Admin) aittir.");
+    if (form.durum === 'EVRAK HAZIR' && vehicle.durum !== 'EVRAK HAZIR' && !canMakeReady) {
+      alert("Bir aracın durumunu 'EVRAK HAZIR' yapma yetkiniz bulunmamaktadır. Bu yetki Yönetici (Admin) tarafından 'Özel Yetkiler' alanından tanımlanabilir.");
       return;
     }
     onSave(form);
@@ -2847,8 +3158,8 @@ export const EditVehicleModal: React.FC<EditVehicleModalProps> = ({
                 className="w-full border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 font-bold bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100"
               >
                 <option value="BEKLEMEDE">BEKLEMEDE</option>
-                <option value="EVRAK HAZIR" disabled={currentUser?.role !== 'admin' && form.durum !== 'EVRAK HAZIR'}>
-                  EVRAK HAZIR {currentUser?.role !== 'admin' && form.durum !== 'EVRAK HAZIR' ? '(Sadece Admin)' : ''}
+                <option value="EVRAK HAZIR" disabled={!canMakeReady && form.durum !== 'EVRAK HAZIR'}>
+                  EVRAK HAZIR {!canMakeReady && form.durum !== 'EVRAK HAZIR' ? '(Yetki Gerekir)' : ''}
                 </option>
                 <option value="RAMPADA">RAMPADA</option>
                 <option value="ÇIKIŞ YAPTI">ÇIKIŞ YAPTI</option>
@@ -2856,27 +3167,42 @@ export const EditVehicleModal: React.FC<EditVehicleModalProps> = ({
             </div>
 
             <div>
-              <label className="block font-semibold text-slate-600 dark:text-slate-300 mb-1">Rampa Ataması</label>
-              <select
-                value={form.rampaId ?? ''}
-                onChange={(e) => {
-                  const rId = e.target.value ? Number(e.target.value) : null;
-                  setForm({
-                    ...form,
-                    rampaId: rId,
-                    durum: rId && form.durum !== 'RAMPADA' ? 'RAMPADA' : form.durum
-                  });
-                }}
-                disabled={form.durum !== 'EVRAK HAZIR' && form.durum !== 'RAMPADA'}
-                className="w-full border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 disabled:bg-slate-100 dark:disabled:bg-slate-800/50 disabled:text-slate-400"
-              >
-                <option value="">Rampa Atanmadı</option>
-                {getAvailableRampsForVehicle(form.rampaId).map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {r.ad}
-                  </option>
-                ))}
-              </select>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block font-semibold text-slate-600 dark:text-slate-300">Rampa Ataması</label>
+                {(form.depoTuru || '').toLowerCase().includes('serbest') && (
+                  <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold">
+                    ✓ Serbest Depo: Doğrudan Atanabilir
+                  </span>
+                )}
+              </div>
+              {(() => {
+                const isSerbest = (form.depoTuru || '').toLowerCase().includes('serbest');
+                const isSecurityOrAdmin = currentUser?.role === 'security' || currentUser?.role === 'admin';
+                const canAssignRamp = form.durum === 'EVRAK HAZIR' || form.durum === 'RAMPADA' || (isSerbest && isSecurityOrAdmin);
+
+                return (
+                  <select
+                    value={form.rampaId ?? ''}
+                    onChange={(e) => {
+                      const rId = e.target.value ? Number(e.target.value) : null;
+                      setForm({
+                        ...form,
+                        rampaId: rId,
+                        durum: rId && form.durum !== 'RAMPADA' ? 'RAMPADA' : form.durum
+                      });
+                    }}
+                    disabled={!canAssignRamp}
+                    className="w-full border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 disabled:bg-slate-100 dark:disabled:bg-slate-800/50 disabled:text-slate-400"
+                  >
+                    <option value="">Rampa Atanmadı</option>
+                    {getAvailableRampsForVehicle(form.rampaId).map((r) => (
+                      <option key={r.id} value={r.id}>
+                        {r.ad}
+                      </option>
+                    ))}
+                  </select>
+                );
+              })()}
             </div>
 
             {currentUser?.role === 'admin' && (
@@ -3156,7 +3482,7 @@ export const ReleaseRampVehicleModal: React.FC<ReleaseRampVehicleModalProps> = (
             </div>
           </button>
 
-          {currentUser?.role === 'admin' ? (
+          {currentUser?.role === 'admin' || hasPermission(currentUser, 'canMakeReady') || hasPermission(currentUser, 'canReleaseRamp') ? (
             <button
               type="button"
               onClick={() => onReleaseOnly(vehicle)}
@@ -3170,7 +3496,7 @@ export const ReleaseRampVehicleModal: React.FC<ReleaseRampVehicleModalProps> = (
             </button>
           ) : (
             <div className="p-2 bg-slate-50 border border-slate-200 rounded-xl text-[10px] text-slate-500 text-center">
-              ℹ️ Rampadaki aracı EVRAK HAZIR durumuna geri alma yetkisi sadece Yöneticidedir (Admin).
+              ℹ️ Rampadaki aracı EVRAK HAZIR durumuna geri alma yetkisi Yönetici (Admin) veya yetkili Personeldedir.
             </div>
           )}
 

@@ -131,6 +131,126 @@ export async function convertPhotosToFiles(photos: string[], baseName: string = 
 }
 
 /**
+ * iOS (iPhone / iPad) cihaz tespit fonksiyonu
+ */
+export function isIOSDevice(): boolean {
+  if (typeof window === 'undefined' || typeof navigator === 'undefined') return false;
+  const userAgent = navigator.userAgent || '';
+  return (
+    /iPad|iPhone|iPod/.test(userAgent) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+  );
+}
+
+/**
+ * Birden fazla fotoğrafı tek bir görsel kolajında birleştirir.
+ * WhatsApp iOS'ta birden fazla fotoğraf aynı anda paylaşıldığında açıklamayı (caption) fotoğraflardan ayırdığı veya
+ * metni sildiği için, fotoğrafları tek bir şık görselde birleştirmek, açıklamanın görselin altına TEK BİR MESAJDA iliştirilmesini garanti eder.
+ */
+export async function mergePhotosIntoSingleImage(
+  photos: string[],
+  baseName: string = 'arac_gorsel'
+): Promise<File | null> {
+  if (!photos || photos.length === 0) return null;
+  if (photos.length === 1) {
+    const files = await convertPhotosToFiles(photos, baseName);
+    return files[0] || null;
+  }
+
+  try {
+    const loadedImages = await Promise.all(
+      photos.map(
+        (src) =>
+          new Promise<HTMLImageElement>((resolve, reject) => {
+            const img = new Image();
+            img.crossOrigin = 'anonymous';
+            img.onload = () => resolve(img);
+            img.onerror = () => reject(new Error('Görsel yüklenemedi'));
+            img.src = src;
+          })
+      )
+    );
+
+    const count = loadedImages.length;
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+
+    if (count === 2) {
+      // 2 fotoğraf: Yan yana (1200 x 675)
+      const canvasW = 1200;
+      const canvasH = 675;
+      canvas.width = canvasW;
+      canvas.height = canvasH;
+      ctx.fillStyle = '#0f172a';
+      ctx.fillRect(0, 0, canvasW, canvasH);
+
+      const colW = (canvasW - 8) / 2;
+      loadedImages.forEach((img, idx) => {
+        const x = idx * (colW + 8);
+        const imgAspect = img.width / img.height;
+        const targetAspect = colW / canvasH;
+        let sW = img.width;
+        let sH = img.height;
+        let sX = 0;
+        let sY = 0;
+        if (imgAspect > targetAspect) {
+          sW = img.height * targetAspect;
+          sX = (img.width - sW) / 2;
+        } else {
+          sH = img.width / targetAspect;
+          sY = (img.height - sH) / 2;
+        }
+        ctx.drawImage(img, sX, sY, sW, sH, x, 0, colW, canvasH);
+      });
+    } else {
+      // 3 veya 4 fotoğraf: 2x2 grid (1200 x 1200)
+      const canvasW = 1200;
+      const canvasH = 1200;
+      canvas.width = canvasW;
+      canvas.height = canvasH;
+      ctx.fillStyle = '#0f172a';
+      ctx.fillRect(0, 0, canvasW, canvasH);
+
+      const cellW = (canvasW - 8) / 2;
+      const cellH = (canvasH - 8) / 2;
+      loadedImages.slice(0, 4).forEach((img, idx) => {
+        const col = idx % 2;
+        const row = Math.floor(idx / 2);
+        const x = col * (cellW + 8);
+        const y = row * (cellH + 8);
+
+        const imgAspect = img.width / img.height;
+        const targetAspect = cellW / cellH;
+        let sW = img.width;
+        let sH = img.height;
+        let sX = 0;
+        let sY = 0;
+        if (imgAspect > targetAspect) {
+          sW = img.height * targetAspect;
+          sX = (img.width - sW) / 2;
+        } else {
+          sH = img.width / targetAspect;
+          sY = (img.height - sH) / 2;
+        }
+        ctx.drawImage(img, sX, sY, sW, sH, x, y, cellW, cellH);
+      });
+    }
+
+    const blob: Blob | null = await new Promise((res) =>
+      canvas.toBlob(res, 'image/jpeg', 0.9)
+    );
+    if (!blob) return null;
+
+    return new File([blob], `${baseName}_tek_kolaj.jpg`, { type: 'image/jpeg' });
+  } catch (err) {
+    console.warn('Fotoğraflar birleştirilemedi, ilk görsel kullanılacak:', err);
+    const files = await convertPhotosToFiles(photos.slice(0, 1), baseName);
+    return files[0] || null;
+  }
+}
+
+/**
  * Web Share API ile fotoğrafları WhatsApp veya hedef uygulamaya gerçek dosya eki olarak paylaşır
  */
 export async function shareViaWebShareWithFiles(options: {
@@ -138,17 +258,39 @@ export async function shareViaWebShareWithFiles(options: {
   text: string;
   photos: string[];
   vehiclePlate: string;
+  mergePhotos?: boolean;
 }): Promise<{ shared: boolean; method: 'web-share-files' | 'unsupported'; error?: string }> {
-  const { title, text, photos, vehiclePlate } = options;
+  const { title, text, photos, vehiclePlate, mergePhotos } = options;
+
+  // Özellikle iPhone'larda WhatsApp metni veya fotoğrafları ayırabildiği için,
+  // paylaşım öncesi metni panoya da her ihtimale karşı kopyalıyoruz
+  if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      // ignore
+    }
+  }
 
   if (typeof navigator !== 'undefined' && 'share' in navigator) {
     try {
-      const files = await convertPhotosToFiles(photos, `arac_${vehiclePlate}`);
-      if (files.length > 0 && typeof navigator.canShare === 'function' && navigator.canShare({ files })) {
+      let filesToShare: File[] = [];
+      if (mergePhotos && photos.length > 1) {
+        const mergedFile = await mergePhotosIntoSingleImage(photos, `arac_${vehiclePlate}`);
+        if (mergedFile) {
+          filesToShare = [mergedFile];
+        } else {
+          filesToShare = await convertPhotosToFiles(photos, `arac_${vehiclePlate}`);
+        }
+      } else {
+        filesToShare = await convertPhotosToFiles(photos, `arac_${vehiclePlate}`);
+      }
+
+      if (filesToShare.length > 0 && typeof navigator.canShare === 'function' && navigator.canShare({ files: filesToShare })) {
         await navigator.share({
           title,
           text,
-          files
+          files: filesToShare
         });
         return { shared: true, method: 'web-share-files' };
       } else if (typeof navigator.canShare === 'function' && navigator.canShare({ text })) {

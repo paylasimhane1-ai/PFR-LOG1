@@ -6,7 +6,8 @@ import {
   FormatVehicleMessageOptions,
   shareViaWebShareWithFiles,
   convertPhotosToFiles,
-  copyPhotoToClipboard
+  copyPhotoToClipboard,
+  isIOSDevice
 } from '../utils/whatsapp';
 import {
   MessageSquare,
@@ -20,7 +21,8 @@ import {
   Download,
   Edit3,
   RotateCcw,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Sparkles
 } from 'lucide-react';
 
 interface WhatsAppSharePromptModalProps {
@@ -80,16 +82,27 @@ export const WhatsAppSharePromptModal: React.FC<WhatsAppSharePromptModalProps> =
     window.open(shareUrl, '_blank');
   };
 
-  const handleShareWithAttachments = async () => {
+  const isIOS = isIOSDevice();
+
+  const handleShareWithAttachments = async (merge: boolean = false) => {
     setIsSharingFiles(true);
     try {
+      // Her ihtimale karşı metni panoya da kopyalayalım (iPhone veya WhatsApp'ta yapıştırmak için hazır olsun)
+      try {
+        await navigator.clipboard.writeText(activeMessageText);
+        setCopied(true);
+      } catch {
+        // ignore
+      }
+
       if (photos.length > 0) {
         // 1. Mobil veya Web Share destekleyen tarayıcı
         const res = await shareViaWebShareWithFiles({
           title: `${vehicle.dorsePlaka} Araç Bilgisi`,
           text: activeMessageText,
           photos,
-          vehiclePlate: vehicle.dorsePlaka
+          vehiclePlate: vehicle.dorsePlaka,
+          mergePhotos: merge
         });
 
         if (res.shared) {
@@ -101,12 +114,6 @@ export const WhatsAppSharePromptModal: React.FC<WhatsAppSharePromptModalProps> =
         // Fotoğrafı ve açıklamayı panoya kopyala, fotoğrafı indir ve WhatsApp Web'i aç
         const ok = await copyPhotoToClipboard(photos[0]);
         if (ok) setPhotoCopied(true);
-        try {
-          await navigator.clipboard.writeText(activeMessageText);
-          setCopied(true);
-        } catch {
-          // ignore
-        }
         setPasteNotice(true);
         await handleDownloadPhotos();
 
@@ -246,14 +253,24 @@ export const WhatsAppSharePromptModal: React.FC<WhatsAppSharePromptModalProps> =
                   </div>
                 ))}
               </div>
-              <div className="bg-white/90 p-2.5 rounded-xl border border-emerald-300 text-[11px] text-emerald-900 space-y-1 shadow-2xs">
-                <div className="flex items-center gap-1.5 text-emerald-800 font-bold text-xs">
+              <div className="bg-white/90 dark:bg-slate-800/90 p-3 rounded-xl border border-emerald-300 dark:border-emerald-700 text-[11px] text-emerald-950 dark:text-emerald-100 space-y-2 shadow-2xs">
+                <div className="flex items-center gap-1.5 text-emerald-800 dark:text-emerald-400 font-bold text-xs">
                   <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                  <span>Fotoğraf Açıklaması (Caption) Olarak Gönderilir</span>
+                  <span>Fotoğraf & Açıklama (Caption) Mantığı</span>
                 </div>
-                <p className="text-[10px] text-slate-600 leading-relaxed font-medium">
-                  Araç bilgileri ayrı bir metin mesajı olarak iletilmez; doğrudan seçilen fotoğrafın altına <strong>açıklama (caption)</strong> olarak eklenir.
+                <p className="text-[10px] text-slate-600 dark:text-slate-300 leading-relaxed font-medium">
+                  {photos.length > 1
+                    ? "iPhone (iOS) ve WhatsApp kısıtlaması nedeniyle birden çok fotoğraf seçildiğinde, WhatsApp açıklamayı fotoğrafların altına iliştirmeyebilir veya fotoğrafları ayrı ayrı iletebilir. 'Fotoğrafları Birleştir & Açıklamayla Gönder' seçeneği tüm fotoğrafları tek kolaj yaparak açıklamayı doğrudan altına iliştirir."
+                    : "Araç bilgileri doğrudan seçilen fotoğrafın altına açıklama (caption) olarak eklenerek tek mesajda iletilir."}
                 </p>
+                <div className="p-2 bg-emerald-50 dark:bg-emerald-950/40 rounded-lg border border-emerald-200 dark:border-emerald-800 text-[10px] text-emerald-900 dark:text-emerald-200 space-y-0.5">
+                  <p className="font-bold flex items-center gap-1">
+                    <span>💡 iPhone (iOS) İpucu:</span>
+                  </p>
+                  <p>
+                    Paylaşım butonuna bastığınızda açıklama metni <strong>otomatik olarak panonuza kopyalanır</strong>. WhatsApp açıldığında gerekirse metin kutusuna doğrudan <strong>&apos;Yapıştır&apos;</strong> yapabilirsiniz.
+                  </p>
+                </div>
                 {pasteNotice && (
                   <div className="mt-1.5 p-2 bg-emerald-100 border border-emerald-400 rounded-lg text-emerald-900 font-bold text-[10px] flex items-center gap-1.5 animate-pulse">
                     <Check className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
@@ -341,10 +358,34 @@ export const WhatsAppSharePromptModal: React.FC<WhatsAppSharePromptModalProps> =
               </button>
             )}
 
-            {photos.length > 0 ? (
+            {photos.length > 1 ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => handleShareWithAttachments(false)}
+                  disabled={isSharingFiles}
+                  className="px-3.5 py-2.5 rounded-xl border border-emerald-300 dark:border-emerald-700 bg-emerald-50/80 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 text-emerald-800 dark:text-emerald-200 font-bold text-xs flex items-center justify-center gap-1.5 transition cursor-pointer disabled:opacity-50"
+                  title="Fotoğrafları ayrı ayrı gönderir (Metin ayrı mesaj olabilir)"
+                >
+                  <Paperclip className="w-3.5 h-3.5" />
+                  <span>Ayrı Ayrı Paylaş</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleShareWithAttachments(true)}
+                  disabled={isSharingFiles}
+                  className="flex-1 sm:flex-none px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 active:scale-95 text-white font-black text-xs flex items-center justify-center gap-2 transition shadow-lg shadow-emerald-600/30 cursor-pointer disabled:opacity-50"
+                  title="Tüm fotoğrafları tek şık kolaj görselde birleştirip açıklamayı doğrudan altına iliştirir (iPhone & WhatsApp için önerilen)"
+                >
+                  <Sparkles className="w-4 h-4 text-amber-300" />
+                  <span>{isSharingFiles ? 'Hazırlanıyor...' : 'Fotoğrafları Birleştir & Açıklamayla Gönder (Tek Mesaj ⭐)'}</span>
+                </button>
+              </>
+            ) : photos.length === 1 ? (
               <button
                 type="button"
-                onClick={handleShareWithAttachments}
+                onClick={() => handleShareWithAttachments(false)}
                 disabled={isSharingFiles}
                 className="flex-1 sm:flex-none px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-black text-xs flex items-center justify-center gap-2 transition shadow-lg shadow-emerald-600/30 cursor-pointer disabled:opacity-50"
               >

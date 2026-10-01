@@ -1,5 +1,5 @@
 import { Warehouse, User, Ramp, Vehicle, ExpectedVehicle, AppNotification, ChatMessage, Customer } from '../types';
-import { DEFAULT_ADMIN_PERMISSIONS, DEFAULT_SECURITY_PERMISSIONS, DEFAULT_GUEST_PERMISSIONS } from '../utils/permissions';
+import { DEFAULT_ADMIN_PERMISSIONS, DEFAULT_PERSONEL_PERMISSIONS, DEFAULT_SECURITY_PERMISSIONS, DEFAULT_GUEST_PERMISSIONS } from '../utils/permissions';
 
 export const initialCustomers: Customer[] = [
   { id: 'cust_1', name: 'Örnek Lojistik A.Ş.', vergiNo: '1234567890', yetkili: 'Ahmet Yılmaz', telefon: '0212 555 10 20' },
@@ -21,6 +21,7 @@ export const initialWarehouses: Warehouse[] = [
 
 export const initialUsers: User[] = [
   { username: 'admin', password: 'admin', role: 'admin', depoId: 0, permissions: DEFAULT_ADMIN_PERMISSIONS },
+  { username: 'operasyon', password: '123', role: 'personel', depoId: 1, permissions: DEFAULT_PERSONEL_PERMISSIONS },
   { username: 'Güvenlik', password: 'Güvenlik123', role: 'security', depoId: 1, permissions: DEFAULT_SECURITY_PERMISSIONS },
   { username: 'Misafir', password: 'Misafir123', role: 'guest', depoId: 0, permissions: DEFAULT_GUEST_PERMISSIONS }
 ];

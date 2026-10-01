@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Vehicle, Ramp, User } from '../types';
 import { cleanPhone, cleanPhoneForWa, getDurationText, getDepoKayitTarihi, getRampaGirisTarihi, getRampaCikisTarihi } from '../utils/helpers';
+import { hasPermission } from '../utils/permissions';
 import {
   Search,
   Plus,
@@ -18,7 +19,8 @@ import {
   Truck,
   Zap,
   Eye,
-  LogIn
+  LogIn,
+  Check
 } from 'lucide-react';
 
 interface VehicleManagementViewProps {
@@ -52,6 +54,8 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
 }) => {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'TÜMÜ' | 'BEKLEMEDE' | 'EVRAK HAZIR' | 'RAMPADA'>('TÜMÜ');
+
+  const canMakeReady = currentUser?.role === 'admin' || hasPermission(currentUser, 'canMakeReady');
 
   const activeVehicles = vehicles.filter((v) => v.durum !== 'ÇIKIŞ YAPTI');
 
@@ -93,6 +97,12 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
     return activeVehicles.filter((v) => v.durum === st).length;
   };
 
+  const isVehicleSerbestDepo = (v?: Vehicle | null) => {
+    if (!v) return false;
+    const dt = (v.depoTuru || '').toLowerCase().trim();
+    return dt === 'serbest depo' || dt === 'serbest' || dt.includes('serbest');
+  };
+
   const handleConfirmExit = (v: Vehicle) => {
     if (window.confirm(`${v.dorsePlaka} plakalı aracın sahadan çıkışını onaylıyor musunuz?`)) {
       onUpdateStatus(v, 'ÇIKIŞ YAPTI');
@@ -100,9 +110,13 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
   };
 
   const handleQuickAssignRamp = (v: Vehicle) => {
-    // Rampa ataması yapılabilmesi için araç durumu 'EVRAK HAZIR' olmalıdır
-    if (v.durum !== 'EVRAK HAZIR') {
-      alert(`Rampa ataması yapılabilmesi için aracın durumunun 'EVRAK HAZIR' olması gerekmektedir.\n\nMevcut Durum: ${v.durum}\nLütfen önce evrak onayını tamamlayınız.`);
+    const isSerbest = isVehicleSerbestDepo(v);
+    const isSecurityOrAdmin = currentUser?.role === 'security' || currentUser?.role === 'admin';
+    const canDirectToRamp = v.durum === 'EVRAK HAZIR' || (isSerbest && isSecurityOrAdmin);
+
+    // Rampa ataması yapılabilmesi için araç durumu 'EVRAK HAZIR' olmalıdır (Serbest Depo için güvenlik/admin doğrudan atayabilir)
+    if (!canDirectToRamp) {
+      alert(`Rampa ataması yapılabilmesi için aracın durumunun 'EVRAK HAZIR' olması gerekmektedir.\n\nMevcut Durum: ${v.durum}\n(Yalnızca Depo Türü 'Serbest Depo' olan araçlar güvenlik tarafından 'EVRAK HAZIR' olmadan doğrudan rampaya yönlendirilebilir).`);
       return;
     }
 
@@ -402,9 +416,9 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                       <option value="BEKLEMEDE">BEKLEMEDE</option>
                       <option
                         value="EVRAK HAZIR"
-                        disabled={currentUser?.role !== 'admin' && v.durum !== 'EVRAK HAZIR'}
+                        disabled={!canMakeReady && v.durum !== 'EVRAK HAZIR'}
                       >
-                        EVRAK HAZIR {currentUser?.role !== 'admin' && v.durum !== 'EVRAK HAZIR' ? '(Admin)' : ''}
+                        EVRAK HAZIR {!canMakeReady && v.durum !== 'EVRAK HAZIR' ? '(Yetki Gerekir)' : ''}
                       </option>
                       <option value="RAMPADA">RAMPADA</option>
                       <option value="ÇIKIŞ YAPTI">ÇIKIŞ YAPTI</option>
@@ -412,39 +426,49 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
 
                     {/* Rampa Bilgisi Dropdown (Küçültülmüş) */}
                     <div className="flex items-center gap-0.5">
-                      <select
-                        value={v.rampaId ?? ''}
-                        onChange={(e) => {
-                          const val = e.target.value ? Number(e.target.value) : null;
-                          if (val !== null && v.durum !== 'EVRAK HAZIR' && v.durum !== 'RAMPADA') {
-                            alert(`Rampa ataması için durumun 'EVRAK HAZIR' olması gerekmektedir.\n\nMevcut Durum: ${v.durum}`);
-                            return;
-                          }
-                          onAssignRamp(v, val);
-                        }}
-                        disabled={(v.durum !== 'EVRAK HAZIR' && v.durum !== 'RAMPADA')}
-                        className={`w-full h-6.5 text-[9px] font-bold border rounded-md px-1 outline-none focus:ring-1 focus:ring-purple-500 truncate ${
-                          v.durum !== 'EVRAK HAZIR' && v.durum !== 'RAMPADA'
-                            ? 'bg-slate-100 dark:bg-slate-800/60 text-slate-400 dark:text-slate-500 border-slate-200 dark:border-slate-700 cursor-not-allowed'
-                            : 'border-purple-300 dark:border-purple-700 bg-purple-50/70 dark:bg-purple-950/40 text-purple-900 dark:text-purple-200'
-                        }`}
-                      >
-                        <option value="">Rampa: {v.rampaId ? getRampName(v.rampaId) : 'Seçilmedi'}</option>
-                        {ramps.map((r) => {
-                          const isOccupiedByOther = vehicles.some(
-                            (o) => o.rampaId === r.id && o.durum === 'RAMPADA' && o.id !== v.id
-                          );
-                          return (
-                            <option
-                              key={r.id}
-                              value={r.id}
-                              disabled={isOccupiedByOther && r.durum === 'Dolu'}
-                            >
-                              {r.ad} ({r.durum}){isOccupiedByOther ? ' [Dolu]' : ''}
-                            </option>
-                          );
-                        })}
-                      </select>
+                      {(() => {
+                        const isSerbest = isVehicleSerbestDepo(v);
+                        const isSecurityOrAdmin = currentUser?.role === 'security' || currentUser?.role === 'admin';
+                        const canDirectToRamp = v.durum === 'EVRAK HAZIR' || v.durum === 'RAMPADA' || (isSerbest && isSecurityOrAdmin);
+
+                        return (
+                          <select
+                            value={v.rampaId ?? ''}
+                            onChange={(e) => {
+                              const val = e.target.value ? Number(e.target.value) : null;
+                              if (val !== null && !canDirectToRamp) {
+                                alert(`Rampa ataması için durumun 'EVRAK HAZIR' olması gerekmektedir.\n\nMevcut Durum: ${v.durum}\n(Sadece Depo Türü 'Serbest Depo' olan araçlar evrak hazır olmadan rampaya atanabilir)`);
+                                return;
+                              }
+                              onAssignRamp(v, val);
+                            }}
+                            disabled={!canDirectToRamp}
+                            className={`w-full h-6.5 text-[9px] font-bold border rounded-md px-1 outline-none focus:ring-1 focus:ring-purple-500 truncate ${
+                              !canDirectToRamp
+                                ? 'bg-slate-100 dark:bg-slate-800/60 text-slate-400 dark:text-slate-500 border-slate-200 dark:border-slate-700 cursor-not-allowed'
+                                : isSerbest && v.durum !== 'EVRAK HAZIR' && v.durum !== 'RAMPADA'
+                                ? 'border-emerald-300 dark:border-emerald-700 bg-emerald-50/70 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200'
+                                : 'border-purple-300 dark:border-purple-700 bg-purple-50/70 dark:bg-purple-950/40 text-purple-900 dark:text-purple-200'
+                            }`}
+                          >
+                            <option value="">Rampa: {v.rampaId ? getRampName(v.rampaId) : 'Seçilmedi'}</option>
+                            {ramps.map((r) => {
+                              const isOccupiedByOther = vehicles.some(
+                                (o) => o.rampaId === r.id && o.durum === 'RAMPADA' && o.id !== v.id
+                              );
+                              return (
+                                <option
+                                  key={r.id}
+                                  value={r.id}
+                                  disabled={isOccupiedByOther && r.durum === 'Dolu'}
+                                >
+                                  {r.ad} ({r.durum}){isOccupiedByOther ? ' [Dolu]' : ''}
+                                </option>
+                              );
+                            })}
+                          </select>
+                        );
+                      })()}
                       {v.rampaId && (
                         <button
                           type="button"
@@ -458,15 +482,31 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                     </div>
                   </div>
 
-                  {/* EVRAK HAZIR ise Kompakt Hızlı Rampa Ata Butonu */}
-                  {v.durum === 'EVRAK HAZIR' && !v.rampaId && (
+                  {/* BEKLEMEDE ise Yetkili Operasyon/Admin için Hızlı Evrak Hazır Butonu */}
+                  {v.durum === 'BEKLEMEDE' && canMakeReady && (
+                    <button
+                      onClick={() => onUpdateStatus(v, 'EVRAK HAZIR')}
+                      className="w-full mt-1 py-1 px-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[8px] font-extrabold flex items-center justify-center gap-1 shadow-2xs transition active:scale-95 cursor-pointer"
+                      title="Aracı tek tıkla 'EVRAK HAZIR' durumuna getir"
+                    >
+                      <Check className="w-2.5 h-2.5" />
+                      <span>Evrak Hazır Onayı Ver</span>
+                    </button>
+                  )}
+
+                  {/* EVRAK HAZIR ise veya Serbest Depo (Güvenlik) ise Kompakt Hızlı Rampa Ata Butonu */}
+                  {((v.durum === 'EVRAK HAZIR') || (isVehicleSerbestDepo(v) && (currentUser?.role === 'security' || currentUser?.role === 'admin') && v.durum === 'BEKLEMEDE')) && !v.rampaId && (
                     <button
                       type="button"
                       onClick={() => handleQuickAssignRamp(v)}
-                      className="w-full h-6 py-0.5 px-2 font-bold rounded-md text-[9px] flex items-center justify-center gap-1 transition active:scale-98 cursor-pointer bg-linear-to-r from-purple-600 to-indigo-600 text-white shadow-2xs"
+                      className={`w-full h-6 py-0.5 px-2 font-bold rounded-md text-[9px] flex items-center justify-center gap-1 transition active:scale-98 cursor-pointer shadow-2xs ${
+                        isVehicleSerbestDepo(v) && v.durum !== 'EVRAK HAZIR'
+                          ? 'bg-linear-to-r from-emerald-600 to-teal-600 text-white'
+                          : 'bg-linear-to-r from-purple-600 to-indigo-600 text-white'
+                      }`}
                     >
                       <Zap className="w-2.5 h-2.5 text-amber-300 fill-amber-300" />
-                      <span>Boş Rampaya Hızlı Ata</span>
+                      <span>{isVehicleSerbestDepo(v) && v.durum !== 'EVRAK HAZIR' ? 'Serbest Depo: Hızlı Rampa Ata' : 'Boş Rampaya Hızlı Ata'}</span>
                     </button>
                   )}
                 </div>
@@ -558,12 +598,22 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                       className="border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1 text-xs font-semibold outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100"
                     >
                       <option value="BEKLEMEDE">BEKLEMEDE</option>
-                      <option value="EVRAK HAZIR" disabled={currentUser?.role !== 'admin' && v.durum !== 'EVRAK HAZIR'}>
-                        EVRAK HAZIR {currentUser?.role !== 'admin' && v.durum !== 'EVRAK HAZIR' ? '(Sadece Admin)' : ''}
+                      <option value="EVRAK HAZIR" disabled={!canMakeReady && v.durum !== 'EVRAK HAZIR'}>
+                        EVRAK HAZIR {!canMakeReady && v.durum !== 'EVRAK HAZIR' ? '(Yetki Gerekir)' : ''}
                       </option>
                       <option value="RAMPADA">RAMPADA</option>
                       <option value="ÇIKIŞ YAPTI">ÇIKIŞ YAPTI</option>
                     </select>
+
+                    {v.durum === 'BEKLEMEDE' && canMakeReady && (
+                      <button
+                        onClick={() => onUpdateStatus(v, 'EVRAK HAZIR')}
+                        className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[10px] font-bold flex items-center gap-1 shadow-xs transition active:scale-95 cursor-pointer"
+                        title="Aracı 'EVRAK HAZIR' durumuna getir"
+                      >
+                        <Check className="w-3 h-3" /> Evrak Hazır Yap
+                      </button>
+                    )}
 
                     {v.isRampayaCagrildi && (
                       <div className="animate-pulse bg-amber-500 text-slate-900 font-extrabold px-2 py-1 rounded text-[9px] shadow-sm flex items-center justify-between gap-1">
@@ -588,47 +638,69 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
 
                   <td className="p-3">
                     <div className="relative space-y-1">
-                      <select
-                        value={v.rampaId ?? ''}
-                        onChange={(e) => onAssignRamp(v, e.target.value ? Number(e.target.value) : null)}
-                        disabled={(v.durum !== 'EVRAK HAZIR' && v.durum !== 'RAMPADA') || currentUser?.role === 'guest'}
-                        title={
-                          currentUser?.role === 'guest'
-                            ? 'Misafir kullanıcılar rampa ataması yapamaz.'
-                            : v.durum === 'BEKLEMEDE'
-                            ? "Rampa atayabilmek için aracın durumunu önce 'EVRAK HAZIR' yapınız."
-                            : 'Rampa Seçiniz'
-                        }
-                        className={`border rounded-lg px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-blue-500 w-full ${
-                          (v.durum !== 'EVRAK HAZIR' && v.durum !== 'RAMPADA') || currentUser?.role === 'guest'
-                            ? 'bg-slate-100 dark:bg-slate-800/60 text-slate-400 dark:text-slate-500 cursor-not-allowed border-slate-200 dark:border-slate-700'
-                            : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 font-semibold text-slate-700 dark:text-slate-200'
-                        }`}
-                      >
-                        <option value="">Rampa Atanmadı</option>
-                        {getAvailableRampsForVehicle(v).map((r) => (
-                          <option key={r.id} value={r.id}>
-                            {r.ad}
-                          </option>
-                        ))}
-                      </select>
+                      {(() => {
+                        const isSerbest = isVehicleSerbestDepo(v);
+                        const isSecurityOrAdmin = currentUser?.role === 'security' || currentUser?.role === 'admin';
+                        const canDirectToRamp = v.durum === 'EVRAK HAZIR' || v.durum === 'RAMPADA' || (isSerbest && isSecurityOrAdmin);
 
-                      {/* Masaüstü Hızlı Rampa Ata Butonu */}
-                      {currentUser?.role !== 'guest' && v.durum !== 'RAMPADA' && (
-                        <button
-                          type="button"
-                          onClick={() => handleQuickAssignRamp(v)}
-                          title={v.durum === 'EVRAK HAZIR' ? "Otomatik boş bir rampa atayıp aracı RAMPADA durumuna alır" : "Rampa ataması için araç durumu 'EVRAK HAZIR' olmalıdır"}
-                          className={`w-full py-1 px-2 border font-bold text-[9px] rounded-lg transition flex items-center justify-center gap-1 cursor-pointer shadow-xs active:scale-98 ${
-                            v.durum === 'EVRAK HAZIR'
-                              ? 'bg-purple-50 hover:bg-purple-100 text-purple-700 border-purple-200 hover:border-purple-300'
-                              : 'bg-slate-100 hover:bg-slate-200 text-slate-400 border-slate-200'
-                          }`}
-                        >
-                          <Zap className={`w-3 h-3 ${v.durum === 'EVRAK HAZIR' ? 'text-amber-500 fill-amber-500' : 'text-slate-400'}`} />
-                          <span>Hızlı Rampa Ata</span>
-                        </button>
-                      )}
+                        return (
+                          <>
+                            <select
+                              value={v.rampaId ?? ''}
+                              onChange={(e) => onAssignRamp(v, e.target.value ? Number(e.target.value) : null)}
+                              disabled={!canDirectToRamp || currentUser?.role === 'guest'}
+                              title={
+                                currentUser?.role === 'guest'
+                                  ? 'Misafir kullanıcılar rampa ataması yapamaz.'
+                                  : isSerbest && v.durum === 'BEKLEMEDE'
+                                  ? "Serbest Depo Aracı: Güvenlik tarafından evrak hazır olmadan da doğrudan rampaya atanabilir."
+                                  : v.durum === 'BEKLEMEDE'
+                                  ? "Rampa atayabilmek için aracın durumunu önce 'EVRAK HAZIR' yapınız. (Serbest Depo hariç)"
+                                  : 'Rampa Seçiniz'
+                              }
+                              className={`border rounded-lg px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-blue-500 w-full ${
+                                !canDirectToRamp || currentUser?.role === 'guest'
+                                  ? 'bg-slate-100 dark:bg-slate-800/60 text-slate-400 dark:text-slate-500 cursor-not-allowed border-slate-200 dark:border-slate-700'
+                                  : isSerbest && v.durum !== 'EVRAK HAZIR' && v.durum !== 'RAMPADA'
+                                  ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-700 font-semibold text-emerald-900 dark:text-emerald-200'
+                                  : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 font-semibold text-slate-700 dark:text-slate-200'
+                              }`}
+                            >
+                              <option value="">Rampa Atanmadı</option>
+                              {getAvailableRampsForVehicle(v).map((r) => (
+                                <option key={r.id} value={r.id}>
+                                  {r.ad}
+                                </option>
+                              ))}
+                            </select>
+
+                            {/* Masaüstü Hızlı Rampa Ata Butonu */}
+                            {currentUser?.role !== 'guest' && v.durum !== 'RAMPADA' && (
+                              <button
+                                type="button"
+                                onClick={() => handleQuickAssignRamp(v)}
+                                title={
+                                  canDirectToRamp
+                                    ? (isSerbest && v.durum !== 'EVRAK HAZIR'
+                                        ? "Serbest Depo: Evrak hazır durumu aranmadan doğrudan boş rampaya yönlendirir"
+                                        : "Otomatik boş bir rampa atayıp aracı RAMPADA durumuna alır")
+                                    : "Rampa ataması için araç durumu 'EVRAK HAZIR' olmalıdır (Serbest Depo hariç)"
+                                }
+                                className={`w-full py-1 px-2 border font-bold text-[9px] rounded-lg transition flex items-center justify-center gap-1 cursor-pointer shadow-xs active:scale-98 ${
+                                  canDirectToRamp
+                                    ? (isSerbest && v.durum !== 'EVRAK HAZIR'
+                                        ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-300 hover:border-emerald-400'
+                                        : 'bg-purple-50 hover:bg-purple-100 text-purple-700 border-purple-200 hover:border-purple-300')
+                                    : 'bg-slate-100 hover:bg-slate-200 text-slate-400 border-slate-200 cursor-not-allowed'
+                                }`}
+                              >
+                                <Zap className={`w-3 h-3 ${canDirectToRamp ? (isSerbest && v.durum !== 'EVRAK HAZIR' ? 'text-emerald-600 fill-emerald-600' : 'text-amber-500 fill-amber-500') : 'text-slate-400'}`} />
+                                <span>{isSerbest && v.durum !== 'EVRAK HAZIR' ? 'Serbest Depo Rampa Ata' : 'Hızlı Rampa Ata'}</span>
+                              </button>
+                            )}
+                          </>
+                        );
+                      })()}
 
                       {v.durum === 'EVRAK HAZIR' && !v.isRampayaCagrildi && currentUser?.role === 'admin' && (
                         <button
