@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { Ramp, Vehicle, User } from '../types';
 import { getRampStatusClass, cleanPhone, cleanPhoneForWa } from '../utils/helpers';
 import { RampTrafficLight } from './RampTrafficLight';
+import { RampSlaIndicator } from './RampSlaIndicator';
+import { getVehicleStageTimes } from '../utils/slaHelpers';
 import {
   Warehouse as WarehouseIcon,
   Truck,
@@ -17,7 +19,8 @@ import {
   AlertTriangle,
   Wrench,
   X,
-  Eye
+  Eye,
+  Flame
 } from 'lucide-react';
 
 interface RampManagementViewProps {
@@ -41,7 +44,7 @@ export const RampManagementView: React.FC<RampManagementViewProps> = ({
   onOpenRampAssignModal,
   onOpenDetailModal
 }) => {
-  const [statusFilter, setStatusFilter] = useState<'Tümü' | 'Boş' | 'Dolu' | 'Bakım-Arıza'>('Tümü');
+  const [statusFilter, setStatusFilter] = useState<'Tümü' | 'Boş' | 'Dolu' | 'Gecikmede' | 'Bakım-Arıza'>('Tümü');
   const [searchQuery, setSearchQuery] = useState('');
 
   const canManageRamps =
@@ -71,6 +74,10 @@ export const RampManagementView: React.FC<RampManagementViewProps> = ({
   const totalCount = ramps.length;
   const emptyCount = ramps.filter((r) => r.durum === 'Boş').length;
   const fullCount = ramps.filter((r) => r.durum === 'Dolu').length;
+  const overdueCount = ramps.filter((r) => {
+    const v = getRampVehicle(r.id);
+    return v && getVehicleStageTimes(v).isOverdue;
+  }).length;
   const maintenanceCount = ramps.filter((r) => r.durum === 'Arızalı' || r.durum === 'Bakımda').length;
 
   // Filtreleme
@@ -80,6 +87,11 @@ export const RampManagementView: React.FC<RampManagementViewProps> = ({
     filteredRamps = filteredRamps.filter((r) => r.durum === 'Boş');
   } else if (statusFilter === 'Dolu') {
     filteredRamps = filteredRamps.filter((r) => r.durum === 'Dolu');
+  } else if (statusFilter === 'Gecikmede') {
+    filteredRamps = filteredRamps.filter((r) => {
+      const v = getRampVehicle(r.id);
+      return v && getVehicleStageTimes(v).isOverdue;
+    });
   } else if (statusFilter === 'Bakım-Arıza') {
     filteredRamps = filteredRamps.filter((r) => r.durum === 'Arızalı' || r.durum === 'Bakımda');
   }
@@ -179,6 +191,25 @@ export const RampManagementView: React.FC<RampManagementViewProps> = ({
           </button>
 
           <button
+            onClick={() => setStatusFilter('Gecikmede')}
+            className={`px-3 py-1.5 rounded-xl font-bold transition shrink-0 flex items-center gap-1.5 cursor-pointer ${
+              statusFilter === 'Gecikmede'
+                ? 'bg-red-600 text-white shadow-sm ring-2 ring-red-400'
+                : 'bg-red-50 dark:bg-red-950/40 text-red-800 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/50 border border-red-200 dark:border-red-800'
+            }`}
+          >
+            <Flame className={`w-3.5 h-3.5 ${overdueCount > 0 ? 'text-red-600 dark:text-red-400 animate-bounce' : 'text-red-500'}`} />
+            Gecikmede
+            <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${
+              overdueCount > 0
+                ? 'bg-red-600 text-white animate-pulse'
+                : 'bg-red-200 dark:bg-red-900/60 text-red-900 dark:text-red-200'
+            }`}>
+              {overdueCount}
+            </span>
+          </button>
+
+          <button
             onClick={() => setStatusFilter('Bakım-Arıza')}
             className={`px-3 py-1.5 rounded-xl font-bold transition shrink-0 flex items-center gap-1.5 cursor-pointer ${
               statusFilter === 'Bakım-Arıza'
@@ -199,36 +230,54 @@ export const RampManagementView: React.FC<RampManagementViewProps> = ({
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 xl:grid-cols-6 gap-1.5 sm:gap-2 md:gap-2.5">
         {filteredRamps.map((r) => {
           const vehicle = getRampVehicle(r.id);
+          const stage = vehicle ? getVehicleStageTimes(vehicle) : null;
+          const isOverdue = stage?.isOverdue;
 
           return (
             <div
               key={r.id}
               className={`ramp-item bg-white dark:bg-slate-900 rounded-lg sm:rounded-xl border shadow-2xs overflow-hidden flex flex-col justify-between transition hover:shadow-xs ${
-                r.durum === 'Dolu'
+                isOverdue
+                  ? 'border-red-500 dark:border-red-600 ring-2 ring-red-400/80 shadow-md bg-red-50/10'
+                  : r.durum === 'Dolu'
                   ? 'border-blue-300 dark:border-blue-800 ring-1 ring-blue-100 dark:ring-blue-900/40'
                   : r.durum === 'Boş'
                   ? 'border-emerald-200 dark:border-emerald-800/80'
                   : 'border-amber-200 dark:border-amber-800/80'
               }`}
             >
-              {/* Rampa Başlık & Durum (Kompakt Trafik Işığı ve Durum Seçici) */}
-              <div className="p-1.5 sm:p-2 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-800/60 gap-1">
-                <div className="flex items-center gap-1 min-w-0">
-                  <WarehouseIcon className="w-3 h-3 text-blue-600 dark:text-blue-400 shrink-0" />
-                  <h3 className="font-extrabold text-slate-800 dark:text-slate-100 text-[11px] sm:text-xs truncate">
+              {/* Rampa Başlık & Durum: Rampa numarası asla sıkışmaz (shrink-0), yüksek kontrastlı belirgin rozet */}
+              <div className={`px-2 py-1.5 border-b flex items-center justify-between gap-1.5 ${
+                isOverdue
+                  ? 'bg-red-50 dark:bg-red-950/70 border-red-300 dark:border-red-800'
+                  : 'bg-slate-100/90 dark:bg-slate-800/90 border-slate-200 dark:border-slate-700/80'
+              }`}>
+                {/* Rampa Numarası (ASLA KESİLMEZ VEYA SIKIŞMAZ) */}
+                <div className="flex items-center gap-1 shrink-0">
+                  <span className={`px-2 py-0.5 rounded-md font-mono font-black text-xs shrink-0 tracking-tight shadow-xs whitespace-nowrap ${
+                    isOverdue
+                      ? 'bg-red-600 text-white ring-1 ring-red-400'
+                      : r.durum === 'Dolu'
+                      ? 'bg-blue-600 text-white ring-1 ring-blue-400'
+                      : r.durum === 'Boş'
+                      ? 'bg-emerald-600 text-white ring-1 ring-emerald-400'
+                      : 'bg-amber-600 text-white ring-1 ring-amber-400'
+                  }`}>
                     {r.ad}
-                  </h3>
+                  </span>
+                  {isOverdue && (
+                    <span className="w-2 h-2 rounded-full bg-red-600 animate-ping shrink-0" title="SLA Gecikmesi" />
+                  )}
                 </div>
 
-                <div className="flex items-center gap-0.5 shrink-0">
-                  {/* Trafik Işığı Göstergesi */}
-                  <RampTrafficLight status={r.durum} showBadge={false} />
-
+                {/* Rampa Durum Seçici / Rozeti */}
+                <div className="flex items-center gap-1 shrink-0">
                   {canManageRamps ? (
                     <select
                       value={r.durum}
                       onChange={(e) => onRampStatusChange(r, e.target.value as Ramp['durum'])}
-                      className={`text-[8px] sm:text-[9px] font-bold border rounded px-1 py-0.2 outline-none cursor-pointer shadow-2xs ${getRampStatusClass(
+                      aria-label={`${r.ad} Durumu`}
+                      className={`text-[9px] font-bold border rounded px-1.5 py-0.5 outline-none cursor-pointer shadow-2xs ${getRampStatusClass(
                         r.durum
                       )}`}
                     >
@@ -238,7 +287,7 @@ export const RampManagementView: React.FC<RampManagementViewProps> = ({
                       <option value="Bakımda">Bakımda</option>
                     </select>
                   ) : (
-                    <span className={`text-[8px] sm:text-[9px] font-bold border rounded px-1 py-0.2 ${getRampStatusClass(r.durum)}`}>
+                    <span className={`text-[9px] font-bold border rounded px-1.5 py-0.5 ${getRampStatusClass(r.durum)}`}>
                       {r.durum}
                     </span>
                   )}
@@ -250,9 +299,13 @@ export const RampManagementView: React.FC<RampManagementViewProps> = ({
                 {vehicle ? (
                   <div className="space-y-1">
                     {/* Araç Kartı */}
-                    <div className="bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800/80 p-1.5 rounded-md relative overflow-hidden space-y-0.5">
+                    <div className={`p-1.5 rounded-md relative overflow-hidden space-y-1 border ${
+                      isOverdue
+                        ? 'bg-red-50/80 dark:bg-red-950/40 border-red-300 dark:border-red-800'
+                        : 'bg-blue-50/70 dark:bg-blue-950/40 border-blue-200 dark:border-blue-800/80'
+                    }`}>
                       {vehicle.isAcik && (
-                        <div className="absolute top-0 right-0 bg-red-600 text-white text-[7px] font-black px-1 py-0.2 rounded-bl shadow animate-pulse flex items-center gap-0.5">
+                        <div className="absolute top-0 right-0 bg-red-600 text-white text-[7px] font-black px-1 py-0.2 rounded-bl shadow animate-pulse flex items-center gap-0.5 z-10">
                           <Zap className="w-2 h-2" /> ACİL
                         </div>
                       )}
@@ -263,23 +316,26 @@ export const RampManagementView: React.FC<RampManagementViewProps> = ({
                         <span className="px-1 py-0.2 tracking-wider text-slate-900">{vehicle.dorsePlaka}</span>
                       </div>
 
-                      <p className="text-[10px] font-bold text-blue-950 dark:text-blue-200 truncate pr-5">{vehicle.musteri}</p>
+                      <p className="text-[10px] font-bold text-slate-900 dark:text-slate-100 truncate pr-5">{vehicle.musteri}</p>
 
                       {vehicle.konteynirNo && (
-                        <p className="text-[8px] text-slate-600 dark:text-slate-400 truncate flex items-center gap-0.5 font-mono">
+                        <p className="text-[8px] text-slate-600 dark:text-slate-300 truncate flex items-center gap-0.5 font-mono">
                           <Box className="w-2 h-2 text-slate-400" /> {vehicle.konteynirNo}
                         </p>
                       )}
 
-                      <div className="pt-0.5 border-t border-blue-200/60 dark:border-blue-800/60 flex justify-between text-[8px] text-slate-600 dark:text-slate-400">
+                      <div className="pt-0.5 border-t border-slate-200/60 dark:border-slate-700/60 flex justify-between text-[8px] text-slate-700 dark:text-slate-300 font-medium">
                         <span>{vehicle.depoTuru}</span>
-                        <span>{vehicle.islemTuru}</span>
+                        <span className="font-bold text-slate-800 dark:text-slate-200">{vehicle.islemTuru}</span>
                       </div>
+
+                      {/* Canlı Rampa Gecikme Sayacı & SLA (Minimize edilmiş mikro görünüm) */}
+                      <RampSlaIndicator vehicle={vehicle} />
 
                       {/* Şoför İletişim (Telefon / WhatsApp) */}
                       {vehicle.soforTel && (
-                        <div className="pt-0.5 border-t border-blue-200/60 dark:border-blue-800/60 flex items-center justify-between gap-1">
-                          <span className="text-[8px] text-slate-600 dark:text-slate-300 truncate font-semibold">
+                        <div className="pt-0.5 border-t border-slate-200/60 dark:border-slate-700/60 flex items-center justify-between gap-1">
+                          <span className="text-[8px] text-slate-700 dark:text-slate-200 truncate font-semibold">
                             {vehicle.soforAd || 'Şoför'}
                           </span>
                           <div className="flex items-center gap-0.5 shrink-0">
@@ -328,7 +384,7 @@ export const RampManagementView: React.FC<RampManagementViewProps> = ({
                               e.target.value = '';
                             }
                           }}
-                          className="w-full h-6 text-[8px] sm:text-[9px] font-bold border rounded px-1 bg-slate-50 dark:bg-slate-800 hover:bg-white dark:hover:bg-slate-700 border-slate-300 dark:border-slate-700 outline-none text-slate-700 dark:text-slate-200 cursor-pointer shadow-2xs truncate"
+                          className="w-full h-6 text-[8px] sm:text-[9px] font-bold border rounded px-1 bg-slate-50 dark:bg-slate-800 hover:bg-white dark:hover:bg-slate-700 border-slate-300 dark:border-slate-700 outline-none text-slate-800 dark:text-slate-100 cursor-pointer shadow-2xs truncate"
                         >
                           <option value="">Rampa Değiştir...</option>
                           {getAvailableRamps().map((targetR) => (
@@ -352,9 +408,9 @@ export const RampManagementView: React.FC<RampManagementViewProps> = ({
                 ) : (
                   <div className="h-full flex flex-col justify-between py-1 text-slate-400 min-h-[65px] sm:min-h-[85px]">
                     <div className="text-center py-1 space-y-0.5">
-                      <Truck className="w-4 h-4 mx-auto opacity-25 text-slate-500" />
-                      <p className="text-[10px] font-bold text-slate-500">Boş Rampa</p>
-                      <p className="text-[8px] text-slate-400">Atamaya hazır</p>
+                      <Truck className="w-4 h-4 mx-auto opacity-30 text-slate-500 dark:text-slate-400" />
+                      <p className="text-[10px] font-bold text-slate-600 dark:text-slate-200">Boş Rampa</p>
+                      <p className="text-[8px] text-slate-500 dark:text-slate-400">Atamaya hazır</p>
                     </div>
 
                     {r.durum === 'Boş' && canAssignRamp && (

@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Vehicle, User } from '../types';
 import { getDurationText, getStatusBadgeClass, getDepoKayitTarihi, getRampaGirisTarihi, getRampaCikisTarihi } from '../utils/helpers';
+import { hasPermission } from '../utils/permissions';
 import {
   FileSpreadsheet,
   Printer,
@@ -434,7 +435,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
     window.print();
   };
 
-  const canUndoExit = currentUser?.role === 'admin' || currentUser?.role === 'operasyon';
+  const canUndoExit = currentUser?.role === 'admin' || hasPermission(currentUser, 'canAuthorizeExit');
 
   const periodLabel = datePreset === 'today'
     ? 'Bugün'

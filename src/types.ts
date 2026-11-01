@@ -83,6 +83,7 @@ export interface Vehicle {
   girisTarihiIso: string;
   girisTimestamp: number;
   evrakHazirTimestamp?: number | null;
+  evrakKayitTarihi?: string | null; // Evrak onay / hazır kayıt tarihi
   rampadaTimestamp?: number | null;
   rampayaGirisTarihi?: string | null; // Rampaya giriş / yanaşma tarihi
   rampadanCikisTarihi?: string | null; // Rampadan çıkış tarihi

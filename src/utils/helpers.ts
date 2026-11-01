@@ -156,39 +156,100 @@ export function getRampStatusClass(durum: string): string {
   }
 }
 
+export function formatToDisplayDateTime(timestamp?: number | null, dateStr?: string | null): string {
+  if (timestamp && !isNaN(timestamp)) {
+    const d = new Date(timestamp);
+    if (!isNaN(d.getTime())) {
+      const day = String(d.getDate()).padStart(2, '0');
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const year = d.getFullYear();
+      const hours = String(d.getHours()).padStart(2, '0');
+      const minutes = String(d.getMinutes()).padStart(2, '0');
+      return `${day}.${month}.${year} ${hours}:${minutes}`;
+    }
+  }
+
+  if (dateStr && dateStr.trim()) {
+    const str = dateStr.trim();
+    if (str.includes('-') && !isNaN(Date.parse(str))) {
+      const d = new Date(str);
+      const day = String(d.getDate()).padStart(2, '0');
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const year = d.getFullYear();
+      const hours = String(d.getHours()).padStart(2, '0');
+      const minutes = String(d.getMinutes()).padStart(2, '0');
+      return `${day}.${month}.${year} ${hours}:${minutes}`;
+    }
+
+    const parts = str.split(' ');
+    if (parts.length >= 2) {
+      const datePart = parts[0];
+      const timePart = parts[1];
+      const dParts = datePart.split('.');
+      if (dParts.length === 3) {
+        const day = dParts[0].padStart(2, '0');
+        const month = dParts[1].padStart(2, '0');
+        const year = dParts[2];
+        const tParts = timePart.split(':');
+        const hours = (tParts[0] || '00').padStart(2, '0');
+        const minutes = (tParts[1] || '00').padStart(2, '0');
+        return `${day}.${month}.${year} ${hours}:${minutes}`;
+      }
+    }
+    return str;
+  }
+
+  return '-';
+}
+
 export function formatDateTimeCustom(timestamp?: number | null, fallbackStr?: string | null): string {
   if (timestamp) {
-    return new Date(timestamp).toLocaleString('tr-TR', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+    return formatToDisplayDateTime(timestamp);
   }
-  return fallbackStr || '-';
+  return fallbackStr ? formatToDisplayDateTime(undefined, fallbackStr) : '-';
 }
 
 export function getDepoKayitTarihi(v?: Vehicle | null): string {
   if (!v) return '-';
-  return v.girisTarihi || (v.girisTimestamp ? formatDateTimeCustom(v.girisTimestamp) : '-');
+  if (v.girisTimestamp) return formatToDisplayDateTime(v.girisTimestamp);
+  if (v.girisTarihi) return formatToDisplayDateTime(undefined, v.girisTarihi);
+  return '-';
 }
+
+export function getEvrakKayitTarihi(v?: Vehicle | null): string {
+  if (!v) return '-';
+  if (v.evrakHazirTimestamp) return formatToDisplayDateTime(v.evrakHazirTimestamp);
+  if (v.evrakKayitTarihi) return formatToDisplayDateTime(undefined, v.evrakKayitTarihi);
+  if (v.durum === 'BEKLEMEDE') {
+    return 'Hazırlanıyor';
+  }
+  if (v.durum === 'EVRAK HAZIR' || v.durum === 'RAMPADA' || v.durum === 'ÇIKIŞ YAPTI') {
+    if (v.rampadaTimestamp) return formatToDisplayDateTime(v.rampadaTimestamp);
+    if (v.girisTimestamp) return formatToDisplayDateTime(v.girisTimestamp);
+    return 'Onaylandı';
+  }
+  return 'Beklemede';
+}
+
+export const getEvrakHazirTarihi = getEvrakKayitTarihi;
 
 export function getRampaGirisTarihi(v?: Vehicle | null): string {
   if (!v) return '-';
-  if (v.rampayaGirisTarihi) return v.rampayaGirisTarihi;
-  if (v.rampadaTimestamp) return formatDateTimeCustom(v.rampadaTimestamp);
-  if (v.durum === 'RAMPADA') return 'Rampada (Kayıtlı)';
-  return 'Henüz Girmedi';
+  if (v.rampadaTimestamp) return formatToDisplayDateTime(v.rampadaTimestamp);
+  if (v.rampayaGirisTarihi) return formatToDisplayDateTime(undefined, v.rampayaGirisTarihi);
+  if (v.durum === 'RAMPADA' || v.durum === 'ÇIKIŞ YAPTI') return 'Rampada';
+  return 'Beklemede';
 }
 
 export function getRampaCikisTarihi(v?: Vehicle | null): string {
   if (!v) return '-';
-  if (v.rampadanCikisTarihi) return v.rampadanCikisTarihi;
-  if (v.cikisTarihi) return v.cikisTarihi;
-  if (v.cikisTimestamp) return formatDateTimeCustom(v.cikisTimestamp);
-  if (v.durum === 'RAMPADA') return 'Rampada Devam Ediyor';
-  return 'Çıkış Yapılmadı';
+  if (v.rampadanCikisTimestamp) return formatToDisplayDateTime(v.rampadanCikisTimestamp);
+  if (v.cikisTimestamp) return formatToDisplayDateTime(v.cikisTimestamp);
+  if (v.rampadanCikisTarihi) return formatToDisplayDateTime(undefined, v.rampadanCikisTarihi);
+  if (v.cikisTarihi) return formatToDisplayDateTime(undefined, v.cikisTarihi);
+  if (v.durum === 'ÇIKIŞ YAPTI') return 'Çıkış Yapıldı';
+  if (v.durum === 'RAMPADA') return 'İşlem Sürüyor';
+  return 'Beklemede';
 }
 
 export function exportVehiclesToCsv(

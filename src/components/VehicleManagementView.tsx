@@ -754,7 +754,7 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                       </button>
                     )}
 
-                    {currentUser?.role === 'admin' && (
+                    {(currentUser?.role === 'admin' || hasPermission(currentUser, 'canToggleAcil')) && (
                       <button
                         onClick={() => onToggleAcil(v)}
                         className={`px-2 py-0.5 rounded text-[9px] font-extrabold transition block mx-auto cursor-pointer w-full ${

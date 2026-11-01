@@ -1,0 +1,6 @@
+{
+  "summary":  "Canlı Rampa Gecikme Sayacı (SLA) ve Aşama Bazlı Süreç Analizi Geliştirme Planı.\nBu plan; Yükleme (90 dk) ve Boşaltma (60 dk) bazlı hedef süreleri, rampadaki araçlar için süreyi aşan kırmızı canlı gecikme sayaçlarını, tesise girişten evrak hazır durumuna ve evraktan rampaya yanaşmaya kadar olan aşama sürelerinin Rampa Yönetimi, Canlı İzleme ve Araç Detay ekranlarına entegrasyonunu kapsar.",
+  "updatedAt":  "2026-11-01T20:22:02.141094759Z",
+  "requestFeedback":  true,
+  "userFacing":  true
+}

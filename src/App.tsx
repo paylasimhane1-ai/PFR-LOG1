@@ -175,8 +175,8 @@ export default function App() {
     }
     return 1;
   });
-  // Sayfa yenilendiğinde veya açılışta doğrudan Araç Yönetimi (araclar) sekmesine gelinsin
-  const [activeTab, setActiveTab] = useState<ActiveTab>('araclar');
+  // Panel sıralamasında 1. sıradaki Canlı İzleme (canli) sekmesiyle başlasın
+  const [activeTab, setActiveTab] = useState<ActiveTab>('canli');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isFirebaseConnected, setIsFirebaseConnected] = useState<boolean>(false);
   const [isSoundEnabled, setIsSoundEnabled] = useState<boolean>(() => {
@@ -1447,6 +1447,8 @@ export default function App() {
             durum: 'ÇIKIŞ YAPTI',
             cikisTarihi: nowStr,
             cikisTimestamp: nowTs,
+            rampadanCikisTarihi: vehicle.rampadanCikisTarihi || nowStr,
+            rampadanCikisTimestamp: vehicle.rampadanCikisTimestamp || nowTs,
             rampaId: null,
             isRampayaCagrildi: false
           };
@@ -1485,7 +1487,9 @@ export default function App() {
               ...v,
               durum: newStatus,
               evrakHazirTimestamp: newStatus === 'EVRAK HAZIR' ? nowTs : v.evrakHazirTimestamp,
+              evrakKayitTarihi: newStatus === 'EVRAK HAZIR' ? nowStr : v.evrakKayitTarihi,
               rampadaTimestamp: newStatus === 'RAMPADA' ? nowTs : v.rampadaTimestamp,
+              rampayaGirisTarihi: newStatus === 'RAMPADA' ? nowStr : v.rampayaGirisTarihi,
               cikisTarihi: null,
               cikisTimestamp: null
             };
@@ -1514,12 +1518,18 @@ export default function App() {
   };
 
   const handleAssignRamp = (vehicle: Vehicle, rampaId: number | null) => {
-    if (currentUser?.role !== 'admin' && currentUser?.role !== 'security' && currentUser?.role !== 'operasyon') {
-      alert('Rampa değişiklikleri ve araç atamaları Yönetim ve Güvenlik yetkisine tabidir.');
+    const canAssign =
+      currentUser?.role === 'admin' ||
+      currentUser?.role === 'security' ||
+      hasPermission(currentUser, 'canAssignRamp');
+
+    if (!canAssign) {
+      alert('Rampa değişiklikleri ve araç atamaları Yönetim ve yetkili personel yetkisine tabidir.');
       return;
     }
 
     const nowTs = Date.now();
+    const nowStr = new Date(nowTs).toLocaleString('tr-TR');
     const oldRampId = vehicle.rampaId;
 
     if (rampaId) {
@@ -1537,6 +1547,9 @@ export default function App() {
           rampaId,
           durum: 'RAMPADA',
           rampadaTimestamp: nowTs,
+          rampayaGirisTarihi: nowStr,
+          evrakHazirTimestamp: vehicle.evrakHazirTimestamp || nowTs,
+          evrakKayitTarihi: vehicle.evrakKayitTarihi || nowStr,
           isRampayaCagrildi: false,
           cagrildigiRampaId: null
         };
@@ -1783,8 +1796,9 @@ export default function App() {
   };
 
   const handleToggleAcil = (vehicle: Vehicle) => {
-    if (currentUser?.role !== 'admin') {
-      alert('Bu işlemi sadece Yetkili Admin kullanıcısı yapabilir.');
+    const canToggle = currentUser?.role === 'admin' || hasPermission(currentUser, 'canToggleAcil');
+    if (!canToggle) {
+      alert('Acil araç durumunu değiştirme yetkiniz bulunmamaktadır.');
       return;
     }
     const updatedStatus = !vehicle.isAcik;
@@ -1893,7 +1907,9 @@ export default function App() {
       isRampayaCagrildi: false,
       cagrildigiRampaId: null,
       cikisTarihi: nowStr,
-      cikisTimestamp: nowTs
+      cikisTimestamp: nowTs,
+      rampadanCikisTarihi: vehicle.rampadanCikisTarihi || nowStr,
+      rampadanCikisTimestamp: vehicle.rampadanCikisTimestamp || nowTs
     };
 
     setVehicles((prev) =>
@@ -2378,6 +2394,10 @@ export default function App() {
           finalVehicle.cikisTarihi = nowStr;
           finalVehicle.cikisTimestamp = nowTs;
         }
+        if (!finalVehicle.rampadanCikisTarihi) {
+          finalVehicle.rampadanCikisTarihi = nowStr;
+          finalVehicle.rampadanCikisTimestamp = nowTs;
+        }
         finalVehicle.rampaId = null;
         finalVehicle.isRampayaCagrildi = false;
         finalVehicle.cagrildigiRampaId = null;
@@ -2761,6 +2781,57 @@ export default function App() {
           </div>
 
           <nav className="p-4 space-y-1">
+            {/* 1. Canlı İzleme */}
+            <button
+              onClick={() => setActiveTab('canli')}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium text-sm transition cursor-pointer ${
+                activeTab === 'canli'
+                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30'
+                  : 'hover:bg-slate-800 text-slate-400 hover:text-white'
+              }`}
+            >
+              <Tv className="w-5 h-5 shrink-0" /> Canlı İzleme
+            </button>
+
+            {/* 2. Araç Yönetimi */}
+            <button
+              onClick={() => setActiveTab('araclar')}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium text-sm transition cursor-pointer ${
+                activeTab === 'araclar'
+                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30'
+                  : 'hover:bg-slate-800 text-slate-400 hover:text-white'
+              }`}
+            >
+              <Truck className="w-5 h-5 shrink-0" /> Araç Yönetimi
+            </button>
+
+            {/* 3. Rampa Yönetimi */}
+            <button
+              onClick={() => setActiveTab('rampalar')}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium text-sm transition cursor-pointer ${
+                activeTab === 'rampalar'
+                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30'
+                  : 'hover:bg-slate-800 text-slate-400 hover:text-white'
+              }`}
+            >
+              <WarehouseIcon className="w-5 h-5 shrink-0" /> Rampa Yönetimi
+            </button>
+
+            {/* 4. Raporlar */}
+            {currentUser.role !== 'security' && (
+              <button
+                onClick={() => setActiveTab('raporlar')}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium text-sm transition cursor-pointer ${
+                  activeTab === 'raporlar'
+                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30'
+                    : 'hover:bg-slate-800 text-slate-400 hover:text-white'
+                }`}
+              >
+                <FileText className="w-5 h-5 shrink-0" /> Raporlar
+              </button>
+            )}
+
+            {/* 5. Dashboard */}
             {currentUser.role !== 'security' && (
               <button
                 onClick={() => setActiveTab('dashboard')}
@@ -2774,6 +2845,7 @@ export default function App() {
               </button>
             )}
 
+            {/* Beklenen Araçlar */}
             <button
               onClick={() => setActiveTab('beklenen')}
               className={`w-full flex items-center justify-between px-4 py-3 rounded-xl font-medium text-sm transition cursor-pointer ${
@@ -2791,52 +2863,6 @@ export default function App() {
                 </span>
               )}
             </button>
-
-            <button
-              onClick={() => setActiveTab('canli')}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium text-sm transition cursor-pointer ${
-                activeTab === 'canli'
-                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30'
-                  : 'hover:bg-slate-800 text-slate-400 hover:text-white'
-              }`}
-            >
-              <Tv className="w-5 h-5 shrink-0" /> Canlı İzleme
-            </button>
-
-            <button
-              onClick={() => setActiveTab('araclar')}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium text-sm transition cursor-pointer ${
-                activeTab === 'araclar'
-                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30'
-                  : 'hover:bg-slate-800 text-slate-400 hover:text-white'
-              }`}
-            >
-              <Truck className="w-5 h-5 shrink-0" /> Araç Yönetimi
-            </button>
-
-            <button
-              onClick={() => setActiveTab('rampalar')}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium text-sm transition cursor-pointer ${
-                activeTab === 'rampalar'
-                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30'
-                  : 'hover:bg-slate-800 text-slate-400 hover:text-white'
-              }`}
-            >
-              <WarehouseIcon className="w-5 h-5 shrink-0" /> Rampa Yönetimi
-            </button>
-
-            {currentUser.role !== 'security' && (
-              <button
-                onClick={() => setActiveTab('raporlar')}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium text-sm transition cursor-pointer ${
-                  activeTab === 'raporlar'
-                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30'
-                    : 'hover:bg-slate-800 text-slate-400 hover:text-white'
-                }`}
-              >
-                <FileText className="w-5 h-5 shrink-0" /> Raporlar
-              </button>
-            )}
           </nav>
         </div>
 
@@ -2914,21 +2940,6 @@ export default function App() {
         {currentUser.role === 'security' ? (
           <>
             <button
-              onClick={() => setActiveTab('beklenen')}
-              className={`flex-1 py-2 flex flex-col items-center gap-1 text-[11px] relative cursor-pointer transition ${
-                activeTab === 'beklenen' ? 'text-amber-400 font-extrabold' : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <Clock className="w-5 h-5" />
-              <span>Beklenen</span>
-              {pendingExpectedVehiclesCount > 0 && (
-                <span className="absolute top-1.5 right-6 bg-amber-500 text-slate-900 font-black text-[9px] w-4 h-4 rounded-full flex items-center justify-center shadow">
-                  {pendingExpectedVehiclesCount}
-                </span>
-              )}
-            </button>
-
-            <button
               onClick={() => setActiveTab('canli')}
               className={`flex-1 py-2 flex flex-col items-center gap-1 text-[11px] cursor-pointer transition ${
                 activeTab === 'canli' ? 'text-blue-400 font-extrabold' : 'text-slate-400 hover:text-slate-200'
@@ -2957,36 +2968,24 @@ export default function App() {
               <WarehouseIcon className="w-5 h-5" />
               <span>Rampa Yönetimi</span>
             </button>
-          </>
-        ) : (
-          <>
-            <button
-              onClick={() => setActiveTab('dashboard')}
-              className={`flex-1 py-1.5 min-h-[48px] flex flex-col items-center justify-center gap-1 rounded-xl transition cursor-pointer ${
-                activeTab === 'dashboard'
-                  ? 'text-blue-400 font-black bg-slate-800/90'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <LayoutDashboard className="w-4 h-4" />
-              <span className="text-[10px]">Özet</span>
-            </button>
+
             <button
               onClick={() => setActiveTab('beklenen')}
-              className={`flex-1 py-1.5 min-h-[48px] flex flex-col items-center justify-center gap-1 rounded-xl relative transition cursor-pointer ${
-                activeTab === 'beklenen'
-                  ? 'text-amber-400 font-black bg-slate-800/90'
-                  : 'text-slate-400 hover:text-slate-200'
+              className={`flex-1 py-2 flex flex-col items-center gap-1 text-[11px] relative cursor-pointer transition ${
+                activeTab === 'beklenen' ? 'text-amber-400 font-extrabold' : 'text-slate-400 hover:text-slate-200'
               }`}
             >
-              <Clock className="w-4 h-4 text-amber-400" />
-              <span className="text-[10px]">Beklenen</span>
+              <Clock className="w-5 h-5" />
+              <span>Beklenen</span>
               {pendingExpectedVehiclesCount > 0 && (
-                <span className="absolute top-1 right-2 bg-amber-500 text-slate-900 font-extrabold text-[8px] w-3.5 h-3.5 rounded-full flex items-center justify-center shadow">
+                <span className="absolute top-1.5 right-6 bg-amber-500 text-slate-900 font-black text-[9px] w-4 h-4 rounded-full flex items-center justify-center shadow">
                   {pendingExpectedVehiclesCount}
                 </span>
               )}
             </button>
+          </>
+        ) : (
+          <>
             <button
               onClick={() => setActiveTab('canli')}
               className={`flex-1 py-1.5 min-h-[48px] flex flex-col items-center justify-center gap-1 rounded-xl transition cursor-pointer ${
@@ -3030,6 +3029,17 @@ export default function App() {
             >
               <FileText className="w-4 h-4" />
               <span className="text-[10px]">Rapor</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('dashboard')}
+              className={`flex-1 py-1.5 min-h-[48px] flex flex-col items-center justify-center gap-1 rounded-xl transition cursor-pointer ${
+                activeTab === 'dashboard'
+                  ? 'text-blue-400 font-black bg-slate-800/90'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <LayoutDashboard className="w-4 h-4" />
+              <span className="text-[10px]">Dashboard</span>
             </button>
           </>
         )}

@@ -1,7 +1,8 @@
 import React from 'react';
 import { Vehicle, Ramp, ActiveTab } from '../types';
 import { getStatusBadgeClass } from '../utils/helpers';
-import { Clock, FileCheck, Truck, Warehouse as WarehouseIcon, List, Eye } from 'lucide-react';
+import { getVehicleStageTimes } from '../utils/slaHelpers';
+import { Clock, FileCheck, Truck, Warehouse as WarehouseIcon, List, Eye, Flame, AlertTriangle } from 'lucide-react';
 
 interface DashboardViewProps {
   vehicles: Vehicle[];
@@ -24,6 +25,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const evrakHazirCount = vehicles.filter((v) => v.durum === 'EVRAK HAZIR').length;
   const rampadaCount = vehicles.filter((v) => v.durum === 'RAMPADA').length;
   const doluRampaCount = ramps.filter((r) => r.durum === 'Dolu').length;
+  const overdueVehicles = vehicles.filter((v) => v.durum === 'RAMPADA' && getVehicleStageTimes(v).isOverdue);
 
   const recentVehicles = [...vehicles]
     .sort((a, b) => {
@@ -35,6 +37,31 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
   return (
     <div className="space-y-4 md:space-y-6 max-w-[2560px] mx-auto w-full">
+      {/* Gecikme Uyarısı Banner'ı (Varsa) */}
+      {overdueVehicles.length > 0 && (
+        <div
+          onClick={() => onNavigateTab('rampalar')}
+          className="bg-red-600 hover:bg-red-700 text-white p-3 sm:p-4 rounded-xl md:rounded-2xl shadow-md flex items-center justify-between cursor-pointer transition animate-in fade-in"
+        >
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
+              <Flame className="w-5 h-5 text-white animate-bounce" />
+            </div>
+            <div>
+              <h4 className="font-extrabold text-xs sm:text-sm">
+                {overdueVehicles.length} Araç Rampa Hedef İşlem Süresini (SLA) Aştı!
+              </h4>
+              <p className="text-[10px] sm:text-[11px] text-red-100">
+                Gecikmedeki araçları ve rampa sayaçlarını incelemek için tıklayın.
+              </p>
+            </div>
+          </div>
+          <span className="text-xs font-bold bg-white text-red-700 px-3 py-1.5 rounded-xl shadow-xs shrink-0">
+            Rampaları Gör →
+          </span>
+        </div>
+      )}
+
       {/* Üst İstatistik Kutucukları (Mobilde küçültülmüş, az yer kaplayan kompakt tasarım) */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-2 sm:gap-2.5 md:gap-4">
         <div
