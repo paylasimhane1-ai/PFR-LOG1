@@ -182,20 +182,28 @@ export const LiveTrackingView: React.FC<LiveTrackingViewProps> = ({
                 </div>
 
                 {/* Plaka & Konteynır */}
-                <div className="flex items-center justify-between gap-1.5 bg-slate-50 dark:bg-slate-800/60 p-1.5 rounded-lg border border-slate-100 dark:border-slate-700/50">
+                <div className={`flex items-center justify-between gap-1.5 p-1.5 rounded-lg border ${
+                  isExited
+                    ? 'bg-slate-800/90 border-slate-700'
+                    : 'bg-slate-50 dark:bg-slate-800/60 border-slate-100 dark:border-slate-700/50'
+                }`}>
                   <div>
-                    <div className="flex items-center gap-1 font-mono font-black text-[11px] text-slate-800 dark:text-slate-100">
-                      <Truck className="w-3 h-3 text-blue-500" />
+                    <div className={`flex items-center gap-1 font-mono font-black text-[11px] ${isExited ? 'text-white' : 'text-slate-800 dark:text-slate-100'}`}>
+                      <Truck className="w-3 h-3 text-blue-400" />
                       {v.dorsePlaka}
                     </div>
                     {v.cekiciPlaka && (
-                      <div className="text-[9px] text-slate-500 dark:text-slate-400 font-mono">
+                      <div className={`text-[9px] font-mono ${isExited ? 'text-slate-300' : 'text-slate-500 dark:text-slate-400'}`}>
                         Çekici: {v.cekiciPlaka}
                       </div>
                     )}
                   </div>
                   {v.konteynirNo ? (
-                    <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-bold border border-blue-200/50">
+                    <span className={`text-[9px] font-mono px-1.5 py-0.2 rounded font-bold border ${
+                      isExited
+                        ? 'bg-blue-900/50 text-blue-200 border-blue-700/60'
+                        : 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-blue-200/50'
+                    }`}>
                       {v.konteynirNo}
                     </span>
                   ) : (
@@ -205,7 +213,7 @@ export const LiveTrackingView: React.FC<LiveTrackingViewProps> = ({
 
                 {/* Şoför & İletişim */}
                 <div className="flex items-center justify-between text-[10px]">
-                  <div className="font-semibold text-slate-800 dark:text-slate-200 truncate">
+                  <div className={`font-semibold truncate ${isExited ? 'text-slate-100' : 'text-slate-800 dark:text-slate-200'}`}>
                     {v.soforAd}
                   </div>
                   {v.soforTel && (
@@ -229,17 +237,21 @@ export const LiveTrackingView: React.FC<LiveTrackingViewProps> = ({
                 </div>
 
                 {/* Rampa, Süre & Depo */}
-                <div className="grid grid-cols-2 gap-1.5 text-[10px] pt-1 border-t border-slate-100 dark:border-slate-800 text-slate-600 dark:text-slate-300">
+                <div className={`grid grid-cols-2 gap-1.5 text-[10px] pt-1 border-t ${
+                  isExited
+                    ? 'border-slate-800 text-slate-300'
+                    : 'border-slate-100 dark:border-slate-800 text-slate-600 dark:text-slate-300'
+                }`}>
                   <div>
                     <span className="text-[9px] text-slate-400 block">Rampa</span>
-                    <span className="font-bold text-blue-600 dark:text-blue-400">
+                    <span className={`font-bold ${isExited ? 'text-blue-300' : 'text-blue-600 dark:text-blue-400'}`}>
                       {getRampName(v.rampaId) || 'Rampa Bekliyor'}
                     </span>
                   </div>
                   <div>
                     <span className="text-[9px] text-slate-400 block">Toplam Süre / İşlem</span>
-                    <span className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-0.5">
-                      <Clock className="w-2.5 h-2.5 text-purple-500" />
+                    <span className={`font-bold flex items-center gap-0.5 ${isExited ? 'text-white' : 'text-slate-800 dark:text-slate-100'}`}>
+                      <Clock className="w-2.5 h-2.5 text-purple-400" />
                       {getDurationText(v)}
                     </span>
                   </div>
@@ -253,30 +265,34 @@ export const LiveTrackingView: React.FC<LiveTrackingViewProps> = ({
                 )}
 
                 {/* 4 Aşamalı Süreç ve Kesin Tarihler */}
-                <div className="bg-slate-50 dark:bg-slate-800/70 p-2 rounded-xl border border-slate-100 dark:border-slate-700/60 text-[10px] space-y-1">
-                  <div className="flex items-center justify-between text-slate-600 dark:text-slate-300">
-                    <span className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400 font-medium">
+                <div className={`p-2 rounded-xl border text-[10px] space-y-1 ${
+                  isExited
+                    ? 'bg-slate-800/90 border-slate-700/80'
+                    : 'bg-slate-50 dark:bg-slate-800/70 border-slate-100 dark:border-slate-700/60'
+                }`}>
+                  <div className="flex items-center justify-between">
+                    <span className={`flex items-center gap-1.5 font-bold ${isExited ? 'text-emerald-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"></span> Depo Kayıt:
                     </span>
-                    <span className="font-mono font-bold text-slate-800 dark:text-slate-100">{getDepoKayitTarihi(v)}</span>
+                    <span className={`font-mono font-bold ${isExited ? 'text-white' : 'text-slate-900 dark:text-slate-100'}`}>{getDepoKayitTarihi(v)}</span>
                   </div>
-                  <div className="flex items-center justify-between text-slate-600 dark:text-slate-300">
-                    <span className="flex items-center gap-1.5 text-blue-500 dark:text-blue-400 font-medium">
+                  <div className="flex items-center justify-between">
+                    <span className={`flex items-center gap-1.5 font-bold ${isExited ? 'text-blue-300' : 'text-blue-600 dark:text-blue-400'}`}>
                       <span className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0"></span> Evrak Kayıt:
                     </span>
-                    <span className="font-mono font-bold text-blue-600 dark:text-blue-300">{getEvrakKayitTarihi(v)}</span>
+                    <span className={`font-mono font-bold ${isExited ? 'text-blue-100' : 'text-blue-700 dark:text-blue-200'}`}>{getEvrakKayitTarihi(v)}</span>
                   </div>
-                  <div className="flex items-center justify-between text-slate-600 dark:text-slate-300">
-                    <span className="flex items-center gap-1.5 text-purple-500 dark:text-purple-400 font-medium">
+                  <div className="flex items-center justify-between">
+                    <span className={`flex items-center gap-1.5 font-bold ${isExited ? 'text-purple-300' : 'text-purple-600 dark:text-purple-400'}`}>
                       <span className="w-1.5 h-1.5 rounded-full bg-purple-500 shrink-0"></span> Rampa Giriş:
                     </span>
-                    <span className="font-mono font-bold text-purple-600 dark:text-purple-300">{getRampaGirisTarihi(v)}</span>
+                    <span className={`font-mono font-bold ${isExited ? 'text-purple-100' : 'text-purple-700 dark:text-purple-200'}`}>{getRampaGirisTarihi(v)}</span>
                   </div>
-                  <div className="flex items-center justify-between text-slate-600 dark:text-slate-300">
-                    <span className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400 font-medium">
+                  <div className="flex items-center justify-between">
+                    <span className={`flex items-center gap-1.5 font-bold ${isExited ? 'text-slate-300' : 'text-slate-600 dark:text-slate-300'}`}>
                       <span className="w-1.5 h-1.5 rounded-full bg-slate-400 shrink-0"></span> Rampa Çıkış:
                     </span>
-                    <span className="font-mono font-bold text-slate-600 dark:text-slate-300">{getRampaCikisTarihi(v)}</span>
+                    <span className={`font-mono font-bold ${isExited ? 'text-slate-100' : 'text-slate-800 dark:text-slate-200'}`}>{getRampaCikisTarihi(v)}</span>
                   </div>
                 </div>
 
@@ -300,8 +316,8 @@ export const LiveTrackingView: React.FC<LiveTrackingViewProps> = ({
 
                 {/* Alt Eylemler */}
                 <div className="flex items-center justify-between pt-1 gap-2">
-                  <span className="text-[10px] text-slate-400 font-mono">
-                    Giriş: {v.girisTarihi}
+                  <span className={`text-[10px] font-mono font-semibold ${isExited ? 'text-slate-300' : 'text-slate-600 dark:text-slate-400'}`}>
+                    Giriş: {getDepoKayitTarihi(v)}
                   </span>
                   <div className="flex items-center gap-1.5">
                     <button
@@ -403,7 +419,9 @@ export const LiveTrackingView: React.FC<LiveTrackingViewProps> = ({
                       <div className="flex items-center gap-1.5 mt-0.5">
                         <a
                           href={`tel:${cleanPhone(v.soforTel)}`}
-                          className="text-[10px] text-emerald-600 font-bold hover:underline flex items-center gap-1"
+                          className={`text-[10px] font-bold hover:underline flex items-center gap-1 ${
+                            isExited ? 'text-emerald-400' : 'text-emerald-600 dark:text-emerald-400'
+                          }`}
                           title="Arama Yap"
                         >
                           <Phone className="w-3 h-3" /> {v.soforTel}
@@ -436,27 +454,27 @@ export const LiveTrackingView: React.FC<LiveTrackingViewProps> = ({
                       <div className="space-y-1 font-mono text-[10px]">
                         <div className="flex items-center gap-1.5" title="1. Depo Kayıt Tarihi (Tesise Kabul)">
                           <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>
-                          <span className="text-[10px] text-slate-400 dark:text-slate-400 font-sans font-medium w-20">Depo Kayıt:</span>
-                          <span className="font-bold text-slate-800 dark:text-slate-100">{getDepoKayitTarihi(v)}</span>
+                          <span className={`text-[10px] font-sans font-bold w-20 ${isExited ? 'text-emerald-400' : 'text-emerald-600 dark:text-emerald-400'}`}>Depo Kayıt:</span>
+                          <span className={`font-bold ${isExited ? 'text-white' : 'text-slate-900 dark:text-slate-100'}`}>{getDepoKayitTarihi(v)}</span>
                         </div>
                         <div className="flex items-center gap-1.5" title={`2. Evrak Kayıt Tarihi (Evrak Hazırlık Süresi: ${stage.evrakHazirlikText})`}>
                           <span className="w-2 h-2 rounded-full bg-blue-500 shrink-0"></span>
-                          <span className="text-[10px] text-blue-500 dark:text-blue-400 font-sans font-medium w-20">Evrak Kayıt:</span>
-                          <span className="font-bold text-blue-600 dark:text-blue-300">
+                          <span className={`text-[10px] font-sans font-bold w-20 ${isExited ? 'text-blue-300' : 'text-blue-600 dark:text-blue-400'}`}>Evrak Kayıt:</span>
+                          <span className={`font-bold ${isExited ? 'text-blue-100' : 'text-blue-700 dark:text-blue-200'}`}>
                             {getEvrakKayitTarihi(v)}
                           </span>
                         </div>
                         <div className="flex items-center gap-1.5" title={`3. Rampa Giriş Tarihi (Rampa Bekleme Süresi: ${stage.rampaBeklemeText})`}>
                           <span className="w-2 h-2 rounded-full bg-purple-500 shrink-0"></span>
-                          <span className="text-[10px] text-purple-500 dark:text-purple-400 font-sans font-medium w-20">Rampa Giriş:</span>
-                          <span className="font-bold text-purple-600 dark:text-purple-300">
+                          <span className={`text-[10px] font-sans font-bold w-20 ${isExited ? 'text-purple-300' : 'text-purple-600 dark:text-purple-400'}`}>Rampa Giriş:</span>
+                          <span className={`font-bold ${isExited ? 'text-purple-100' : 'text-purple-700 dark:text-purple-200'}`}>
                             {getRampaGirisTarihi(v)}
                           </span>
                         </div>
                         <div className="flex items-center gap-1.5" title="4. Rampa Çıkış Tarihi">
                           <span className={`w-2 h-2 rounded-full shrink-0 ${v.rampadanCikisTarihi || v.cikisTarihi || v.durum === 'ÇIKIŞ YAPTI' ? 'bg-slate-400' : 'bg-slate-600/60'}`}></span>
-                          <span className="text-[10px] text-slate-400 dark:text-slate-400 font-sans font-medium w-20">Rampa Çıkış:</span>
-                          <span className="font-bold text-slate-600 dark:text-slate-300">
+                          <span className={`text-[10px] font-sans font-bold w-20 ${isExited ? 'text-slate-300' : 'text-slate-600 dark:text-slate-300'}`}>Rampa Çıkış:</span>
+                          <span className={`font-bold ${isExited ? 'text-slate-100' : 'text-slate-800 dark:text-slate-200'}`}>
                             {getRampaCikisTarihi(v)}
                           </span>
                         </div>

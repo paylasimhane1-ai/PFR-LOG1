@@ -861,33 +861,41 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                     </span>
                   </div>
 
-                  <div className="flex items-center justify-between text-xs py-1 px-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/50">
+                  <div className={`flex items-center justify-between text-xs py-1.5 px-2.5 rounded-xl ${
+                    isExited
+                      ? 'bg-slate-800/90 text-slate-100 border border-slate-700/60'
+                      : 'bg-slate-50 dark:bg-slate-800/50 text-slate-800 dark:text-slate-200'
+                  }`}>
                     <span className="font-semibold">{v.soforAd}</span>
-                    <span className="text-[11px] opacity-70">{v.soforTel}</span>
+                    <span className={`text-[11px] ${isExited ? 'text-slate-300' : 'text-slate-500 dark:text-slate-400'}`}>{v.soforTel}</span>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2 text-[11px] pt-1 border-t border-slate-100 dark:border-slate-800">
+                  <div className={`grid grid-cols-2 gap-2 text-[11px] pt-1 border-t ${isExited ? 'border-slate-800' : 'border-slate-100 dark:border-slate-800'}`}>
                     <div>
-                      <span className="text-slate-400 block text-[9px]">Giriş:</span>
-                      <span className="font-mono font-semibold text-emerald-600 dark:text-emerald-400">{getDepoKayitTarihi(v)}</span>
+                      <span className={`block text-[9px] ${isExited ? 'text-slate-300' : 'text-slate-500 dark:text-slate-400'}`}>Giriş:</span>
+                      <span className={`font-mono font-semibold ${isExited ? 'text-emerald-400' : 'text-emerald-600 dark:text-emerald-400'}`}>{getDepoKayitTarihi(v)}</span>
                     </div>
                     <div>
-                      <span className="text-slate-400 block text-[9px]">Çıkış / Süre:</span>
-                      <span className="font-mono font-semibold">{isExited ? getRampaCikisTarihi(v) : getDurationText(v)}</span>
+                      <span className={`block text-[9px] ${isExited ? 'text-slate-300' : 'text-slate-500 dark:text-slate-400'}`}>Çıkış / Süre:</span>
+                      <span className={`font-mono font-semibold ${isExited ? 'text-white' : 'text-slate-800 dark:text-slate-100'}`}>{isExited ? getRampaCikisTarihi(v) : getDurationText(v)}</span>
                     </div>
                   </div>
 
-                  <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2">
+                  <div className={`pt-2 border-t flex items-center justify-between gap-2 ${isExited ? 'border-slate-800' : 'border-slate-100 dark:border-slate-800'}`}>
                     <button
                       onClick={() => onOpenDetailModal(v)}
-                      className="px-2.5 py-1 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer"
+                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer ${
+                        isExited
+                          ? 'bg-blue-900/60 hover:bg-blue-900/80 text-blue-200 border border-blue-700/50'
+                          : 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
+                      }`}
                     >
                       <Eye className="w-3.5 h-3.5" /> İncele
                     </button>
                     {isExited && canUndoExit && (
                       <button
                         onClick={() => onUndoExit(v)}
-                        className="px-2.5 py-1 bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer"
+                        className="px-2.5 py-1 bg-amber-900/60 hover:bg-amber-900/80 text-amber-200 border border-amber-700/50 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer"
                       >
                         <RotateCcw className="w-3 h-3" /> Geri Al
                       </button>
