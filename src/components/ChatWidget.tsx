@@ -46,7 +46,8 @@ import {
   ArrowLeft,
   SlidersHorizontal,
   LogOut,
-  AlertCircle
+  AlertCircle,
+  Clock
 } from 'lucide-react';
 import { playChime } from '../utils/audio';
 import { sendNativeNotification, loadPushSettings } from '../utils/notifications';
@@ -79,6 +80,8 @@ interface ChatWidgetProps {
   onMarkMessagesAsRead?: (messageIds: number[]) => void;
   onUpdatePresence?: (typingInChannel: string | null) => void;
   onCreateGroup?: (payload: { name: string; description?: string; members: string[] }) => ChatGroup | undefined | void;
+  onApproveGroup?: (groupId: string) => void;
+  onRejectGroup?: (groupId: string, reason?: string) => void;
   onUpdateGroupMembers?: (groupId: string, members: string[]) => void;
   onUpdateGroup?: (groupId: string, updates: { name: string; description?: string; members: string[] }) => void;
   onLeaveGroup?: (groupId: string) => void;
@@ -196,6 +199,8 @@ interface ConversationWindowProps {
   onBackMobile?: () => void;
   onOpenManageGroup: (group: ChatGroup) => void;
   onOpenCreateGroup: (preselectedMembers?: string[]) => void;
+  onApproveGroup?: (groupId: string) => void;
+  onRejectGroup?: (groupId: string, reason?: string) => void;
   onLeaveGroup?: (groupId: string) => void;
   onDeleteGroup?: (groupId: string) => void;
   onSendMessage: (payload: ChatSendPayload) => void;
@@ -234,6 +239,8 @@ const ChatConversationWindow: React.FC<ConversationWindowProps> = ({
   onBackMobile,
   onOpenManageGroup,
   onOpenCreateGroup,
+  onApproveGroup,
+  onRejectGroup,
   onLeaveGroup,
   onDeleteGroup,
   onSendMessage,
@@ -1813,6 +1820,67 @@ const ChatConversationWindow: React.FC<ConversationWindowProps> = ({
       )}
 
       {/* ================= MESAJ YAZMA ALANI (LinkedIn / Facebook Tarzı) ================= */}
+      {meta.kind === 'group' && meta.group && (meta.group.status === 'pending' || meta.group.status === 'rejected') ? (
+        <div className="p-3 bg-amber-50/90 dark:bg-amber-950/35 border-t border-amber-200 dark:border-amber-800/70 space-y-2 shrink-0 text-xs">
+          {meta.group.status === 'pending' ? (
+            <>
+              <div className="flex items-start gap-2 text-amber-900 dark:text-amber-200">
+                <Clock className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                <div className="space-y-0.5">
+                  <p className="font-bold">Admin Onayı Bekleniyor</p>
+                  <p className="text-[11px] opacity-90">
+                    {currentUser.role === 'admin'
+                      ? 'Bu grup talebi onayınızı bekliyor. Onaylandığında seçilen tüm üyelere açılacaktır.'
+                      : 'Grubunuz Admin onayına gönderildi. Onaylanana kadar diğer üyelere görünmez ve mesaj gönderilemez.'}
+                  </p>
+                </div>
+              </div>
+              {currentUser.role === 'admin' && (
+                <div className="flex items-center gap-2">
+                  {onApproveGroup && (
+                    <button
+                      type="button"
+                      onClick={() => onApproveGroup(meta.group!.id)}
+                      className="flex-1 py-1.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center justify-center gap-1 cursor-pointer"
+                    >
+                      <Check className="w-3.5 h-3.5" />
+                      <span>Grubu Onayla</span>
+                    </button>
+                  )}
+                  {onRejectGroup && (
+                    <button
+                      type="button"
+                      onClick={() => onRejectGroup(meta.group!.id)}
+                      className="flex-1 py-1.5 px-3 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-xs flex items-center justify-center gap-1 cursor-pointer"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                      <span>Reddet</span>
+                    </button>
+                  )}
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="flex items-center justify-between gap-2 text-red-800 dark:text-red-200">
+              <div className="min-w-0">
+                <p className="font-bold">Grup Talebi Reddedildi</p>
+                {meta.group.rejectedReason && (
+                  <p className="text-[11px] opacity-90 truncate">{meta.group.rejectedReason}</p>
+                )}
+              </div>
+              {onDeleteGroup && (
+                <button
+                  type="button"
+                  onClick={() => onDeleteGroup(meta.group!.id)}
+                  className="px-2.5 py-1 rounded-lg bg-red-600 text-white font-bold text-[11px] shrink-0 cursor-pointer"
+                >
+                  Kaldır
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      ) : (
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -1932,6 +2000,7 @@ const ChatConversationWindow: React.FC<ConversationWindowProps> = ({
           </button>
         </div>
       </form>
+      )}
     </div>
   );
 };
@@ -1954,6 +2023,8 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
   onMarkMessagesAsRead,
   onUpdatePresence,
   onCreateGroup,
+  onApproveGroup,
+  onRejectGroup,
   onUpdateGroupMembers,
   onUpdateGroup,
   onLeaveGroup,
@@ -1980,6 +2051,8 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
   const [newGroupDesc, setNewGroupDesc] = useState('');
   const [newGroupMembers, setNewGroupMembers] = useState<string[]>([]);
   const [groupUserSearch, setGroupUserSearch] = useState('');
+  const [rejectingGroupId, setRejectingGroupId] = useState<string | null>(null);
+  const [rejectReasonInput, setRejectReasonInput] = useState('');
 
   const [managingGroupId, setManagingGroupId] = useState<string | null>(null);
   const [editGroupName, setEditGroupName] = useState('');
@@ -2057,19 +2130,46 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
     return isPresenceOnline(selfP, now);
   }, [presenceByUsernameMap, myUsernameLower, now]);
 
-  // Groups visible to current user (only groups the user is a member or creator of)
+  const isAdminUser = currentUser?.role === 'admin';
+
+  // Approved groups visible to current user (legacy groups without status count as approved)
   const myGroups = useMemo(() => {
     if (!currentUser || currentUser.role === 'guest') return [];
     return chatGroups.filter(
       (g) =>
-        g.createdBy.trim().toLowerCase() === myUsernameLower ||
-        g.members.some((u) => u.trim().toLowerCase() === myUsernameLower)
+        (!g.status || g.status === 'approved') &&
+        (g.createdBy.trim().toLowerCase() === myUsernameLower ||
+          g.members.some((u) => u.trim().toLowerCase() === myUsernameLower))
     );
   }, [chatGroups, currentUser, myUsernameLower]);
 
+  // Admin approval queue (only visible to admins)
+  const pendingAdminGroups = useMemo(() => {
+    if (!isAdminUser) return [];
+    return chatGroups
+      .filter((g) => g.status === 'pending')
+      .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  }, [chatGroups, isAdminUser]);
+
+  // Requester's own pending or rejected group requests (only visible to creator)
+  const myPendingOrRejectedGroups = useMemo(() => {
+    if (!currentUser || currentUser.role === 'guest' || isAdminUser) return [];
+    return chatGroups
+      .filter(
+        (g) =>
+          (g.status === 'pending' || g.status === 'rejected') &&
+          g.createdBy.trim().toLowerCase() === myUsernameLower
+      )
+      .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  }, [chatGroups, currentUser, isAdminUser, myUsernameLower]);
+
   // Close open/maximized windows if a custom group is deleted or user is removed (or non-group/non-DM)
   useEffect(() => {
-    const validGroupIds = new Set(myGroups.map((g) => g.id));
+    const validGroupIds = new Set([
+      ...myGroups.map((g) => g.id),
+      ...pendingAdminGroups.map((g) => g.id),
+      ...myPendingOrRejectedGroups.map((g) => g.id)
+    ]);
     setOpenWindows((prev) => {
       const next = prev.filter((w) => {
         if (w.id.startsWith('grp_')) return validGroupIds.has(w.id);
@@ -2088,7 +2188,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
       setMobileActiveChannelId(null);
       setMobileScreen('list');
     }
-  }, [myGroups, maximizedChannelId, mobileActiveChannelId]);
+  }, [myGroups, pendingAdminGroups, myPendingOrRejectedGroups, maximizedChannelId, mobileActiveChannelId]);
 
   // Visible messages (own DMs + own groups only; legacy department channels hidden)
   const visibleMessages = useMemo(() => {
@@ -2352,7 +2452,8 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
       members: newGroupMembers
     });
     setShowCreateGroupModal(false);
-    if (created && created.id) {
+    setDrawerTab('groups');
+    if (created && created.id && (!created.status || created.status === 'approved')) {
       openConversation(created.id);
     }
   };
@@ -2415,6 +2516,8 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
             }}
             onOpenManageGroup={openManageGroupDialog}
             onOpenCreateGroup={openCreateGroupDialog}
+            onApproveGroup={onApproveGroup}
+            onRejectGroup={onRejectGroup}
             onLeaveGroup={onLeaveGroup}
             onDeleteGroup={onDeleteGroup}
             onSendMessage={onSendMessage}
@@ -2573,11 +2676,15 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
                   }`}
                 >
                   <span>Gruplar</span>
-                  {groupsTabUnread > 0 && (
+                  {groupsTabUnread > 0 ? (
                     <span className="px-1.5 py-0.2 rounded-full bg-blue-600 text-white text-[10px] font-black tabular-nums">
                       {groupsTabUnread}
                     </span>
-                  )}
+                  ) : isAdminUser && pendingAdminGroups.length > 0 ? (
+                    <span className="px-1.5 py-0.2 rounded-full bg-amber-500 text-slate-950 text-[10px] font-black tabular-nums" title="Onay bekleyen grup talebi">
+                      {pendingAdminGroups.length}
+                    </span>
+                  ) : null}
                 </button>
                 <button
                   type="button"
@@ -2604,7 +2711,134 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
               {/* Liste Alanı */}
               <div className="flex-1 overflow-y-auto custom-scroll">
                 {drawerTab === 'groups' ? (
-                  <div className="p-2.5 space-y-2.5">
+                  <div className="p-2.5 space-y-3">
+                    {/* Admin Onay Kuyruğu (Masaüstü Çekmece) */}
+                    {isAdminUser && pendingAdminGroups.length > 0 && (
+                      <div className="rounded-xl border border-amber-300 dark:border-amber-700/80 bg-amber-50/70 dark:bg-amber-950/30 p-2 space-y-2">
+                        <div className="flex items-center justify-between px-1">
+                          <span className="text-[10px] font-black uppercase tracking-wider text-amber-800 dark:text-amber-300 flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            <span>Onay Bekleyenler ({pendingAdminGroups.length})</span>
+                          </span>
+                        </div>
+                        <div className="space-y-1.5">
+                          {pendingAdminGroups.map((pg) => (
+                            <div key={pg.id} className="p-2 rounded-lg bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-800/60 space-y-1.5">
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="min-w-0">
+                                  <div className="font-bold text-xs text-slate-900 dark:text-white truncate">{pg.name}</div>
+                                  <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate">
+                                    Talep: <strong>{pg.createdBy}</strong> · {pg.members.length} üye
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                {onApproveGroup && (
+                                  <button
+                                    type="button"
+                                    onClick={() => onApproveGroup(pg.id)}
+                                    className="flex-1 py-1 px-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold flex items-center justify-center gap-1 cursor-pointer"
+                                  >
+                                    <Check className="w-3 h-3" />
+                                    <span>Onayla</span>
+                                  </button>
+                                )}
+                                {onRejectGroup && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setRejectingGroupId((prev) => (prev === pg.id ? null : pg.id));
+                                      setRejectReasonInput('');
+                                    }}
+                                    className="flex-1 py-1 px-2 rounded-lg bg-red-50 dark:bg-red-950/60 hover:bg-red-100 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800 text-[10px] font-bold flex items-center justify-center gap-1 cursor-pointer"
+                                  >
+                                    <X className="w-3 h-3" />
+                                    <span>Reddet</span>
+                                  </button>
+                                )}
+                              </div>
+                              {rejectingGroupId === pg.id && onRejectGroup && (
+                                <div className="flex items-center gap-1 pt-1">
+                                  <input
+                                    type="text"
+                                    maxLength={200}
+                                    value={rejectReasonInput}
+                                    onChange={(e) => setRejectReasonInput(e.target.value)}
+                                    placeholder="Red nedeni..."
+                                    className="flex-1 px-2 py-1 text-[10px] rounded border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 outline-none"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      onRejectGroup(pg.id, rejectReasonInput);
+                                      setRejectingGroupId(null);
+                                      setRejectReasonInput('');
+                                    }}
+                                    className="px-2 py-1 rounded bg-red-600 text-white text-[10px] font-bold cursor-pointer"
+                                  >
+                                    Gönder
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Talebi Açan Kişi İçin Bekleyen / Reddedilen Gruplar */}
+                    {!isAdminUser && myPendingOrRejectedGroups.length > 0 && (
+                      <div className="space-y-1.5">
+                        <div className="px-1 text-[10px] font-extrabold uppercase tracking-wider text-amber-600 dark:text-amber-400">
+                          Grup Taleplerim ({myPendingOrRejectedGroups.length})
+                        </div>
+                        {myPendingOrRejectedGroups.map((pg) => (
+                          <div
+                            key={pg.id}
+                            className={`p-2 rounded-xl border flex items-center justify-between gap-2 ${
+                              pg.status === 'rejected'
+                                ? 'bg-red-50/70 dark:bg-red-950/30 border-red-200 dark:border-red-800/70'
+                                : 'bg-amber-50/70 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800/70'
+                            }`}
+                          >
+                            <button
+                              type="button"
+                              onClick={() => openConversation(pg.id)}
+                              className="min-w-0 flex-1 text-left cursor-pointer"
+                            >
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-bold text-xs text-slate-900 dark:text-white truncate">{pg.name}</span>
+                                <span
+                                  className={`text-[9px] font-bold px-1.5 py-0.2 rounded shrink-0 ${
+                                    pg.status === 'rejected'
+                                      ? 'bg-red-100 dark:bg-red-900/70 text-red-700 dark:text-red-200'
+                                      : 'bg-amber-100 dark:bg-amber-900/70 text-amber-800 dark:text-amber-200'
+                                  }`}
+                                >
+                                  {pg.status === 'rejected' ? 'Reddedildi' : 'Onay Bekliyor'}
+                                </span>
+                              </div>
+                              <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
+                                {pg.status === 'rejected'
+                                  ? pg.rejectedReason || 'Admin tarafından reddedildi.'
+                                  : `Admin onayı bekleniyor · ${pg.members.length} üye`}
+                              </p>
+                            </button>
+                            {onDeleteGroup && (
+                              <button
+                                type="button"
+                                onClick={() => onDeleteGroup(pg.id)}
+                                title="Talebi İptal Et / Kaldır"
+                                className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 cursor-pointer shrink-0"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
                     {/* Özel Gruplar */}
                     <div>
                       <div className="px-1 pb-1.5 flex items-center justify-between gap-2">
@@ -2845,24 +3079,25 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
       </div>
 
       {/* ========================================================================
-          MOBİL: YÜZEN MESAJLAŞMA BUTONU + TAM EKRAN LİSTE / SOHBET GÖRÜNÜMÜ
+          MOBİL: YALNIZCA SİMGE OLARAK YÜZEN MESAJLAŞMA BUTONU + TAM EKRAN LİSTE / SOHBET
          ======================================================================== */}
       <div className="md:hidden chat-widget">
         {mobileScreen === 'closed' ? (
           <button
             type="button"
             onClick={() => setMobileScreen('list')}
-            className="fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom))] right-3 z-40 h-11 px-3.5 rounded-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-2xl flex items-center gap-2 cursor-pointer active:scale-95 transition"
+            aria-label="Mesajlaşma"
+            title="Mesajlaşma"
+            className="fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom))] right-3 z-40 w-12 h-12 rounded-full bg-blue-600 hover:bg-blue-700 text-white shadow-2xl border border-blue-400/40 flex items-center justify-center cursor-pointer active:scale-95 transition"
           >
-            <div className="relative">
-              <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-black ${getAvatarTone(currentUser.role)}`}>
-                {getInitials(currentUser.username)}
-              </div>
-              <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white dark:border-slate-900 ${isSelfOnline ? 'bg-emerald-500' : 'bg-slate-400'}`} />
-            </div>
-            <span className="text-xs font-bold text-slate-900 dark:text-white">Mesajlaşma</span>
+            <MessageSquare className="w-5 h-5" />
+            <span
+              className={`absolute bottom-0.5 right-0.5 w-3 h-3 rounded-full border-2 border-white dark:border-slate-900 ${
+                isSelfOnline ? 'bg-emerald-400' : 'bg-slate-400'
+              }`}
+            />
             {totalUnreadCount > 0 && (
-              <span className="px-1.5 py-0.2 rounded-full bg-red-600 text-white text-[10px] font-black tabular-nums">
+              <span className="absolute -top-1 -right-1 min-w-[20px] h-5 px-1 rounded-full bg-red-600 text-white text-[10px] font-black tabular-nums flex items-center justify-center shadow">
                 {totalUnreadCount > 99 ? '99+' : totalUnreadCount}
               </span>
             )}
@@ -2946,11 +3181,15 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
                     }`}
                   >
                     <span>Gruplar</span>
-                    {groupsTabUnread > 0 && (
+                    {groupsTabUnread > 0 ? (
                       <span className="px-1.5 py-0.2 rounded-full bg-blue-600 text-white text-[10px] font-black tabular-nums">
                         {groupsTabUnread}
                       </span>
-                    )}
+                    ) : isAdminUser && pendingAdminGroups.length > 0 ? (
+                      <span className="px-1.5 py-0.2 rounded-full bg-amber-500 text-slate-950 text-[10px] font-black tabular-nums">
+                        {pendingAdminGroups.length}
+                      </span>
+                    ) : null}
                   </button>
                   <button
                     type="button"
@@ -2977,6 +3216,129 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
                 <div className="flex-1 overflow-y-auto">
                   {drawerTab === 'groups' ? (
                     <div className="p-2.5 space-y-3">
+                      {/* Admin Onay Kuyruğu (Mobil) */}
+                      {isAdminUser && pendingAdminGroups.length > 0 && (
+                        <div className="rounded-xl border border-amber-300 dark:border-amber-700/80 bg-amber-50/70 dark:bg-amber-950/30 p-2.5 space-y-2">
+                          <div className="text-[10px] font-black uppercase tracking-wider text-amber-800 dark:text-amber-300 flex items-center gap-1">
+                            <Clock className="w-3.5 h-3.5" />
+                            <span>Onay Bekleyenler ({pendingAdminGroups.length})</span>
+                          </div>
+                          <div className="space-y-2">
+                            {pendingAdminGroups.map((pg) => (
+                              <div key={pg.id} className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-800/60 space-y-2">
+                                <div>
+                                  <div className="font-bold text-xs text-slate-900 dark:text-white">{pg.name}</div>
+                                  <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                                    Talep: <strong>{pg.createdBy}</strong> · {pg.members.length} üye
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  {onApproveGroup && (
+                                    <button
+                                      type="button"
+                                      onClick={() => onApproveGroup(pg.id)}
+                                      className="flex-1 py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center justify-center gap-1 cursor-pointer"
+                                    >
+                                      <Check className="w-3.5 h-3.5" />
+                                      <span>Onayla</span>
+                                    </button>
+                                  )}
+                                  {onRejectGroup && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setRejectingGroupId((prev) => (prev === pg.id ? null : pg.id));
+                                        setRejectReasonInput('');
+                                      }}
+                                      className="flex-1 py-2 px-3 rounded-xl bg-red-50 dark:bg-red-950/60 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800 text-xs font-bold flex items-center justify-center gap-1 cursor-pointer"
+                                    >
+                                      <X className="w-3.5 h-3.5" />
+                                      <span>Reddet</span>
+                                    </button>
+                                  )}
+                                </div>
+                                {rejectingGroupId === pg.id && onRejectGroup && (
+                                  <div className="flex items-center gap-1.5 pt-1">
+                                    <input
+                                      type="text"
+                                      maxLength={200}
+                                      value={rejectReasonInput}
+                                      onChange={(e) => setRejectReasonInput(e.target.value)}
+                                      placeholder="Red nedeni..."
+                                      className="flex-1 px-2.5 py-1.5 text-xs rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 outline-none"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        onRejectGroup(pg.id, rejectReasonInput);
+                                        setRejectingGroupId(null);
+                                        setRejectReasonInput('');
+                                      }}
+                                      className="px-3 py-1.5 rounded-lg bg-red-600 text-white text-xs font-bold cursor-pointer"
+                                    >
+                                      Gönder
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Kurucu İçin Bekleyen / Reddedilen Grup Talepleri (Mobil) */}
+                      {!isAdminUser && myPendingOrRejectedGroups.length > 0 && (
+                        <div className="space-y-1.5">
+                          <div className="px-1 text-[10px] font-extrabold uppercase tracking-wider text-amber-600 dark:text-amber-400">
+                            Grup Taleplerim ({myPendingOrRejectedGroups.length})
+                          </div>
+                          {myPendingOrRejectedGroups.map((pg) => (
+                            <div
+                              key={pg.id}
+                              className={`p-2.5 rounded-xl border flex items-center justify-between gap-2 ${
+                                pg.status === 'rejected'
+                                  ? 'bg-red-50/70 dark:bg-red-950/30 border-red-200 dark:border-red-800/70'
+                                  : 'bg-amber-50/70 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800/70'
+                              }`}
+                            >
+                              <button
+                                type="button"
+                                onClick={() => openConversation(pg.id)}
+                                className="min-w-0 flex-1 text-left cursor-pointer"
+                              >
+                                <div className="flex items-center gap-1.5">
+                                  <span className="font-bold text-xs text-slate-900 dark:text-white truncate">{pg.name}</span>
+                                  <span
+                                    className={`text-[10px] font-bold px-1.5 py-0.2 rounded shrink-0 ${
+                                      pg.status === 'rejected'
+                                        ? 'bg-red-100 dark:bg-red-900/70 text-red-700 dark:text-red-200'
+                                        : 'bg-amber-100 dark:bg-amber-900/70 text-amber-800 dark:text-amber-200'
+                                    }`}
+                                  >
+                                    {pg.status === 'rejected' ? 'Reddedildi' : 'Onay Bekliyor'}
+                                  </span>
+                                </div>
+                                <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
+                                  {pg.status === 'rejected'
+                                    ? pg.rejectedReason || 'Admin tarafından reddedildi.'
+                                    : `Admin onayı bekleniyor · ${pg.members.length} üye`}
+                                </p>
+                              </button>
+                              {onDeleteGroup && (
+                                <button
+                                  type="button"
+                                  onClick={() => onDeleteGroup(pg.id)}
+                                  title="Talebi Kaldır"
+                                  className="p-2 rounded-lg text-slate-400 hover:text-red-600 cursor-pointer shrink-0"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
                       <div>
                         <div className="px-1 pb-1.5 text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
                           Sohbet Grupları ({customGroupItems.length})
@@ -3173,6 +3535,8 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
                 onBackMobile={() => setMobileScreen('list')}
                 onOpenManageGroup={openManageGroupDialog}
                 onOpenCreateGroup={openCreateGroupDialog}
+                onApproveGroup={onApproveGroup}
+                onRejectGroup={onRejectGroup}
                 onLeaveGroup={onLeaveGroup}
                 onDeleteGroup={onDeleteGroup}
                 onSendMessage={onSendMessage}
@@ -3212,6 +3576,15 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
             </div>
 
             <div className="p-4 space-y-3 text-xs">
+              {!isAdminUser && (
+                <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/70 text-amber-900 dark:text-amber-200 text-[11px] flex items-start gap-2">
+                  <Clock className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                  <span>
+                    Yeni grup talebiniz Admin onayından geçtikten sonra aktifleşecek ve seçilen üyelere açılacaktır.
+                  </span>
+                </div>
+              )}
+
               <div>
                 <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Grup Adı *</label>
                 <input
@@ -3303,7 +3676,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
                 disabled={!newGroupName.trim()}
                 className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs cursor-pointer disabled:opacity-40"
               >
-                Grubu Oluştur
+                {isAdminUser ? 'Grubu Oluştur' : 'Onay Talebi Gönder'}
               </button>
             </div>
           </form>

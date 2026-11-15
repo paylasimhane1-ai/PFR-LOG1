@@ -28,7 +28,10 @@ import {
   StickyNote,
   RotateCcw,
   CheckSquare,
-  Square
+  Square,
+  SlidersHorizontal,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 
 interface VehicleManagementViewProps {
@@ -86,6 +89,7 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
   const [onlyOverdue, setOnlyOverdue] = useState(false);
   const [sortBy, setSortBy] = useState<SortOption>('default');
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -276,14 +280,15 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
     }
   };
 
-  const hasActiveFilters =
-    search.trim() !== '' ||
-    statusFilter !== 'TÜMÜ' ||
-    islemFilter !== 'TÜMÜ' ||
-    depoTuruFilter !== 'TÜMÜ' ||
-    onlyUrgent ||
-    onlyOverdue ||
-    sortBy !== 'default';
+  const activeFilterCount =
+    (statusFilter !== 'TÜMÜ' ? 1 : 0) +
+    (islemFilter !== 'TÜMÜ' ? 1 : 0) +
+    (depoTuruFilter !== 'TÜMÜ' ? 1 : 0) +
+    (onlyUrgent ? 1 : 0) +
+    (onlyOverdue ? 1 : 0) +
+    (sortBy !== 'default' ? 1 : 0);
+
+  const hasActiveFilters = search.trim() !== '' || activeFilterCount > 0;
 
   const handleResetFilters = () => {
     setSearch('');
@@ -395,10 +400,10 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
   return (
     <div className="space-y-4 max-w-[2560px] mx-auto w-full">
       {/* Üst Arama, Hızlı Özet & Filtre Paneli */}
-      <div className="bg-white dark:bg-slate-900 p-3.5 md:p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-3 transition-colors">
-        <div className="flex flex-col md:flex-row gap-2.5 justify-between items-stretch md:items-center">
+      <div className="bg-white dark:bg-slate-900 p-3 md:p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-2.5 md:space-y-3 transition-colors">
+        <div className="flex flex-col md:flex-row gap-2 md:gap-2.5 justify-between items-stretch md:items-center">
           <div className="flex items-center gap-2 flex-1 min-w-0">
-            <div className="relative flex-1">
+            <div className="relative flex-1 min-w-0">
               <Search className="w-4 h-4 absolute left-3 top-2.5 md:top-3 text-slate-400" />
               <input
                 type="text"
@@ -418,6 +423,26 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                 </button>
               )}
             </div>
+
+            <button
+              type="button"
+              onClick={() => setMobileFiltersOpen((prev) => !prev)}
+              aria-expanded={mobileFiltersOpen}
+              className={`md:hidden shrink-0 px-3 py-2 rounded-xl border text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${
+                mobileFiltersOpen || activeFilterCount > 0
+                  ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800'
+                  : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
+              }`}
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5" />
+              <span>Filtreler</span>
+              {activeFilterCount > 0 && (
+                <span className="px-1.5 py-0.2 rounded-full bg-blue-600 text-white text-[10px] font-extrabold tabular-nums">
+                  {activeFilterCount}
+                </span>
+              )}
+              {mobileFiltersOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+            </button>
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
@@ -426,7 +451,7 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                 type="button"
                 onClick={() => onExportCsv(filtered)}
                 disabled={filtered.length === 0}
-                className="flex-1 md:flex-initial px-3 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 tabular-nums"
+                className="flex-1 md:flex-initial px-3 py-2 md:py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 tabular-nums"
                 title="Filtrelenmiş aktif araç listesini CSV/Excel olarak indir"
               >
                 <Download className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
@@ -438,7 +463,7 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
               <button
                 type="button"
                 onClick={onOpenNewVehicleModal}
-                className="flex-1 md:flex-initial px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs md:text-sm font-bold rounded-xl transition flex items-center justify-center gap-2 cursor-pointer shadow-md shadow-blue-500/20 active:scale-98 whitespace-nowrap shrink-0"
+                className="flex-1 md:flex-initial px-4 py-2 md:py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs md:text-sm font-bold rounded-xl transition flex items-center justify-center gap-2 cursor-pointer shadow-md shadow-blue-500/20 active:scale-98 whitespace-nowrap shrink-0"
               >
                 <Plus className="w-4 h-4" /> Yeni Araç Ekle
               </button>
@@ -446,6 +471,8 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
           </div>
         </div>
 
+        {/* Mobilde açılır/kapanır detay filtreler — masaüstünde her zaman açık */}
+        <div className={`${mobileFiltersOpen ? 'block' : 'hidden md:block'} space-y-2.5 md:space-y-3`}>
         {/* Durum Sekmeleri + Canlı Acil / SLA Gecikme Filtreleri */}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 custom-scroll text-xs">
           <button
@@ -627,6 +654,7 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
               Gösterilen: <strong className="text-slate-800 dark:text-slate-100">{filtered.length}</strong> / {activeVehicles.length}
             </span>
           </div>
+        </div>
         </div>
       </div>
 

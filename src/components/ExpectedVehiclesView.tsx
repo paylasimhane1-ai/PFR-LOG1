@@ -17,7 +17,10 @@ import {
   CalendarCheck,
   Search,
   X,
-  Edit3
+  Edit3,
+  SlidersHorizontal,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 
 interface ExpectedVehiclesViewProps {
@@ -50,6 +53,9 @@ export const ExpectedVehiclesView: React.FC<ExpectedVehiclesViewProps> = ({
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+
+  const activeFilterCount = statusFilter !== '' ? 1 : 0;
 
   const canManageExpected = currentUser?.role === 'admin' || hasPermission(currentUser, 'canManageExpected');
 
@@ -204,12 +210,12 @@ export const ExpectedVehiclesView: React.FC<ExpectedVehiclesViewProps> = ({
   return (
     <div className="space-y-4">
       {/* Üst Arama & Filtre Paneli */}
-      <div className="bg-white dark:bg-slate-900 p-3.5 md:p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-3 transition-colors">
-        <div className="flex flex-col md:flex-row gap-3 justify-between items-stretch md:items-center">
-          {/* Arama Inputu */}
-          <div className="flex items-center gap-2 flex-1">
-            <div className="relative flex-1">
-              <Search className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
+      <div className="bg-white dark:bg-slate-900 p-3 md:p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-2.5 md:space-y-3 transition-colors">
+        <div className="flex flex-col md:flex-row gap-2 md:gap-3 justify-between items-stretch md:items-center">
+          {/* Arama Inputu + Mobil Filtreler Butonu */}
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            <div className="relative flex-1 min-w-0">
+              <Search className="w-4 h-4 absolute left-3 top-2.5 md:top-3 text-slate-400" />
               <input
                 type="text"
                 value={search}
@@ -221,19 +227,32 @@ export const ExpectedVehiclesView: React.FC<ExpectedVehiclesViewProps> = ({
                 <button
                   onClick={() => setSearch('')}
                   className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 cursor-pointer"
+                  aria-label="Aramayı Temizle"
                 >
                   <X className="w-4 h-4" />
                 </button>
               )}
             </div>
-            {search && (
-              <button
-                onClick={() => setSearch('')}
-                className="px-3 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-xl text-xs font-semibold transition cursor-pointer shrink-0"
-              >
-                Temizle
-              </button>
-            )}
+
+            <button
+              type="button"
+              onClick={() => setMobileFiltersOpen((prev) => !prev)}
+              aria-expanded={mobileFiltersOpen}
+              className={`md:hidden shrink-0 px-3 py-2 rounded-xl border text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${
+                mobileFiltersOpen || activeFilterCount > 0
+                  ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800'
+                  : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
+              }`}
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5" />
+              <span>Filtreler</span>
+              {activeFilterCount > 0 && (
+                <span className="px-1.5 py-0.2 rounded-full bg-blue-600 text-white text-[10px] font-extrabold tabular-nums">
+                  {activeFilterCount}
+                </span>
+              )}
+              {mobileFiltersOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+            </button>
           </div>
 
           {/* Eylem Butonları */}
@@ -269,7 +288,7 @@ export const ExpectedVehiclesView: React.FC<ExpectedVehiclesViewProps> = ({
             {canManageExpected && (
               <button
                 onClick={onOpenAddModal}
-                className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-slate-900 font-black text-xs md:text-sm rounded-xl transition flex items-center justify-center gap-1.5 shadow cursor-pointer active:scale-95"
+                className="w-full sm:w-auto px-4 py-2 bg-amber-500 hover:bg-amber-600 text-slate-900 font-black text-xs md:text-sm rounded-xl transition flex items-center justify-center gap-1.5 shadow cursor-pointer active:scale-95"
               >
                 <Plus className="w-4 h-4" /> Tekli Ekle
               </button>
@@ -277,8 +296,8 @@ export const ExpectedVehiclesView: React.FC<ExpectedVehiclesViewProps> = ({
           </div>
         </div>
 
-        {/* Hızlı Filtre Butonları */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 custom-scroll text-xs">
+        {/* Hızlı Filtre Butonları — Mobilde açılır panelde, masaüstünde her zaman görünür */}
+        <div className={`${mobileFiltersOpen ? 'flex' : 'hidden md:flex'} items-center gap-1.5 overflow-x-auto pb-1 pt-2 md:pt-0 border-t md:border-t-0 border-slate-100 dark:border-slate-800 custom-scroll text-xs`}>
           <button
             onClick={() => setStatusFilter('')}
             className={`px-3 py-1.5 rounded-xl font-bold transition shrink-0 flex items-center gap-1.5 cursor-pointer ${

@@ -202,13 +202,17 @@ service cloud.firestore {
 
     function isValidChatGroup(d) {
       return d.keys().hasAll(['id', 'name', 'members', 'createdBy', 'createdAt']) &&
-        d.keys().hasOnly(['id', 'name', 'description', 'members', 'createdBy', 'createdAt']) &&
+        d.keys().hasOnly(['id', 'name', 'description', 'members', 'createdBy', 'createdAt', 'status', 'approvedBy', 'approvedAt', 'rejectedReason']) &&
         d.id is string && d.id.size() >= 1 && d.id.size() <= 128 &&
         d.name is string && d.name.size() >= 1 && d.name.size() <= 80 &&
         isOptStr(d, 'description', 200) &&
         d.members is list && d.members.size() >= 1 && d.members.size() <= 200 && d.members[0] is string &&
         d.createdBy is string && d.createdBy.size() >= 1 && d.createdBy.size() <= 120 &&
-        d.createdAt is number;
+        d.createdAt is number &&
+        (!('status' in d) || d.status == null || d.status in ['pending', 'approved', 'rejected']) &&
+        isOptStr(d, 'approvedBy', 120) &&
+        isOptNum(d, 'approvedAt') &&
+        isOptStr(d, 'rejectedReason', 300);
     }
 
     function isValidCustomer(d) {

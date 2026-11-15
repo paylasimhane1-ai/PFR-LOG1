@@ -9,7 +9,8 @@ import {
   UserRole,
   AppNotification,
   Customer,
-  SlaSettings
+  SlaSettings,
+  ChatGroup
 } from '../types';
 import { CustomerAutocomplete } from './CustomerAutocomplete';
 import { VehicleLifecycleTimeline } from './RampSlaIndicator';
@@ -712,11 +713,15 @@ interface UserManagementModalProps {
   users: User[];
   warehouses: Warehouse[];
   currentUser: User | null;
+  chatGroups?: ChatGroup[];
   getWarehouseNameById: (id: number) => string;
   onNotify?: (msg: string, type?: 'success' | 'info' | 'warning') => void;
   onAddUser: (newUser: User) => void;
   onEditUser: (user: User) => void;
   onDeleteUser: (user: User) => void;
+  onApproveChatGroup?: (groupId: string) => void;
+  onRejectChatGroup?: (groupId: string, reason?: string) => void;
+  onDeleteChatGroup?: (groupId: string) => void;
 }
 
 export const UserManagementModal: React.FC<UserManagementModalProps> = ({
@@ -725,11 +730,15 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
   users,
   warehouses,
   currentUser,
+  chatGroups = [],
   getWarehouseNameById,
   onNotify,
   onAddUser,
   onEditUser,
-  onDeleteUser
+  onDeleteUser,
+  onApproveChatGroup,
+  onRejectChatGroup,
+  onDeleteChatGroup
 }) => {
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [form, setForm] = useState<{
@@ -747,7 +756,14 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
   });
 
   const [expandedUserPerms, setExpandedUserPerms] = useState<string | null>(null);
-  const [modalTab, setModalTab] = useState<'users' | 'special_permissions'>('users');
+  const [modalTab, setModalTab] = useState<'users' | 'special_permissions' | 'group_approvals'>('users');
+  const [rejectDrafts, setRejectDrafts] = useState<Record<string, string>>({});
+  const [rejectingGroupId, setRejectingGroupId] = useState<string | null>(null);
+
+  const pendingChatGroups = chatGroups.filter((g) => g.status === 'pending').sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  const reviewedChatGroups = chatGroups
+    .filter((g) => g.status === 'approved' || g.status === 'rejected')
+    .sort((a, b) => (b.approvedAt || b.createdAt || 0) - (a.approvedAt || a.createdAt || 0));
 
   const handleDirectToggleUserPermission = (targetUser: User, permissionKey: keyof UserPermissions) => {
     if (targetUser.role === 'admin' || targetUser.role === 'guest') return;
@@ -946,20 +962,20 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
           </button>
         </div>
 
-        {/* Tab Seçimi: Kullanıcılar ve Özel Yetki Alanları */}
-        <div className="flex items-center gap-2 px-5 pt-2.5 bg-slate-900 border-b border-slate-800">
+        {/* Tab Seçimi: Kullanıcılar, Özel Yetki Alanları ve Grup Onayları */}
+        <div className="flex items-center gap-2 px-4 sm:px-5 pt-2.5 bg-slate-900 border-b border-slate-800 overflow-x-auto custom-scroll">
           <button
             type="button"
             onClick={() => setModalTab('users')}
-            className={`pb-2.5 px-3 font-bold text-xs flex items-center gap-1.5 transition cursor-pointer border-b-2 ${
+            className={`pb-2.5 px-3 font-bold text-xs flex items-center gap-1.5 transition cursor-pointer border-b-2 shrink-0 ${
               modalTab === 'users'
                 ? 'text-white border-blue-500'
                 : 'text-slate-400 border-transparent hover:text-slate-200'
             }`}
           >
             <Users className="w-3.5 h-3.5" />
-            <span>Kullanıcı Listesi & Ekleme</span>
-            <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-slate-800 text-slate-300 font-semibold border border-slate-700">
+            <span>Kullanıcı Listesi</span>
+            <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-slate-800 text-slate-300 font-semibold border border-slate-700 tabular-nums">
               {users.length}
             </span>
           </button>
@@ -967,22 +983,209 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
           <button
             type="button"
             onClick={() => setModalTab('special_permissions')}
-            className={`pb-2.5 px-3 font-bold text-xs flex items-center gap-1.5 transition cursor-pointer border-b-2 ${
+            className={`pb-2.5 px-3 font-bold text-xs flex items-center gap-1.5 transition cursor-pointer border-b-2 shrink-0 ${
               modalTab === 'special_permissions'
                 ? 'text-emerald-300 border-emerald-400'
                 : 'text-slate-400 border-transparent hover:text-slate-200'
             }`}
           >
             <CheckSquare className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Özel Yetki Alanı & İzin Butonları</span>
-            <span className="text-[9px] px-2 py-0.2 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-black">
-              Evrak Hazır Butonları
-            </span>
+            <span>Özel Yetki Alanı</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setModalTab('group_approvals')}
+            className={`pb-2.5 px-3 font-bold text-xs flex items-center gap-1.5 transition cursor-pointer border-b-2 shrink-0 ${
+              modalTab === 'group_approvals'
+                ? 'text-amber-300 border-amber-400'
+                : 'text-slate-400 border-transparent hover:text-slate-200'
+            }`}
+          >
+            <MessageSquare className="w-3.5 h-3.5 text-amber-400" />
+            <span>Grup Onayları</span>
+            {pendingChatGroups.length > 0 ? (
+              <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-red-600 text-white font-black tabular-nums">
+                {pendingChatGroups.length}
+              </span>
+            ) : (
+              <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-slate-800 text-slate-300 font-semibold border border-slate-700 tabular-nums">
+                0
+              </span>
+            )}
           </button>
         </div>
 
         {/* Scrollable Content */}
-        {modalTab === 'special_permissions' ? (
+        {modalTab === 'group_approvals' ? (
+          /* =========================================================
+             SOHBET GRUBU ONAY KUYRUĞU (ADMIN)
+             ========================================================= */
+          <div className="p-5 overflow-y-auto space-y-5 custom-scroll text-xs">
+            <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/70 p-4 rounded-2xl flex items-start gap-3">
+              <div className="w-9 h-9 rounded-xl bg-amber-500 text-slate-950 flex items-center justify-center shrink-0">
+                <MessageSquare className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="font-black text-sm text-slate-900 dark:text-white">
+                  Yeni Sohbet Grubu Onay Kuyruğu
+                </h4>
+                <p className="text-[11px] text-slate-600 dark:text-slate-300 mt-0.5">
+                  Admin dışındaki kullanıcıların oluşturduğu sohbet grupları onaylanana kadar diğer üyelere görünmez ve mesajlaşmaya kapalı kalır.
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h5 className="font-bold text-slate-800 dark:text-slate-100 text-xs flex items-center gap-1.5">
+                  <Clock className="w-4 h-4 text-amber-500" />
+                  <span>Onay Bekleyen Talepler ({pendingChatGroups.length})</span>
+                </h5>
+              </div>
+
+              {pendingChatGroups.length === 0 ? (
+                <div className="p-6 text-center rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 text-slate-400">
+                  Şu anda Admin onayı bekleyen yeni grup talebi bulunmuyor.
+                </div>
+              ) : (
+                <div className="space-y-2.5">
+                  {pendingChatGroups.map((grp) => {
+                    const isRejecting = rejectingGroupId === grp.id;
+                    const createdLabel = grp.createdAt
+                      ? new Date(grp.createdAt).toLocaleString('tr-TR', { dateStyle: 'short', timeStyle: 'short' })
+                      : '';
+                    return (
+                      <div
+                        key={grp.id}
+                        className="p-4 rounded-2xl border border-amber-300 dark:border-amber-700 bg-white dark:bg-slate-800 shadow-sm space-y-3"
+                      >
+                        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                          <div className="space-y-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-black text-sm text-slate-900 dark:text-white">{grp.name}</span>
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-200">
+                                Onay Bekliyor
+                              </span>
+                            </div>
+                            {grp.description && (
+                              <p className="text-[11px] text-slate-600 dark:text-slate-300">{grp.description}</p>
+                            )}
+                            <div className="text-[11px] text-slate-500 dark:text-slate-400 flex flex-wrap items-center gap-2">
+                              <span>
+                                Talep Eden: <strong className="text-slate-800 dark:text-slate-200">{grp.createdBy}</strong>
+                              </span>
+                              {createdLabel && <span className="tabular-nums">• {createdLabel}</span>}
+                              <span className="tabular-nums">• {grp.members.length} üye</span>
+                            </div>
+                            <div className="flex flex-wrap gap-1 pt-1">
+                              {grp.members.map((m) => (
+                                <span
+                                  key={m}
+                                  className="px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-[10px] font-semibold"
+                                >
+                                  {m}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                onApproveChatGroup?.(grp.id);
+                                if (rejectingGroupId === grp.id) setRejectingGroupId(null);
+                              }}
+                              className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-sm"
+                            >
+                              <Check className="w-3.5 h-3.5" />
+                              <span>Onayla</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setRejectingGroupId((prev) => (prev === grp.id ? null : grp.id))}
+                              className="px-3.5 py-2 rounded-xl bg-red-50 dark:bg-red-950/60 hover:bg-red-100 dark:hover:bg-red-900/60 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800 font-bold text-xs flex items-center gap-1.5 cursor-pointer"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                              <span>Reddet</span>
+                            </button>
+                          </div>
+                        </div>
+
+                        {isRejecting && (
+                          <div className="pt-2 border-t border-slate-100 dark:border-slate-700 flex flex-col sm:flex-row gap-2">
+                            <input
+                              type="text"
+                              maxLength={250}
+                              value={rejectDrafts[grp.id] || ''}
+                              onChange={(e) => setRejectDrafts((prev) => ({ ...prev, [grp.id]: e.target.value }))}
+                              placeholder="Red gerekçesi (opsiyonel)..."
+                              className="flex-1 px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white outline-none"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                onRejectChatGroup?.(grp.id, rejectDrafts[grp.id]);
+                                setRejectingGroupId(null);
+                              }}
+                              className="px-3.5 py-1.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-xs cursor-pointer"
+                            >
+                              Reddi Onayla
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {reviewedChatGroups.length > 0 && (
+              <div className="space-y-2 pt-3 border-t border-slate-200 dark:border-slate-800">
+                <h5 className="font-bold text-slate-600 dark:text-slate-300 text-xs">
+                  Son İncelenen Gruplar ({reviewedChatGroups.length})
+                </h5>
+                <div className="divide-y divide-slate-200 dark:divide-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden bg-white dark:bg-slate-900">
+                  {reviewedChatGroups.slice(0, 12).map((grp) => (
+                    <div key={grp.id} className="p-3 flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-bold text-slate-800 dark:text-slate-100 truncate">{grp.name}</span>
+                          <span
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded ${
+                              grp.status === 'approved'
+                                ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300'
+                                : 'bg-red-100 dark:bg-red-950/60 text-red-700 dark:text-red-300'
+                            }`}
+                          >
+                            {grp.status === 'approved' ? 'Onaylandı' : 'Reddedildi'}
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
+                          Kurucu: {grp.createdBy}
+                          {grp.approvedBy ? ` · İşlem: ${grp.approvedBy}` : ''}
+                          {grp.rejectedReason ? ` · Neden: ${grp.rejectedReason}` : ''}
+                        </p>
+                      </div>
+                      {onDeleteChatGroup && (
+                        <button
+                          type="button"
+                          onClick={() => onDeleteChatGroup(grp.id)}
+                          title="Grubu Sil"
+                          className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/50 rounded-lg cursor-pointer shrink-0"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        ) : modalTab === 'special_permissions' ? (
           /* =========================================================
              ÖZEL YETKİ ALANI & İZİN BUTONLARI (OPERASYON / PERSONEL)
              ========================================================= */

@@ -143,7 +143,6 @@ import {
   deleteExpectedVehicleFromFirestore,
   saveNotificationToFirestore,
   deleteNotificationFromFirestore,
-  markNotificationAsReadInFirestore,
   saveChatMessageToFirestore,
   markChatMessageAsReadInFirestore,
   subscribeToChatPresence,
@@ -915,18 +914,20 @@ export default function App() {
     });
   }, [notifications, resolveNotifDepoId, activeDepoIds, currentUser, selectedDepoId]);
 
-  // Kullanıcı bazlı okunmamış bildirim sayısı (giriş yapan kullanıcının henüz okumadığı bildirimler)
+  // Rampaya çağrılan ve henüz rampa yönlendirmesi/işlemi yapılmamış (BEKLİYOR) bildirim sayısı
+  // Menü açılsa dahi araç yönlendirilene veya çağrı iptal edilene kadar yanık kalır.
   const pendingNotificationsCount = useMemo(() => {
     if (!currentUser) return 0;
-    const currentUsername = currentUser.username;
-    return scopedNotifications.filter((n) => {
-      if (n.status !== 'BEKLİYOR') return false;
-      const readBy = Array.isArray(n.readBy) ? n.readBy : [];
-      return !readBy.includes(currentUsername);
-    }).length;
+    return scopedNotifications.filter((n) => n.status === 'BEKLİYOR').length;
   }, [scopedNotifications, currentUser]);
 
-  // Kullanıcı bazlı okunmamış sohbet mesajı sayısı (yalnızca özel DM ve üye olunan özel gruplar; misafir hariç)
+  // Admin onayı bekleyen yeni sohbet grubu sayısı
+  const pendingChatGroupsCount = useMemo(
+    () => chatGroups.filter((g) => g.status === 'pending').length,
+    [chatGroups]
+  );
+
+  // Kullanıcı bazlı okunmamış sohbet mesajı sayısı (yalnızca özel DM ve onaylı özel gruplar; misafir hariç)
   const unreadChatCount = useMemo(() => {
     if (!currentUser || currentUser.role === 'guest') return 0;
     const myLower = currentUser.username.trim().toLowerCase();
@@ -942,6 +943,7 @@ export default function App() {
       } else if (ch.startsWith('grp_')) {
         const grp = chatGroups.find((g) => g.id === ch);
         if (!grp) return false;
+        if (grp.status && grp.status !== 'approved') return false;
         const isMember =
           grp.createdBy.trim().toLowerCase() === myLower ||
           grp.members.some((u) => u.trim().toLowerCase() === myLower);
@@ -954,32 +956,6 @@ export default function App() {
       return !readBy.some((u) => u.trim().toLowerCase() === myLower);
     }).length;
   }, [chatMessages, chatGroups, currentUser]);
-
-  const handleMarkNotificationsAsReadForMe = useCallback(() => {
-    if (!currentUser) return;
-    const currentUsername = currentUser.username;
-    const unread = scopedNotifications.filter(
-      (n) => n.status === 'BEKLİYOR' && !(Array.isArray(n.readBy) && n.readBy.includes(currentUsername))
-    );
-    if (unread.length === 0) return;
-
-    const unreadIds = new Set(unread.map((u) => u.id));
-    setNotifications((prev) =>
-      prev.map((n) => {
-        if (unreadIds.has(n.id) && n.status === 'BEKLİYOR') {
-          const currentReadBy = Array.isArray(n.readBy) ? n.readBy : [];
-          if (!currentReadBy.includes(currentUsername)) {
-            return { ...n, readBy: [...currentReadBy, currentUsername] };
-          }
-        }
-        return n;
-      })
-    );
-
-    unread.forEach((n) => {
-      markNotificationAsReadInFirestore(n.id, currentUsername);
-    });
-  }, [currentUser, scopedNotifications]);
 
   const driverHistory = useMemo(() => {
     const map = new Map<string, { ad: string; tel: string }>();
@@ -1661,21 +1637,30 @@ export default function App() {
     showToast(`${items.length} adet beklenen araç içe aktarıldı.`);
   };
 
-  // Bildirim temizleme ve Firestore senkronizasyonu
-  // Kural: "Rampaya çağrılan araçlarda işlem yapılmayan bildirim silinmesin"
+  // Rampa yönlendirmesi/ataması veya çıkış tamamlandığında araç çağrı bildirimini 'İŞLEM YAPILDI' durumuna çeker
+  // (Araç silindiğinde forceAll=true ile tamamen silinir). Böylece işlem yapılan araç kadar sayaç azalır.
   const removeVehicleCallNotifications = (vehicleId: number, dorsePlaka?: string, forceAll = false) => {
     setNotifications((prev) => {
-      const remaining: AppNotification[] = [];
+      const next: AppNotification[] = [];
       prev.forEach((n) => {
         const matches = n.vehicleId === vehicleId || (dorsePlaka && n.plaka === dorsePlaka);
-        // İşlem yapılmayan (BEKLİYOR) çağrı bildirimleri korunmalı, silinmemelidir!
-        if (matches && (forceAll || n.status !== 'BEKLİYOR')) {
+        if (!matches) {
+          next.push(n);
+          return;
+        }
+        if (forceAll) {
           deleteNotificationFromFirestore(n.id);
+          return;
+        }
+        if (n.status === 'BEKLİYOR') {
+          const completed: AppNotification = { ...n, status: 'İŞLEM YAPILDI' };
+          saveNotificationToFirestore(completed);
+          next.push(completed);
         } else {
-          remaining.push(n);
+          next.push(n);
         }
       });
-      return remaining;
+      return next;
     });
   };
 
@@ -2863,13 +2848,27 @@ export default function App() {
       })
     );
 
-    // Bildirimi Firestore'dan ve yerel durumdan kalıcı olarak sil
-    deleteNotificationFromFirestore(notification.id);
-    removeVehicleCallNotifications(notification.vehicleId, notification.plaka);
+    // İlgili bildirimi ve aracın bekleyen çağrılarını İŞLEM YAPILDI durumuna çek (sayaç işlem yapılan araç kadar azalır)
+    const trimmedNote = note.trim();
+    setNotifications((prev) =>
+      prev.map((n) => {
+        if (n.id === notification.id) {
+          const updatedN: AppNotification = {
+            ...n,
+            status: 'İŞLEM YAPILDI',
+            ...(trimmedNote ? { securityNote: trimmedNote } : {})
+          };
+          saveNotificationToFirestore(updatedN);
+          return updatedN;
+        }
+        return n;
+      })
+    );
+    removeVehicleCallNotifications(notification.vehicleId ?? -1, notification.plaka);
 
     setShowSecurityActionModal(false);
     playChime('success');
-    showToast(`${notification.plaka} plakalı araç ${getRampName(rampId)} numarasına yanaştırıldı ve bildirim silindi.`, 'success');
+    showToast(`${notification.plaka} plakalı araç ${getRampName(rampId)} numarasına yanaştırıldı.`, 'success');
 
     if (updatedVehicleRecord) {
       const vRec = updatedVehicleRecord as Vehicle;
@@ -3470,6 +3469,13 @@ export default function App() {
     if (!payload.channelId || (!payload.channelId.startsWith('dm__') && !payload.channelId.startsWith('grp_'))) {
       return;
     }
+    if (payload.channelId.startsWith('grp_')) {
+      const targetGroup = chatGroups.find((g) => g.id === payload.channelId);
+      if (!targetGroup || (targetGroup.status && targetGroup.status !== 'approved')) {
+        showToast('Bu grup henüz Admin tarafından onaylanmadığı için mesaj gönderilemez.', 'warning');
+        return;
+      }
+    }
     const nowTs = Date.now();
     const candidateId = nowTs * 100 + Math.floor(Math.random() * 100);
     const uniqueId = Math.max(candidateId, lastChatMessageIdRef.current + 1);
@@ -3504,18 +3510,68 @@ export default function App() {
       new Set([currentUser.username, ...payload.members].map((m) => m.trim()).filter(Boolean))
     );
     const nowTs = Date.now();
+    const isAdminUser = currentUser.role === 'admin';
     const newGroup: ChatGroup = {
       id: `grp_${nowTs}`,
       name: cleanName,
       description: payload.description?.trim() || undefined,
       members: uniqueMembers,
       createdBy: currentUser.username,
-      createdAt: nowTs
+      createdAt: nowTs,
+      status: isAdminUser ? 'approved' : 'pending',
+      ...(isAdminUser ? { approvedBy: currentUser.username, approvedAt: nowTs } : {})
     };
     setChatGroups((prev) => [...prev, newGroup]);
     saveChatGroupToFirestore(newGroup);
-    showToast(`"${cleanName}" grubu oluşturuldu (${uniqueMembers.length} üye).`, 'success');
+    if (isAdminUser) {
+      showToast(`"${cleanName}" grubu oluşturuldu ve aktif edildi (${uniqueMembers.length} üye).`, 'success');
+    } else {
+      showToast(`"${cleanName}" grup talebiniz Admin onayına gönderildi. Onaylandığında üyelere açılacaktır.`, 'info');
+    }
     return newGroup;
+  };
+
+  const handleApproveChatGroup = (groupId: string) => {
+    if (!currentUser || currentUser.role !== 'admin') {
+      showToast('Grup onaylama yetkisi yalnızca Admin kullanıcılara aittir.', 'warning');
+      return;
+    }
+    const target = chatGroups.find((g) => g.id === groupId);
+    if (!target) return;
+    const updated: ChatGroup = {
+      id: target.id,
+      name: target.name,
+      ...(target.description ? { description: target.description } : {}),
+      members: target.members,
+      createdBy: target.createdBy,
+      createdAt: target.createdAt,
+      status: 'approved',
+      approvedBy: currentUser.username,
+      approvedAt: Date.now()
+    };
+    setChatGroups((prev) => prev.map((g) => (g.id === groupId ? updated : g)));
+    saveChatGroupToFirestore(updated);
+    showToast(`"${target.name}" grubu onaylandı ve tüm üyelerine açıldı.`, 'success');
+  };
+
+  const handleRejectChatGroup = (groupId: string, reason?: string) => {
+    if (!currentUser || currentUser.role !== 'admin') {
+      showToast('Grup reddetme yetkisi yalnızca Admin kullanıcılara aittir.', 'warning');
+      return;
+    }
+    const target = chatGroups.find((g) => g.id === groupId);
+    if (!target) return;
+    const cleanReason = reason?.trim() || 'Admin tarafından onaylanmadı.';
+    const updated: ChatGroup = {
+      ...target,
+      status: 'rejected',
+      approvedBy: currentUser.username,
+      approvedAt: Date.now(),
+      rejectedReason: cleanReason
+    };
+    setChatGroups((prev) => prev.map((g) => (g.id === groupId ? updated : g)));
+    saveChatGroupToFirestore(updated);
+    showToast(`"${target.name}" grup talebi reddedildi.`, 'info');
   };
 
   const handleUpdateChatGroupMembers = (groupId: string, members: string[]) => {
@@ -3820,9 +3876,17 @@ export default function App() {
               </button>
               <button
                 onClick={() => setShowUserManagementModal(true)}
-                className="w-full py-1.5 bg-blue-700 hover:bg-blue-800 text-white text-xs rounded-lg font-bold transition flex items-center justify-center gap-1.5 shadow cursor-pointer"
+                className="w-full py-1.5 px-2 bg-blue-700 hover:bg-blue-800 text-white text-xs rounded-lg font-bold transition flex items-center justify-center gap-1.5 shadow cursor-pointer relative"
               >
                 <Users className="w-3 h-3" /> Kullanıcı Yönetimi
+                {pendingChatGroupsCount > 0 && (
+                  <span
+                    className="ml-auto px-1.5 py-0.2 rounded-full bg-red-600 text-white text-[10px] font-black tabular-nums"
+                    title="Onay bekleyen yeni grup talebi"
+                  >
+                    {pendingChatGroupsCount}
+                  </span>
+                )}
               </button>
               <button
                 onClick={() => setShowWarehouseModal(true)}
@@ -4026,13 +4090,7 @@ export default function App() {
             {/* RAMPAYA ÇAĞRILAN ARAÇLAR BİLDİRİM BUTONU (Mobil ve Masaüstü Optimize) */}
             <div className="relative">
               <button
-                onClick={() => {
-                  const nextState = !showNotificationMenu;
-                  setShowNotificationMenu(nextState);
-                  if (nextState) {
-                    handleMarkNotificationsAsReadForMe();
-                  }
-                }}
+                onClick={() => setShowNotificationMenu((prev) => !prev)}
                 className="px-2.5 py-1.5 md:py-2 bg-purple-50 dark:bg-purple-950/60 hover:bg-purple-100 dark:hover:bg-purple-900/60 text-purple-800 dark:text-purple-200 border border-purple-200 dark:border-purple-800/70 text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer relative shrink-0 h-9"
                 title="Rampaya Çağrılan Araçlar"
               >
@@ -4245,10 +4303,15 @@ export default function App() {
             {/* Mobil Menü Butonu (Yönetici İşlemleri, Ayarlar & Çıkış) */}
             <button
               onClick={() => setShowMobileAdminMenu(true)}
-              className="md:hidden p-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl transition flex items-center justify-center cursor-pointer border border-slate-200 dark:border-slate-700"
+              className="md:hidden p-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl transition flex items-center justify-center cursor-pointer border border-slate-200 dark:border-slate-700 relative"
               title="Yönetim & Hızlı İşlemler Menüsü"
             >
               <Menu className="w-4 h-4 text-slate-800 dark:text-slate-200" />
+              {currentUser.role === 'admin' && pendingChatGroupsCount > 0 && (
+                <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-600 text-white text-[9px] font-black flex items-center justify-center tabular-nums">
+                  {pendingChatGroupsCount}
+                </span>
+              )}
             </button>
           </div>
         </header>
@@ -4455,6 +4518,8 @@ export default function App() {
           onMarkMessagesAsRead={handleMarkChatMessagesAsRead}
           onUpdatePresence={handleUpdateChatPresence}
           onCreateGroup={handleCreateChatGroup}
+          onApproveGroup={handleApproveChatGroup}
+          onRejectGroup={handleRejectChatGroup}
           onUpdateGroupMembers={handleUpdateChatGroupMembers}
           onUpdateGroup={handleUpdateChatGroup}
           onLeaveGroup={handleLeaveChatGroup}
@@ -4517,11 +4582,15 @@ export default function App() {
         users={users}
         warehouses={warehouses}
         currentUser={currentUser}
+        chatGroups={chatGroups}
         getWarehouseNameById={getWarehouseNameById}
         onNotify={showToast}
         onAddUser={handleAddUser}
         onEditUser={handleEditUser}
         onDeleteUser={handleDeleteUser}
+        onApproveChatGroup={handleApproveChatGroup}
+        onRejectChatGroup={handleRejectChatGroup}
+        onDeleteChatGroup={handleDeleteChatGroup}
       />
 
       {/* 4. Detaylı Araç Bilgi & Fotoğraf İnceleme Modalı */}
@@ -4821,9 +4890,15 @@ export default function App() {
                 >
                   <span className="flex items-center gap-2.5">
                     <Users className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                    <span>Kullanıcı & İzin Yönetimi</span>
+                    <span>Kullanıcı, İzin & Grup Onayları</span>
                   </span>
-                  <span className="text-[10px] bg-blue-600 text-white px-2 py-0.5 rounded-full font-semibold">Kutucuklu İzinler</span>
+                  {pendingChatGroupsCount > 0 ? (
+                    <span className="text-[10px] bg-red-600 text-white px-2 py-0.5 rounded-full font-black tabular-nums">
+                      {pendingChatGroupsCount} Onay Bekliyor
+                    </span>
+                  ) : (
+                    <span className="text-[10px] bg-blue-600 text-white px-2 py-0.5 rounded-full font-semibold">Yönetim</span>
+                  )}
                 </button>
 
                 <button

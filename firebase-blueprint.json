@@ -142,7 +142,7 @@
     },
     "ChatGroup": {
       "title": "ChatGroup",
-      "description": "Custom team messaging group with member list",
+      "description": "Custom team messaging group with member list and admin approval state",
       "type": "object",
       "properties": {
         "id": { "type": "string", "minLength": 1, "maxLength": 128 },
@@ -150,7 +150,11 @@
         "description": { "type": "string", "maxLength": 200 },
         "members": { "type": "array", "description": "Usernames belonging to this group" },
         "createdBy": { "type": "string", "minLength": 1, "maxLength": 120 },
-        "createdAt": { "type": "number" }
+        "createdAt": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+        "approvedBy": { "type": "string", "maxLength": 120 },
+        "approvedAt": { "type": "number" },
+        "rejectedReason": { "type": "string", "maxLength": 300 }
       },
       "required": ["id", "name", "members", "createdBy", "createdAt"]
     },

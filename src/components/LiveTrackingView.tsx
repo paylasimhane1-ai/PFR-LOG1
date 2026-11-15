@@ -4,7 +4,7 @@ import { cleanPhone, cleanPhoneForWa, getStatusBadgeClass, getDurationText, getD
 import { hasPermission } from '../utils/permissions';
 import { RampSlaIndicator } from './RampSlaIndicator';
 import { getVehicleStageTimes } from '../utils/slaHelpers';
-import { Search, Eye, RotateCcw, X, Megaphone, Phone, MessageSquare, Warehouse as WarehouseIcon, Clock, Truck, LogIn, LogOut, Flame, FileCheck, ArrowRight } from 'lucide-react';
+import { Search, Eye, RotateCcw, X, Megaphone, Phone, MessageSquare, Warehouse as WarehouseIcon, Clock, Truck, LogIn, LogOut, Flame, FileCheck, ArrowRight, SlidersHorizontal, ChevronDown, ChevronUp } from 'lucide-react';
 
 interface LiveTrackingViewProps {
   vehicles: Vehicle[];
@@ -38,6 +38,9 @@ export const LiveTrackingView: React.FC<LiveTrackingViewProps> = ({
     startDate: '',
     endDate: ''
   });
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+
+  const activeDateFilterCount = (filters.startDate ? 1 : 0) + (filters.endDate ? 1 : 0);
 
   const handleSetToday = () => {
     const todayIso = new Date().toISOString().slice(0, 10);
@@ -85,8 +88,52 @@ export const LiveTrackingView: React.FC<LiveTrackingViewProps> = ({
   return (
     <div className="space-y-4 max-w-[2560px] mx-auto w-full">
       <div className="bg-white dark:bg-slate-900 p-3 sm:p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-2.5 md:space-y-0 md:flex md:items-center md:justify-between md:gap-3 transition-colors">
-        {/* Tarih Filtresi */}
-        <div className="flex flex-col sm:flex-row sm:items-center gap-2 text-xs">
+        {/* Arama Kutusu + Mobil Filtreler Butonu */}
+        <div className="flex items-center gap-2 w-full md:w-64 md:order-2">
+          <div className="relative flex-1">
+            <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-400" />
+            <input
+              type="text"
+              value={filters.search}
+              onChange={(e) => setFilters({ ...filters, search: e.target.value })}
+              placeholder="Ara (Plaka, Müşteri)..."
+              className="w-full pl-9 pr-7 py-2 md:py-1.5 border border-slate-200 dark:border-slate-700 rounded-xl text-xs outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-100 placeholder-slate-400"
+            />
+            {filters.search && (
+              <button
+                type="button"
+                onClick={() => setFilters({ ...filters, search: '' })}
+                className="absolute right-2.5 top-2.5 md:top-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 cursor-pointer"
+                aria-label="Aramayı Temizle"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setMobileFiltersOpen((prev) => !prev)}
+            aria-expanded={mobileFiltersOpen}
+            className={`md:hidden shrink-0 px-3 py-2 rounded-xl border text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${
+              mobileFiltersOpen || activeDateFilterCount > 0
+                ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800'
+                : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
+            }`}
+          >
+            <SlidersHorizontal className="w-3.5 h-3.5" />
+            <span>Filtreler</span>
+            {activeDateFilterCount > 0 && (
+              <span className="px-1.5 py-0.2 rounded-full bg-blue-600 text-white text-[10px] font-extrabold tabular-nums">
+                {activeDateFilterCount}
+              </span>
+            )}
+            {mobileFiltersOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+          </button>
+        </div>
+
+        {/* Tarih Filtresi — Mobilde açılır panelde, masaüstünde her zaman görünür */}
+        <div className={`${mobileFiltersOpen ? 'flex' : 'hidden md:flex'} flex-col sm:flex-row sm:items-center gap-2 text-xs md:order-1 pt-2 md:pt-0 border-t md:border-t-0 border-slate-100 dark:border-slate-800`}>
           <div className="flex items-center justify-between sm:justify-start gap-1.5">
             <span className="font-bold text-slate-700 dark:text-slate-300 text-xs shrink-0">Tarih:</span>
             <div className="flex items-center gap-1">
@@ -124,18 +171,6 @@ export const LiveTrackingView: React.FC<LiveTrackingViewProps> = ({
               className="w-full sm:w-auto border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1.5 text-xs outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-100"
             />
           </div>
-        </div>
-
-        {/* Arama Kutusu */}
-        <div className="relative w-full md:w-64">
-          <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-400" />
-          <input
-            type="text"
-            value={filters.search}
-            onChange={(e) => setFilters({ ...filters, search: e.target.value })}
-            placeholder="Ara (Plaka, Müşteri)..."
-            className="w-full pl-9 pr-3 py-1.5 border border-slate-200 dark:border-slate-700 rounded-xl text-xs outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-100 placeholder-slate-400"
-          />
         </div>
       </div>
 

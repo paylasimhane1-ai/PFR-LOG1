@@ -21,7 +21,11 @@ import {
   Calendar,
   Zap,
   Activity,
-  ChevronRight
+  ChevronRight,
+  SlidersHorizontal,
+  ChevronDown,
+  ChevronUp,
+  X
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -151,7 +155,8 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
   onUndoExit
 }) => {
   const [activeTab, setActiveTab] = useState<'both' | 'charts' | 'table'>('both');
-  
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+
   // Varsayılan: "Bugün" mantığı
   const [datePreset, setDatePreset] = useState<'today' | 'yesterday' | 'week' | 'month' | 'all' | 'custom'>('today');
   const [filters, setFilters] = useState(() => {
@@ -162,6 +167,8 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
       endDate: today
     };
   });
+
+  const activeFilterCount = (datePreset !== 'today' ? 1 : 0) + (activeTab !== 'both' ? 1 : 0);
 
   const handlePresetSelect = (preset: 'today' | 'yesterday' | 'week' | 'month' | 'all') => {
     setDatePreset(preset);
@@ -464,19 +471,19 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
   return (
     <div className="space-y-4">
       {/* Üst Filtre ve Dışa Aktarma Başlığı */}
-      <div className="bg-white dark:bg-slate-900 p-3.5 sm:p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4 transition-colors">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
+      <div className="bg-white dark:bg-slate-900 p-3 sm:p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-3 sm:space-y-4 transition-colors">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2.5 md:gap-3">
           <div>
             <h3 className="font-bold text-slate-800 dark:text-slate-100 text-sm sm:text-base flex items-center gap-2">
               <BarChart3 className="w-5 h-5 text-blue-600 dark:text-blue-400" />
               Saha Analitik & Hareket Raporları
             </h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 tabular-nums">
               Dönem: <b className="text-blue-600 dark:text-blue-400">{periodLabel}</b> • {sortedReports.length} araç işlemi listeleniyor
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+          <div className={`${mobileFiltersOpen ? 'flex' : 'hidden md:flex'} flex-wrap items-center gap-2 w-full md:w-auto`}>
             {/* Görünüm Geçişi */}
             <div className="flex w-full sm:w-auto bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700 text-xs">
               <button
@@ -524,10 +531,54 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
           </div>
         </div>
 
+        {/* Mobil kompakt arama + Filtreler butonu */}
+        <div className="flex md:hidden items-center gap-2">
+          <div className="relative flex-1 min-w-0">
+            <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-400" />
+            <input
+              type="text"
+              value={filters.search}
+              onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
+              placeholder="Plaka, müşteri veya şoför ara..."
+              className="w-full pl-9 pr-7 py-2 border border-slate-200 dark:border-slate-700 rounded-xl text-xs outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-100 placeholder-slate-400"
+            />
+            {filters.search && (
+              <button
+                type="button"
+                onClick={() => setFilters(prev => ({ ...prev, search: '' }))}
+                className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 cursor-pointer"
+                aria-label="Aramayı Temizle"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setMobileFiltersOpen((prev) => !prev)}
+            aria-expanded={mobileFiltersOpen}
+            className={`shrink-0 px-3 py-2 rounded-xl border text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${
+              mobileFiltersOpen || activeFilterCount > 0
+                ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800'
+                : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
+            }`}
+          >
+            <SlidersHorizontal className="w-3.5 h-3.5" />
+            <span>Filtreler</span>
+            {activeFilterCount > 0 && (
+              <span className="px-1.5 py-0.2 rounded-full bg-blue-600 text-white text-[10px] font-extrabold tabular-nums">
+                {activeFilterCount}
+              </span>
+            )}
+            {mobileFiltersOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+          </button>
+        </div>
+
         {/* ========================================================
             HIZLI DÖNEM SEÇİCİ & TARİH ARALIĞI FİLTRESİ
             ======================================================== */}
-        <div className="pt-3 border-t border-slate-100 dark:border-slate-800 space-y-3">
+        <div className={`${mobileFiltersOpen ? 'block' : 'hidden md:block'} pt-3 border-t border-slate-100 dark:border-slate-800 space-y-3`}>
           {/* Preset Düğmeleri */}
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex flex-wrap items-center gap-1.5">
@@ -601,7 +652,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
             )}
           </div>
 
-          {/* Tarih Seçiciler ve Arama Inputu */}
+          {/* Tarih Seçiciler ve Masaüstü Arama Inputu */}
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-2.5 text-xs">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Tarih Aralığı:</span>
@@ -622,7 +673,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
               </div>
             </div>
 
-            <div className="relative w-full md:w-72">
+            <div className="hidden md:block relative w-full md:w-72">
               <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-400" />
               <input
                 type="text"

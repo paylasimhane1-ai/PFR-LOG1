@@ -193,6 +193,10 @@ export interface ChatGroup {
   members: string[];
   createdBy: string;
   createdAt: number;
+  status?: 'pending' | 'approved' | 'rejected';
+  approvedBy?: string;
+  approvedAt?: number;
+  rejectedReason?: string;
 }
 
 export type WhatsAppProvider = 'webhook' | 'greenapi' | 'ultramsg' | 'twilio' | 'sharelink';

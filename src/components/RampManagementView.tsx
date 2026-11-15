@@ -27,7 +27,9 @@ import {
   LayoutGrid,
   Grid3x3,
   Clock,
-  FileCheck2
+  FileCheck2,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 
 interface RampManagementViewProps {
@@ -78,7 +80,10 @@ export const RampManagementView: React.FC<RampManagementViewProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<RampSortOption>('default');
   const [gridDensity, setGridDensity] = useState<'comfortable' | 'compact'>('comfortable');
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const [now, setNow] = useState<number>(() => Date.now());
+
+  const activeFilterCount = (statusFilter !== 'Tümü' ? 1 : 0) + (sortBy !== 'default' ? 1 : 0);
 
   // Arıza / Bakım Notu Modal Durumu
   const [noteModalState, setNoteModalState] = useState<{
@@ -303,28 +308,50 @@ export const RampManagementView: React.FC<RampManagementViewProps> = ({
 
         {/* Üst Arama, Sıralama & Yönetim Araçları */}
         <div className="flex flex-col lg:flex-row gap-2.5 justify-between items-stretch lg:items-center">
-          <div className="relative flex-1 min-w-0">
-            <Search className="w-4 h-4 absolute left-3 top-2.5 md:top-3 text-slate-400" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Rampa Adı, Plaka, Çekici, Müşteri veya Arıza Notu Ara..."
-              className="w-full pl-9 pr-8 py-2 border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-100 placeholder-slate-400 rounded-xl text-xs md:text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-            />
-            {searchQuery && (
-              <button
-                type="button"
-                onClick={() => setSearchQuery('')}
-                className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 cursor-pointer"
-                aria-label="Aramayı Temizle"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            )}
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            <div className="relative flex-1 min-w-0">
+              <Search className="w-4 h-4 absolute left-3 top-2.5 md:top-3 text-slate-400" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Rampa Adı, Plaka, Çekici, Müşteri veya Arıza Notu Ara..."
+                className="w-full pl-9 pr-8 py-2 border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-100 placeholder-slate-400 rounded-xl text-xs md:text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 cursor-pointer"
+                  aria-label="Aramayı Temizle"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setMobileFiltersOpen((prev) => !prev)}
+              aria-expanded={mobileFiltersOpen}
+              className={`md:hidden shrink-0 px-3 py-2 rounded-xl border text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${
+                mobileFiltersOpen || activeFilterCount > 0
+                  ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800'
+                  : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
+              }`}
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5" />
+              <span>Filtreler</span>
+              {activeFilterCount > 0 && (
+                <span className="px-1.5 py-0.2 rounded-full bg-blue-600 text-white text-[10px] font-extrabold tabular-nums">
+                  {activeFilterCount}
+                </span>
+              )}
+              {mobileFiltersOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+            </button>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 shrink-0">
+          <div className={`${mobileFiltersOpen ? 'flex' : 'hidden md:flex'} flex-wrap items-center gap-2 shrink-0`}>
             <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-1.5">
               <ArrowUpDown className="w-3.5 h-3.5 text-slate-400 shrink-0" />
               <select
@@ -397,8 +424,8 @@ export const RampManagementView: React.FC<RampManagementViewProps> = ({
           </div>
         </div>
 
-        {/* Durum Filtreleme Sekmeleri */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 custom-scroll text-xs">
+        {/* Durum Filtreleme Sekmeleri — Mobilde açılır panelde, masaüstünde her zaman görünür */}
+        <div className={`${mobileFiltersOpen ? 'flex' : 'hidden md:flex'} items-center gap-1.5 overflow-x-auto pb-1 custom-scroll text-xs`}>
           <button
             type="button"
             onClick={() => setStatusFilter('Tümü')}
