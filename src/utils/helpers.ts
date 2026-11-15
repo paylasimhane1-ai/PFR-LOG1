@@ -1,4 +1,34 @@
-import { Vehicle } from '../types';
+import { SlaSettings, Vehicle } from '../types';
+import { getVehicleStageTimes } from './slaHelpers';
+
+export function parseTurkishDateTime(dateStr?: string | null): number | null {
+  if (!dateStr || typeof dateStr !== 'string') return null;
+  const trimmed = dateStr.trim();
+  if (!trimmed) return null;
+
+  // DD.MM.YYYY HH:mm(:ss) or DD.MM.YYYY
+  const trMatch = trimmed.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})(?:\s+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?/);
+  if (trMatch) {
+    const day = Number(trMatch[1]);
+    const month = Number(trMatch[2]) - 1;
+    const year = Number(trMatch[3]);
+    const hour = trMatch[4] ? Number(trMatch[4]) : 0;
+    const minute = trMatch[5] ? Number(trMatch[5]) : 0;
+    const second = trMatch[6] ? Number(trMatch[6]) : 0;
+    const d = new Date(year, month, day, hour, minute, second);
+    if (!isNaN(d.getTime()) && d.getFullYear() === year && d.getMonth() === month && d.getDate() === day) {
+      return d.getTime();
+    }
+  }
+
+  // ISO / RFC formats (YYYY-MM-DD...)
+  if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) {
+    const parsed = Date.parse(trimmed);
+    if (!isNaN(parsed)) return parsed;
+  }
+
+  return null;
+}
 
 export function cleanPhone(tel?: string): string {
   if (!tel) return '';
@@ -93,8 +123,7 @@ export function getRampDurationText(vehicle?: Vehicle | null): string {
   // Rampa başlangıç zamanı
   let startTs = vehicle.rampadaTimestamp || null;
   if (!startTs && vehicle.rampayaGirisTarihi) {
-    const parsed = Date.parse(vehicle.rampayaGirisTarihi);
-    if (!isNaN(parsed)) startTs = parsed;
+    startTs = parseTurkishDateTime(vehicle.rampayaGirisTarihi);
   }
 
   if (!startTs) {
@@ -255,11 +284,13 @@ export function getRampaCikisTarihi(v?: Vehicle | null): string {
 export function exportVehiclesToCsv(
   vehicles: Vehicle[],
   getWarehouseName: (id: number) => string,
-  getRampName: (id: number | null) => string
-): void {
+  getRampName: (id: number | null) => string,
+  slaSettings?: SlaSettings,
+  onNotify?: (msg: string, type?: 'success' | 'info' | 'warning') => void
+): boolean {
   if (!vehicles.length) {
-    alert('Aktarılacak araç kaydı bulunamadı.');
-    return;
+    onNotify?.('Aktarılacak araç kaydı bulunamadı.', 'warning');
+    return false;
   }
 
   let csvContent = '\uFEFF';
@@ -267,15 +298,21 @@ export function exportVehiclesToCsv(
     'Kayıt ID',
     'Depo Tesis',
     'Depoya Kayıt Tarihi',
+    'Evrak Kayıt Tarihi',
     'Rampaya Giriş Tarihi',
     'Rampadan Çıkış Tarihi',
-    'Geçen Süre',
+    'Evrak Hazırlık Süresi',
+    'Rampa Bekleme Süresi',
+    'Rampa İşlem Süresi',
+    'Toplam Geçen Süre',
+    'SLA / Gecikme Durumu',
     'Müşteri',
     'Çekici Plaka',
     'Dorse Plaka',
     'Konteynır No',
     'Şoför Adı',
     'Şoför Tel',
+    'Şoför TC',
     'Nakliyeci',
     'Depo Türü',
     'İşlem Türü',
@@ -286,20 +323,37 @@ export function exportVehiclesToCsv(
   ];
   csvContent += headers.join(';') + '\n';
 
+  const now = Date.now();
   vehicles.forEach((v) => {
+    const stage = getVehicleStageTimes(v, now, slaSettings);
+    const slaStatusText =
+      stage.rampaIslemMinutes === null
+        ? 'Rampada Değil'
+        : stage.isOverdue
+        ? `Gecikmede (${stage.delayText} / Hedef ${stage.targetText})`
+        : stage.status === 'WARNING'
+        ? `Sınırda (%${stage.progressPercent} / Hedef ${stage.targetText})`
+        : `Normal (%${stage.progressPercent} / Hedef ${stage.targetText})`;
+
     const row = [
       v.id,
       `"${getWarehouseName(v.depoId)}"`,
       `"${getDepoKayitTarihi(v)}"`,
+      `"${getEvrakKayitTarihi(v)}"`,
       `"${getRampaGirisTarihi(v)}"`,
       `"${getRampaCikisTarihi(v)}"`,
+      `"${stage.evrakHazirlikText}"`,
+      `"${stage.rampaBeklemeText}"`,
+      `"${stage.rampaIslemText}"`,
       `"${getDurationText(v)}"`,
+      `"${slaStatusText}"`,
       `"${v.musteri || ''}"`,
       `"${v.cekiciPlaka || ''}"`,
       `"${v.dorsePlaka || ''}"`,
       `"${v.konteynirNo || ''}"`,
       `"${v.soforAd || ''}"`,
       `"${v.soforTel || ''}"`,
+      `"${v.soforTc || ''}"`,
       `"${v.nakliyeFirmasi || ''}"`,
       `"${v.depoTuru || ''}"`,
       `"${v.islemTuru || ''}"`,
@@ -320,6 +374,7 @@ export function exportVehiclesToCsv(
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
+  return true;
 }
 
 export function downloadExpectedTemplateCsv(): void {
@@ -341,12 +396,55 @@ export function downloadExpectedTemplateCsv(): void {
   link.click();
 }
 
+export const MAX_VEHICLE_PHOTOS = 5;
+export const MAX_SINGLE_PHOTO_BYTES = 180 * 1024;
+export const MAX_TOTAL_PHOTOS_BYTES = 720 * 1024;
+
+export function estimateDataUrlBytes(dataUrl: string): number {
+  if (!dataUrl) return 0;
+  if (dataUrl.startsWith('data:')) {
+    const commaIdx = dataUrl.indexOf(',');
+    if (commaIdx !== -1) {
+      const b64 = dataUrl.slice(commaIdx + 1);
+      const padding = b64.endsWith('==') ? 2 : b64.endsWith('=') ? 1 : 0;
+      return Math.max(0, Math.floor((b64.length * 3) / 4) - padding);
+    }
+  }
+  return new Blob([dataUrl]).size;
+}
+
+export function validateVehiclePhotos(photos?: string[] | null): { valid: boolean; totalBytes: number; message?: string } {
+  const list = Array.isArray(photos) ? photos : [];
+  if (list.length > MAX_VEHICLE_PHOTOS) {
+    return {
+      valid: false,
+      totalBytes: 0,
+      message: `Bir araca en fazla ${MAX_VEHICLE_PHOTOS} adet fotoğraf eklenebilir.`
+    };
+  }
+  const totalBytes = list.reduce((sum, item) => sum + estimateDataUrlBytes(item), 0);
+  if (totalBytes > MAX_TOTAL_PHOTOS_BYTES) {
+    const totalKb = Math.round(totalBytes / 1024);
+    const maxKb = Math.round(MAX_TOTAL_PHOTOS_BYTES / 1024);
+    return {
+      valid: false,
+      totalBytes,
+      message: `Toplam fotoğraf boyutu (${totalKb} KB) sunucu sınırını (${maxKb} KB) aşıyor. Lütfen bazı fotoğrafları kaldırın.`
+    };
+  }
+  return { valid: true, totalBytes };
+}
+
 /**
  * Akıllı telefon ve tarayıcı kameralarından yüklenen yüksek çözünürlüklü fotoğrafları
  * Firestore'un 1 MB doküman boyut sınırını aşmamak ve hızlı kaydetmek için
- * maksimum 800px genişlik ve %70 JPEG kalitesinde sıkıştırır (~30-50 KB).
+ * kademeli çözünürlük ve JPEG kalite sıkıştırması uygular (hedef <= 180 KB).
  */
 export async function compressImageFile(file: File, maxWidth = 800, quality = 0.7): Promise<string> {
+  if (file.size > 25 * 1024 * 1024) {
+    throw new Error('Fotoğraf dosyası çok büyük (maksimum 25 MB).');
+  }
+
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onerror = () => reject(new Error('Fotoğraf dosyası okunamadı'));
@@ -354,22 +452,37 @@ export async function compressImageFile(file: File, maxWidth = 800, quality = 0.
       const img = new Image();
       img.onerror = () => reject(new Error('Fotoğraf formatı desteklenmiyor'));
       img.onload = () => {
-        let width = img.width;
-        let height = img.height;
-        if (width > maxWidth) {
-          height = Math.round((height * maxWidth) / width);
-          width = maxWidth;
+        const steps = [
+          { w: maxWidth, q: quality },
+          { w: Math.min(maxWidth, 640), q: Math.min(quality, 0.55) },
+          { w: Math.min(maxWidth, 480), q: Math.min(quality, 0.42) },
+          { w: Math.min(maxWidth, 380), q: 0.34 }
+        ];
+
+        let bestDataUrl = '';
+        for (const step of steps) {
+          let width = img.width;
+          let height = img.height;
+          if (width > step.w) {
+            height = Math.max(1, Math.round((height * step.w) / width));
+            width = step.w;
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            resolve(event.target?.result as string);
+            return;
+          }
+          ctx.drawImage(img, 0, 0, width, height);
+          bestDataUrl = canvas.toDataURL('image/jpeg', step.q);
+          if (estimateDataUrlBytes(bestDataUrl) <= MAX_SINGLE_PHOTO_BYTES) {
+            resolve(bestDataUrl);
+            return;
+          }
         }
-        const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) {
-          resolve(event.target?.result as string);
-          return;
-        }
-        ctx.drawImage(img, 0, 0, width, height);
-        resolve(canvas.toDataURL('image/jpeg', quality));
+        resolve(bestDataUrl);
       };
       img.src = event.target?.result as string;
     };

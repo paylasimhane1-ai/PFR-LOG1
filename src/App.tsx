@@ -7,11 +7,12 @@ import {
   ExpectedVehicle,
   AppNotification,
   ChatMessage,
-  ChatReply,
+  ChatPresence,
   ActiveTab,
   Customer,
   WhatsAppConfig,
-  PushNotificationSettings
+  PushNotificationSettings,
+  SlaSettings
 } from './types';
 import {
   initialWarehouses,
@@ -25,9 +26,11 @@ import {
 } from './data/initialData';
 import {
   cleanPhone,
-  exportVehiclesToCsv
+  exportVehiclesToCsv,
+  validateVehiclePhotos
 } from './utils/helpers';
 import { hasPermission } from './utils/permissions';
+import { DEFAULT_SLA_SETTINGS } from './utils/slaHelpers';
 import { LoginView } from './components/LoginView';
 import { GuestPortal } from './components/GuestPortal';
 import { DashboardView } from './components/DashboardView';
@@ -36,7 +39,7 @@ import { LiveTrackingView } from './components/LiveTrackingView';
 import { VehicleManagementView } from './components/VehicleManagementView';
 import { RampManagementView } from './components/RampManagementView';
 import { ReportsView } from './components/ReportsView';
-import { ChatWidget } from './components/ChatWidget';
+import { ChatWidget, ChatSendPayload } from './components/ChatWidget';
 import { CustomerManagementModal } from './components/CustomerManagementModal';
 import { WhatsAppSettingsModal } from './components/WhatsAppSettingsModal';
 import { PushNotificationSettingsModal } from './components/PushNotificationSettingsModal';
@@ -74,7 +77,9 @@ import {
   EditVehicleModal,
   PasswordModal,
   ReleaseRampVehicleModal,
-  ConfirmModal
+  ConfirmModal,
+  SlaSettingsModal,
+  RampConfigModal
 } from './components/Modals';
 
 import {
@@ -107,7 +112,8 @@ import {
   Bell,
   MessageSquare,
   Sun,
-  Moon
+  Moon,
+  SlidersHorizontal
 } from 'lucide-react';
 import { playChime } from './utils/audio';
 import {
@@ -139,9 +145,16 @@ import {
   markNotificationAsReadInFirestore,
   saveChatMessageToFirestore,
   markChatMessageAsReadInFirestore,
+  subscribeToChatPresence,
+  upsertChatPresenceInFirestore,
   saveWarehouseToFirestore,
   subscribeToWhatsAppSettings,
-  clearAllCustomersFromFirestore
+  clearAllCustomersFromFirestore,
+  deleteRampFromFirestore,
+  saveRampsBatchToFirestore,
+  subscribeToSlaSettings,
+  saveSlaSettingsToFirestore,
+  subscribeToFirestoreErrors
 } from './lib/firebase';
 
 export default function App() {
@@ -231,6 +244,7 @@ export default function App() {
       return initialChatMessages;
     }
   });
+  const [chatPresences, setChatPresences] = useState<ChatPresence[]>([]);
 
   // Modal Visibility States
   const [showAddExpectedModal, setShowAddExpectedModal] = useState(false);
@@ -255,6 +269,10 @@ export default function App() {
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [showWarehouseModal, setShowWarehouseModal] = useState(false);
   const [showCustomerModal, setShowCustomerModal] = useState(false);
+  const [slaSettings, setSlaSettings] = useState<SlaSettings>(DEFAULT_SLA_SETTINGS);
+  const [showSlaSettingsModal, setShowSlaSettingsModal] = useState(false);
+  const [showRampConfigModal, setShowRampConfigModal] = useState(false);
+  const [rampConfigInitialWhId, setRampConfigInitialWhId] = useState<number | undefined>(undefined);
   const [customers, setCustomers] = useState<Customer[]>(() => {
     try {
       if (localStorage.getItem('yms_customers_cleared') === 'true') {
@@ -281,6 +299,10 @@ export default function App() {
   const [inAppAlert, setInAppAlert] = useState<InAppAlert | null>(null);
   const isFirstNotifLoadRef = useRef(true);
   const seenNotifIdsRef = useRef<Set<number>>(new Set());
+  const handledDeepLinkRef = useRef(false);
+  const currentUserRef = useRef<User | null>(currentUser);
+  const selectedDepoIdRef = useRef<number>(selectedDepoId);
+  const activeDepoIdsRef = useRef<Set<number>>(new Set(warehouses.filter((w) => w.aktif !== false).map((w) => w.id)));
 
   // Siyah (Karanlık) Mod / Normal Mod Tema Durumu
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
@@ -315,16 +337,18 @@ export default function App() {
     return () => window.removeEventListener('focus', handleFocus);
   }, []);
 
-  // WhatsApp linkinden gelen araç fotoğrafı veya detayını doğrudan aç
+  // WhatsApp linkinden gelen araç fotoğrafı veya detayını tek seferlik doğrudan aç
   useEffect(() => {
-    if (typeof window === 'undefined' || vehicles.length === 0) return;
+    if (typeof window === 'undefined' || vehicles.length === 0 || handledDeepLinkRef.current) return;
     try {
-      const params = new URLSearchParams(window.location.search);
-      const aracId = params.get('aracId') || params.get('arac');
+      const url = new URL(window.location.href);
+      const aracId = url.searchParams.get('aracId') || url.searchParams.get('arac');
       if (aracId) {
+        handledDeepLinkRef.current = true;
+        const viewParam = url.searchParams.get('view');
         const found = vehicles.find((v) => v.id === Number(aracId));
         if (found) {
-          if (params.get('view') === 'photos') {
+          if (viewParam === 'photos') {
             setSelectedVehicleForPhoto(found);
             setShowPhotoGalleryModal(true);
           } else {
@@ -332,6 +356,11 @@ export default function App() {
             setShowDetailViewModal(true);
           }
         }
+        url.searchParams.delete('aracId');
+        url.searchParams.delete('arac');
+        url.searchParams.delete('view');
+        const remainingQuery = url.searchParams.toString();
+        window.history.replaceState({}, '', url.pathname + (remainingQuery ? '?' + remainingQuery : '') + url.hash);
       }
     } catch {
       // ignore
@@ -353,6 +382,12 @@ export default function App() {
       setToast((curr) => (curr?.message === message ? null : curr));
     }, 4500);
   }, []);
+
+  useEffect(() => {
+    return subscribeToFirestoreErrors((msg) => {
+      showToast(msg, 'warning');
+    });
+  }, [showToast]);
 
   // Genel Onay Modalı State
   const [confirmConfig, setConfirmConfig] = useState<{
@@ -418,7 +453,13 @@ export default function App() {
 
   useEffect(() => {
     try {
-      localStorage.setItem('yms_vehicles', JSON.stringify(vehicles));
+      const sanitizedForCache = vehicles.map((v) => ({
+        ...v,
+        fotograflar: Array.isArray(v.fotograflar)
+          ? v.fotograflar.filter((src) => typeof src === 'string' && !src.startsWith('data:'))
+          : []
+      }));
+      localStorage.setItem('yms_vehicles', JSON.stringify(sanitizedForCache));
     } catch (e) {
       console.error(e);
     }
@@ -455,6 +496,24 @@ export default function App() {
       console.error(e);
     }
   }, [warehouses]);
+
+  // Canlı Sohbet Çevrimiçi Durumu (Presence Heartbeat)
+  useEffect(() => {
+    if (!currentUser || currentUser.role === 'guest') return;
+    const sendHeartbeat = () => {
+      upsertChatPresenceInFirestore({
+        username: currentUser.username,
+        role: currentUser.role,
+        depoId: currentUser.depoId,
+        lastActiveAt: Date.now(),
+        typingInChannel: null,
+        typingAt: null
+      });
+    };
+    sendHeartbeat();
+    const hbInterval = setInterval(sendHeartbeat, 35000);
+    return () => clearInterval(hbInterval);
+  }, [currentUser?.username, currentUser?.role, currentUser?.depoId]);
 
   // Firebase Firestore Canlı Eşzamanlama (Real-time Subscriptions)
   useEffect(() => {
@@ -527,11 +586,19 @@ export default function App() {
           isFirstNotifLoadRef.current = false;
           remoteNotifs.forEach((n) => seenNotifIdsRef.current.add(n.id));
         } else {
-          // Yeni gelen bekleyen bildirimleri anında telefon ve tarayıcıya kayan bildirim olarak ilet
+          // Yeni gelen bekleyen bildirimleri depo kapsamına göre telefon ve tarayıcıya kayan bildirim olarak ilet
           remoteNotifs.forEach((n) => {
             if (!seenNotifIdsRef.current.has(n.id)) {
               seenNotifIdsRef.current.add(n.id);
               if (n.status === 'BEKLİYOR') {
+                const u = currentUserRef.current;
+                const selDepo = selectedDepoIdRef.current;
+                const activeIds = activeDepoIdsRef.current;
+                if (n.depoId) {
+                  if (activeIds.size > 0 && !activeIds.has(n.depoId)) return;
+                  if (u && u.role !== 'admin' && u.depoId > 0 && n.depoId !== u.depoId) return;
+                  if (selDepo > 0 && n.depoId !== selDepo) return;
+                }
                 sendNativeNotification({
                   title: `🚨 ${n.plaka ? n.plaka + ' - ' : ''}Rampaya Çağrıldı!`,
                   body: n.text,
@@ -561,6 +628,10 @@ export default function App() {
       }
     });
 
+    const unsubPresence = subscribeToChatPresence((remotePresences) => {
+      setChatPresences(remotePresences || []);
+    });
+
     const unsubCustomers = subscribeToCustomers((remoteCustomers) => {
       if (remoteCustomers) {
         setCustomers(remoteCustomers);
@@ -579,6 +650,12 @@ export default function App() {
       }
     });
 
+    const unsubSla = subscribeToSlaSettings((remoteSla) => {
+      if (remoteSla) {
+        setSlaSettings(remoteSla);
+      }
+    });
+
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
@@ -590,8 +667,10 @@ export default function App() {
       unsubExpected();
       unsubNotifs();
       unsubChat();
+      unsubPresence();
       unsubCustomers();
       unsubWhatsApp();
+      unsubSla();
     };
   }, []);
 
@@ -647,6 +726,18 @@ export default function App() {
     return new Set(activeWarehouses.map((w) => w.id));
   }, [activeWarehouses]);
 
+  useEffect(() => {
+    currentUserRef.current = currentUser;
+  }, [currentUser]);
+
+  useEffect(() => {
+    selectedDepoIdRef.current = selectedDepoId;
+  }, [selectedDepoId]);
+
+  useEffect(() => {
+    activeDepoIdsRef.current = activeDepoIds;
+  }, [activeDepoIds]);
+
   const currentWarehouseName = useMemo(() => {
     return getWarehouseNameById(selectedDepoId);
   }, [getWarehouseNameById, selectedDepoId]);
@@ -674,6 +765,40 @@ export default function App() {
     return vehicles.filter((v) => (v.depoId || 1) === selectedDepoId);
   }, [vehicles, selectedDepoId, activeDepoIds]);
 
+  // Scoped Ramps per Warehouse
+  const currentWarehouseRamps = useMemo(() => {
+    if (selectedDepoId === 0) {
+      return ramps.filter((r) => activeDepoIds.has(r.depoId || 1));
+    }
+    return ramps.filter((r) => (r.depoId || 1) === selectedDepoId);
+  }, [ramps, selectedDepoId, activeDepoIds]);
+
+  // Live synced detail modal vehicle
+  const liveSelectedDetailVehicle = useMemo(() => {
+    if (!selectedDetailVehicle) return null;
+    return vehicles.find((v) => v.id === selectedDetailVehicle.id) || selectedDetailVehicle;
+  }, [selectedDetailVehicle, vehicles]);
+
+  const normalizePlate = useCallback((plate?: string | null) => {
+    return (plate || '').replace(/\s+/g, '').toUpperCase();
+  }, []);
+
+  const findDuplicateActiveVehicle = useCallback(
+    (dorsePlaka?: string | null, ignoreVehicleId?: number) => {
+      const target = normalizePlate(dorsePlaka);
+      if (!target) return null;
+      return (
+        vehicles.find(
+          (v) =>
+            v.durum !== 'ÇIKIŞ YAPTI' &&
+            v.id !== ignoreVehicleId &&
+            normalizePlate(v.dorsePlaka) === target
+        ) || null
+      );
+    },
+    [vehicles, normalizePlate]
+  );
+
   // Counts (Filtered by active warehouses)
   const pendingExpectedVehiclesCount = useMemo(() => {
     let list = expectedVehicles.filter((e) => activeDepoIds.has(e.depoId || 1));
@@ -683,39 +808,69 @@ export default function App() {
     return list.filter((e) => e.durum === 'BEKLENİYOR').length;
   }, [expectedVehicles, selectedDepoId, activeDepoIds]);
 
+  const resolveNotifDepoId = useCallback(
+    (n: AppNotification) => {
+      if (n.depoId && n.depoId > 0) return n.depoId;
+      const v = vehicles.find((item) => item.id === n.vehicleId);
+      return v?.depoId || 1;
+    },
+    [vehicles]
+  );
+
+  const scopedNotifications = useMemo(() => {
+    return notifications.filter((n) => {
+      const dId = resolveNotifDepoId(n);
+      if (activeDepoIds.size > 0 && !activeDepoIds.has(dId)) return false;
+      if (currentUser && currentUser.role !== 'admin' && currentUser.depoId > 0 && dId !== currentUser.depoId) {
+        return false;
+      }
+      if (selectedDepoId !== 0 && dId !== selectedDepoId) return false;
+      return true;
+    });
+  }, [notifications, resolveNotifDepoId, activeDepoIds, currentUser, selectedDepoId]);
+
   // Kullanıcı bazlı okunmamış bildirim sayısı (giriş yapan kullanıcının henüz okumadığı bildirimler)
   const pendingNotificationsCount = useMemo(() => {
     if (!currentUser) return 0;
     const currentUsername = currentUser.username;
-    return notifications.filter((n) => {
+    return scopedNotifications.filter((n) => {
       if (n.status !== 'BEKLİYOR') return false;
       const readBy = Array.isArray(n.readBy) ? n.readBy : [];
       return !readBy.includes(currentUsername);
     }).length;
-  }, [notifications, currentUser]);
+  }, [scopedNotifications, currentUser]);
 
-  // Kullanıcı bazlı okunmamış sohbet mesajı sayısı (giriş yapan kullanıcının henüz okumadığı mesajlar)
+  // Kullanıcı bazlı okunmamış sohbet mesajı sayısı (özel DM gizlilik filtresi dahil)
   const unreadChatCount = useMemo(() => {
     if (!currentUser) return 0;
-    const currentUsername = currentUser.username;
+    const myLower = currentUser.username.trim().toLowerCase();
     return chatMessages.filter((m) => {
-      if (m.sender === currentUsername) return false;
+      if (m.sender.trim().toLowerCase() === myLower) return false;
+      const ch = m.channelId || 'genel';
+      if (ch.startsWith('dm__')) {
+        const parts = ch.split('__').slice(1);
+        const isParticipant =
+          (m.recipient && m.recipient.trim().toLowerCase() === myLower) ||
+          parts.includes(myLower);
+        if (!isParticipant) return false;
+      }
       const readBy = Array.isArray(m.readBy) ? m.readBy : [];
-      return !readBy.includes(currentUsername);
+      return !readBy.some((u) => u.trim().toLowerCase() === myLower);
     }).length;
   }, [chatMessages, currentUser]);
 
   const handleMarkNotificationsAsReadForMe = useCallback(() => {
     if (!currentUser) return;
     const currentUsername = currentUser.username;
-    const unread = notifications.filter(
+    const unread = scopedNotifications.filter(
       (n) => n.status === 'BEKLİYOR' && !(Array.isArray(n.readBy) && n.readBy.includes(currentUsername))
     );
     if (unread.length === 0) return;
 
+    const unreadIds = new Set(unread.map((u) => u.id));
     setNotifications((prev) =>
       prev.map((n) => {
-        if (n.status === 'BEKLİYOR') {
+        if (unreadIds.has(n.id) && n.status === 'BEKLİYOR') {
           const currentReadBy = Array.isArray(n.readBy) ? n.readBy : [];
           if (!currentReadBy.includes(currentUsername)) {
             return { ...n, readBy: [...currentReadBy, currentUsername] };
@@ -728,7 +883,7 @@ export default function App() {
     unread.forEach((n) => {
       markNotificationAsReadInFirestore(n.id, currentUsername);
     });
-  }, [currentUser, notifications]);
+  }, [currentUser, scopedNotifications]);
 
   const driverHistory = useMemo(() => {
     const map = new Map<string, { ad: string; tel: string }>();
@@ -791,6 +946,71 @@ export default function App() {
     saveWarehouseToFirestore(updatedWarehouse);
     showToast(`Depo güncellendi: ${updatedWarehouse.ad}`);
   }, [warehouses, showToast]);
+
+  const handleSaveSlaSettings = useCallback((newSettings: SlaSettings) => {
+    setSlaSettings(newSettings);
+    saveSlaSettingsToFirestore(newSettings);
+    showToast('SLA hedef süreleri güncellendi ve tüm cihazlara aktarıldı.', 'success');
+  }, [showToast]);
+
+  const handleAddRampForWarehouse = useCallback((depoId: number, name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    const nextId = ramps.length > 0 ? Math.max(...ramps.map((r) => r.id)) + 1 : 1;
+    const newRamp: Ramp = {
+      id: nextId,
+      ad: trimmed,
+      durum: 'Boş',
+      depoId
+    };
+    setRamps((prev) => [...prev, newRamp]);
+    saveRampToFirestore(newRamp);
+    showToast(`${getWarehouseNameById(depoId)} için "${trimmed}" eklendi.`, 'success');
+  }, [ramps, getWarehouseNameById, showToast]);
+
+  const handleSeedDefaultRampsForWarehouse = useCallback((depoId: number, count: number) => {
+    const safeCount = Math.max(1, Math.min(30, Math.floor(count || 1)));
+    const existingForDepo = ramps.filter((r) => (r.depoId || 1) === depoId);
+    const baseId = ramps.length > 0 ? Math.max(...ramps.map((r) => r.id)) + 1 : 1;
+    const startNumber = existingForDepo.length + 1;
+    const newRamps: Ramp[] = Array.from({ length: safeCount }, (_, idx) => ({
+      id: baseId + idx,
+      ad: `Rampa ${startNumber + idx}`,
+      durum: 'Boş',
+      depoId
+    }));
+    setRamps((prev) => [...prev, ...newRamps]);
+    saveRampsBatchToFirestore(newRamps);
+    showToast(`${getWarehouseNameById(depoId)} için ${safeCount} adet yeni rampa oluşturuldu.`, 'success');
+  }, [ramps, getWarehouseNameById, showToast]);
+
+  const handleRenameRamp = useCallback((ramp: Ramp, newName: string) => {
+    const trimmed = newName.trim();
+    if (!trimmed) return;
+    const updated: Ramp = { ...ramp, ad: trimmed };
+    setRamps((prev) => prev.map((r) => (r.id === ramp.id ? updated : r)));
+    saveRampToFirestore(updated);
+    showToast(`Rampa adı güncellendi: ${trimmed}`, 'success');
+  }, [showToast]);
+
+  const handleDeleteRamp = useCallback((ramp: Ramp) => {
+    const occupied = vehicles.some((v) => v.rampaId === ramp.id && v.durum === 'RAMPADA');
+    if (occupied || ramp.durum === 'Dolu') {
+      showToast(`${ramp.ad} şu anda dolu olduğu için silinemez.`, 'warning');
+      return;
+    }
+    askConfirm(
+      'Rampayı Sil',
+      `"${ramp.ad}" rampasını kalıcı olarak silmek istediğinize emin misiniz?`,
+      () => {
+        setRamps((prev) => prev.filter((r) => r.id !== ramp.id));
+        deleteRampFromFirestore(ramp.id);
+        showToast(`${ramp.ad} silindi.`, 'info');
+      },
+      'danger',
+      'Evet, Rampayı Sil'
+    );
+  }, [vehicles, askConfirm, showToast]);
 
   const handleLoginSuccess = (user: User, depoId: number) => {
     setCurrentUser(user);
@@ -904,6 +1124,11 @@ export default function App() {
   };
 
   const handleOpenNewVehicleDirectly = () => {
+    const canCreate = currentUser?.role === 'admin' || hasPermission(currentUser, 'canCreateVehicle');
+    if (!canCreate) {
+      showToast('Yeni araç kaydı oluşturma yetkiniz bulunmamaktadır.', 'warning');
+      return;
+    }
     setProcessingExpectedVehicleId(null);
     setNewVehicleInitialValues({
       depoId: selectedDepoId === 0 ? 1 : selectedDepoId,
@@ -925,12 +1150,31 @@ export default function App() {
 
   // Beklenen Aracı Sahaya Al butonuna basıldığında: Bilgileri tekrar girmeden doğrudan onay modalını aç
   const handleProcessExpectedArrival = (exp: ExpectedVehicle) => {
+    const canManage = currentUser?.role === 'admin' || hasPermission(currentUser, 'canManageExpected');
+    if (!canManage) {
+      showToast('Beklenen araçları sahaya alma yetkiniz bulunmamaktadır.', 'warning');
+      return;
+    }
     setSelectedExpectedVehicleForArrival(exp);
     setShowExpectedArrivalModal(true);
   };
 
   // 1-Tıkla Doğrudan Sahaya Kabul Et (Zaten girilmiş bilgileri aynen aktarır, kullanıcıdan tekrar bilgi istemez)
   const handleDirectAdmitExpectedVehicle = (exp: ExpectedVehicle) => {
+    const canManage = currentUser?.role === 'admin' || hasPermission(currentUser, 'canManageExpected');
+    if (!canManage) {
+      showToast('Beklenen araçları sahaya alma yetkiniz bulunmamaktadır.', 'warning');
+      return;
+    }
+    const dup = findDuplicateActiveVehicle(exp.dorsePlaka);
+    if (dup) {
+      showToast(
+        `${exp.dorsePlaka} plakalı araç zaten sahada aktif görünüyor (${dup.durum}). Tekrar giriş yapılamaz!`,
+        'warning'
+      );
+      return;
+    }
+
     const nowTs = Date.now();
     const nowStr = new Date(nowTs).toLocaleString('tr-TR');
     const nowIso = new Date(nowTs).toISOString().slice(0, 10);
@@ -1010,6 +1254,11 @@ export default function App() {
 
   // İstenirse bilgileri düzenleyerek / fotoğraflayarak açma
   const handleOpenEditExpectedForm = (exp: ExpectedVehicle) => {
+    const canManage = currentUser?.role === 'admin' || hasPermission(currentUser, 'canManageExpected');
+    if (!canManage) {
+      showToast('Beklenen araçları sahaya alma yetkiniz bulunmamaktadır.', 'warning');
+      return;
+    }
     setShowExpectedArrivalModal(false);
     setSelectedExpectedVehicleForArrival(null);
     setProcessingExpectedVehicleId(exp.id);
@@ -1031,7 +1280,32 @@ export default function App() {
     setShowNewVehicleModal(true);
   };
 
-  const handleSaveNewVehicle = (vehicleData: Partial<Vehicle>) => {
+  const handleSaveNewVehicle = (vehicleData: Partial<Vehicle>): boolean => {
+    const canCreate =
+      currentUser?.role === 'admin' ||
+      hasPermission(currentUser, 'canCreateVehicle') ||
+      (Boolean(processingExpectedVehicleId) && hasPermission(currentUser, 'canManageExpected'));
+    if (!canCreate) {
+      showToast('Yeni araç kaydı oluşturma yetkiniz bulunmamaktadır.', 'warning');
+      return false;
+    }
+
+    const photoCheck = validateVehiclePhotos(vehicleData.fotograflar);
+    if (!photoCheck.valid) {
+      showToast(photoCheck.message || 'Fotoğraf boyutu veya sayısı sınırı aşıldı.', 'warning');
+      return false;
+    }
+
+    const dup = findDuplicateActiveVehicle(vehicleData.dorsePlaka);
+    if (dup) {
+      showToast(
+        `${vehicleData.dorsePlaka} plakalı araç zaten sahada aktif görünüyor (${dup.durum}). Çıkış yapılmadan yeni kayıt açılamaz!`,
+        'warning'
+      );
+      return false;
+    }
+
+    const canToggleUrgent = currentUser?.role === 'admin' || hasPermission(currentUser, 'canToggleAcil');
     const nowTs = Date.now();
     const nowStr = new Date(nowTs).toLocaleString('tr-TR');
     const nowIso = new Date(nowTs).toISOString().slice(0, 10);
@@ -1051,7 +1325,7 @@ export default function App() {
       islemTuru: (vehicleData.islemTuru === 'Tahliye' ? 'Boşaltma' : vehicleData.islemTuru as 'Boşaltma' | 'Yükleme') || 'Boşaltma',
       aciklama: vehicleData.aciklama || '',
       fotograflar: vehicleData.fotograflar || [],
-      isAcik: Boolean(vehicleData.isAcik),
+      isAcik: canToggleUrgent ? Boolean(vehicleData.isAcik) : false,
       durum: 'BEKLEMEDE',
       rampaId: null,
       isRampayaCagrildi: false,
@@ -1130,6 +1404,7 @@ export default function App() {
         }
       });
     }
+    return true;
   };
 
   const handleShareVehicleToWhatsApp = async (vehicle: Vehicle) => {
@@ -1203,6 +1478,10 @@ export default function App() {
   };
 
   const handleSaveExpectedVehicle = (data: Omit<ExpectedVehicle, 'id' | 'durum' | 'kabulTarihi'>) => {
+    if (!(currentUser?.role === 'admin' || hasPermission(currentUser, 'canManageExpected'))) {
+      showToast('Beklenen araç ekleme yetkiniz bulunmamaktadır.', 'warning');
+      return;
+    }
     const newExp: ExpectedVehicle = {
       id: Date.now(),
       ...data,
@@ -1222,6 +1501,10 @@ export default function App() {
   };
 
   const handleUpdateExpectedVehicle = (updated: ExpectedVehicle) => {
+    if (!(currentUser?.role === 'admin' || hasPermission(currentUser, 'canManageExpected'))) {
+      showToast('Beklenen araç güncelleme yetkiniz bulunmamaktadır.', 'warning');
+      return;
+    }
     if (updated.musteri && updated.musteri.trim()) {
       handleAddNewCustomerByName(updated.musteri.trim());
     }
@@ -1236,6 +1519,10 @@ export default function App() {
   };
 
   const handleDeleteExpectedSingle = (exp: ExpectedVehicle) => {
+    if (!(currentUser?.role === 'admin' || hasPermission(currentUser, 'canManageExpected'))) {
+      showToast('Beklenen araç silme yetkiniz bulunmamaktadır.', 'warning');
+      return;
+    }
     askConfirm(
       'Beklenen Aracı Sil',
       `${exp.dorsePlaka || 'Seçili'} beklenen araç kaydını silmek istediğinizden emin misiniz?`,
@@ -1248,12 +1535,20 @@ export default function App() {
   };
 
   const handleDeleteExpectedBatch = (ids: number[]) => {
+    if (!(currentUser?.role === 'admin' || hasPermission(currentUser, 'canManageExpected'))) {
+      showToast('Beklenen araçları toplu silme yetkiniz bulunmamaktadır.', 'warning');
+      return;
+    }
     setExpectedVehicles((prev) => prev.filter((e) => !ids.includes(e.id)));
     ids.forEach((id) => deleteExpectedVehicleFromFirestore(id));
     showToast(`${ids.length} adet beklenen araç silindi.`, 'info');
   };
 
   const handleImportExcelExpected = (items: ExpectedVehicle[]) => {
+    if (!(currentUser?.role === 'admin' || hasPermission(currentUser, 'canManageExpected'))) {
+      showToast('Excel ile beklenen araç aktarma yetkiniz bulunmamaktadır.', 'warning');
+      return;
+    }
     setExpectedVehicles((prev) => [...items, ...prev]);
     items.forEach((item) => saveExpectedVehicleToFirestore(item));
     showToast(`${items.length} adet beklenen araç içe aktarıldı.`);
@@ -1306,7 +1601,7 @@ export default function App() {
     if (newStatus === 'EVRAK HAZIR') {
       const canMakeReady = currentUser?.role === 'admin' || hasPermission(currentUser, 'canMakeReady');
       if (!canMakeReady) {
-        alert("Araç durumunu 'EVRAK HAZIR' yapma yetkiniz bulunmamaktadır. Bu yetki Yönetici (Admin) tarafından 'Özel Yetki Alanı' üzerinden tanımlanır.");
+        showToast("Araç durumunu 'EVRAK HAZIR' yapma yetkiniz bulunmamaktadır. Bu yetki Yönetici (Admin) tarafından 'Özel Yetki Alanı' üzerinden tanımlanır.", 'warning');
         return;
       }
 
@@ -1333,14 +1628,17 @@ export default function App() {
               );
             }
 
-            // 2. Aracı EVRAK HAZIR durumuna al ve rampa/çağrı bağlarını temizle
+            // 2. Aracı EVRAK HAZIR durumuna al ve rampa/çağrı bağlarını temizle (orijinal Evrak Kayıt zamanını koru)
             const updatedVehicle: Vehicle = {
               ...vehicle,
               durum: 'EVRAK HAZIR',
               rampaId: null,
               isRampayaCagrildi: false,
               cagrildigiRampaId: null,
-              evrakHazirTimestamp: nowTs,
+              evrakHazirTimestamp: vehicle.evrakHazirTimestamp || nowTs,
+              evrakKayitTarihi: vehicle.evrakKayitTarihi || nowStr,
+              rampadanCikisTarihi: vehicle.durum === 'RAMPADA' ? nowStr : vehicle.rampadanCikisTarihi,
+              rampadanCikisTimestamp: vehicle.durum === 'RAMPADA' ? nowTs : vehicle.rampadanCikisTimestamp,
               cikisTarihi: null,
               cikisTimestamp: null
             };
@@ -1376,6 +1674,14 @@ export default function App() {
 
     // BEKLEMEDE durumuna geçişte araç rampada ise onay sorgusu ve rampayı boşaltma
     if (newStatus === 'BEKLEMEDE' && (vehicle.durum === 'RAMPADA' || vehicle.rampaId)) {
+      const canPullBack =
+        currentUser?.role === 'admin' ||
+        hasPermission(currentUser, 'canReleaseRamp') ||
+        hasPermission(currentUser, 'canEditVehicle');
+      if (!canPullBack) {
+        showToast("Rampadaki aracı 'BEKLEMEDE' durumuna geri çekme yetkiniz bulunmamaktadır.", 'warning');
+        return;
+      }
       const currentRamp = ramps.find((r) => r.id === vehicle.rampaId);
       const rampName = currentRamp ? currentRamp.ad : (vehicle.rampaId ? `Rampa ${vehicle.rampaId}` : 'Rampa');
 
@@ -1404,6 +1710,8 @@ export default function App() {
             rampaId: null,
             isRampayaCagrildi: false,
             cagrildigiRampaId: null,
+            rampadanCikisTarihi: vehicle.durum === 'RAMPADA' ? nowStr : vehicle.rampadanCikisTarihi,
+            rampadanCikisTimestamp: vehicle.durum === 'RAMPADA' ? nowTs : vehicle.rampadanCikisTimestamp,
             cikisTarihi: null,
             cikisTimestamp: null
           };
@@ -1436,7 +1744,22 @@ export default function App() {
       return;
     }
 
+    if (newStatus === 'BEKLEMEDE' && vehicle.durum === 'ÇIKIŞ YAPTI') {
+      const canAuthorizeExit =
+        currentUser?.role === 'admin' || hasPermission(currentUser, 'canAuthorizeExit');
+      if (!canAuthorizeExit) {
+        showToast('Çıkış yapmış aracı tekrar sahaya alma yetkiniz bulunmamaktadır.', 'warning');
+        return;
+      }
+    }
+
     if (newStatus === 'ÇIKIŞ YAPTI') {
+      const canAuthorizeExit =
+        currentUser?.role === 'admin' || hasPermission(currentUser, 'canAuthorizeExit');
+      if (!canAuthorizeExit) {
+        showToast('Araç çıkışı onaylama yetkiniz bulunmamaktadır.', 'warning');
+        return;
+      }
       askConfirm(
         'Araç Çıkışı Onayı',
         `${vehicle.dorsePlaka} plakalı aracı ÇIKIŞ YAPTI durumuna getirmek ve sahadan çıkışını kaydetmek istediğinizden emin misiniz?`,
@@ -1474,8 +1797,18 @@ export default function App() {
         }
       );
     } else {
+      if (newStatus === 'RAMPADA') {
+        const canAssign =
+          currentUser?.role === 'admin' ||
+          currentUser?.role === 'security' ||
+          hasPermission(currentUser, 'canAssignRamp');
+        if (!canAssign) {
+          showToast("Araç durumunu 'RAMPADA' yapma yetkiniz bulunmamaktadır.", 'warning');
+          return;
+        }
+      }
       if (newStatus === 'RAMPADA' && !vehicle.rampaId) {
-        alert("Bir aracı 'RAMPADA' durumuna almak için lütfen yanındaki 'Rampa Atama' sütunundan boş bir rampa seçiniz. Rampa seçildiğinde aracın durumu otomatik olarak RAMPADA yapılacaktır.");
+        showToast("Bir aracı 'RAMPADA' durumuna almak için lütfen yanındaki 'Rampa Atama' sütunundan boş bir rampa seçiniz.", 'warning');
         return;
       }
 
@@ -1486,10 +1819,22 @@ export default function App() {
             updatedVehicle = {
               ...v,
               durum: newStatus,
-              evrakHazirTimestamp: newStatus === 'EVRAK HAZIR' ? nowTs : v.evrakHazirTimestamp,
-              evrakKayitTarihi: newStatus === 'EVRAK HAZIR' ? nowStr : v.evrakKayitTarihi,
+              evrakHazirTimestamp:
+                newStatus === 'EVRAK HAZIR'
+                  ? v.evrakHazirTimestamp || nowTs
+                  : newStatus === 'RAMPADA'
+                  ? v.evrakHazirTimestamp || nowTs
+                  : v.evrakHazirTimestamp,
+              evrakKayitTarihi:
+                newStatus === 'EVRAK HAZIR'
+                  ? v.evrakKayitTarihi || nowStr
+                  : newStatus === 'RAMPADA'
+                  ? v.evrakKayitTarihi || nowStr
+                  : v.evrakKayitTarihi,
               rampadaTimestamp: newStatus === 'RAMPADA' ? nowTs : v.rampadaTimestamp,
               rampayaGirisTarihi: newStatus === 'RAMPADA' ? nowStr : v.rampayaGirisTarihi,
+              rampadanCikisTarihi: newStatus === 'RAMPADA' ? null : v.rampadanCikisTarihi,
+              rampadanCikisTimestamp: newStatus === 'RAMPADA' ? null : v.rampadanCikisTimestamp,
               cikisTarihi: null,
               cikisTimestamp: null
             };
@@ -1524,7 +1869,7 @@ export default function App() {
       hasPermission(currentUser, 'canAssignRamp');
 
     if (!canAssign) {
-      alert('Rampa değişiklikleri ve araç atamaları Yönetim ve yetkili personel yetkisine tabidir.');
+      showToast('Rampa değişiklikleri ve araç atamaları Yönetim ve yetkili personel yetkisine tabidir.', 'warning');
       return;
     }
 
@@ -1533,11 +1878,17 @@ export default function App() {
     const oldRampId = vehicle.rampaId;
 
     if (rampaId) {
+      const targetRampObj = ramps.find((r) => r.id === rampaId);
+      if (targetRampObj && (targetRampObj.depoId || 1) !== (vehicle.depoId || 1)) {
+        showToast(`${targetRampObj.ad} farklı bir depoya ait! Lütfen aracın bulunduğu depodaki bir rampayı seçiniz.`, 'warning');
+        return;
+      }
+
       const occupiedByOther = vehicles.find(
         (v) => v.rampaId === rampaId && v.durum === 'RAMPADA' && v.id !== vehicle.id
       );
       if (occupiedByOther) {
-        alert(`Bu rampa şu anda ${occupiedByOther.dorsePlaka} plakalı araç tarafından kullanılmaktadır. Lütfen boş bir rampa seçiniz.`);
+        showToast(`Bu rampa şu anda ${occupiedByOther.dorsePlaka} plakalı araç tarafından kullanılmaktadır. Lütfen boş bir rampa seçiniz.`, 'warning');
         return;
       }
 
@@ -1548,6 +1899,8 @@ export default function App() {
           durum: 'RAMPADA',
           rampadaTimestamp: nowTs,
           rampayaGirisTarihi: nowStr,
+          rampadanCikisTarihi: null,
+          rampadanCikisTimestamp: null,
           evrakHazirTimestamp: vehicle.evrakHazirTimestamp || nowTs,
           evrakKayitTarihi: vehicle.evrakKayitTarihi || nowStr,
           isRampayaCagrildi: false,
@@ -1653,7 +2006,7 @@ export default function App() {
       if (vehicle.durum === 'RAMPADA' || oldRampId) {
         const canReleaseToReady = currentUser?.role === 'admin' || hasPermission(currentUser, 'canMakeReady') || hasPermission(currentUser, 'canReleaseRamp');
         if (!canReleaseToReady) {
-          alert("Rampadaki aracı rampa atamasından çıkarıp 'EVRAK HAZIR' durumuna geri alma yetkiniz bulunmamaktadır. Bu yetki Yönetici (Admin) tarafından 'Özel Yetkiler' alanından verilebilir.");
+          showToast("Rampadaki aracı rampa atamasından çıkarıp 'EVRAK HAZIR' durumuna geri alma yetkiniz bulunmamaktadır.", 'warning');
           return;
         }
 
@@ -1668,7 +2021,10 @@ export default function App() {
               durum: 'EVRAK HAZIR',
               isRampayaCagrildi: false,
               cagrildigiRampaId: null,
-              evrakHazirTimestamp: nowTs
+              evrakHazirTimestamp: vehicle.evrakHazirTimestamp || nowTs,
+              evrakKayitTarihi: vehicle.evrakKayitTarihi || nowStr,
+              rampadanCikisTarihi: nowStr,
+              rampadanCikisTimestamp: nowTs
             };
             setVehicles((prev) =>
               prev.map((v) => (v.id === vehicle.id ? updatedVehicle : v))
@@ -1710,13 +2066,14 @@ export default function App() {
   };
 
   const handleSendAdminCallRequest = (vehicle: Vehicle) => {
-    if (currentUser?.role !== 'admin') {
-      alert('Güvenliğe çağrı gönderme yetkisi sadece Yöneticiye (Admin) aittir.');
+    const canCall = currentUser?.role === 'admin' || hasPermission(currentUser, 'canCallVehicle');
+    if (!canCall) {
+      showToast('Güvenliğe çağrı gönderme yetkiniz bulunmamaktadır.', 'warning');
       return;
     }
 
     if (vehicle.isRampayaCagrildi || vehicle.durum === 'RAMPADA') {
-      alert('Bu araç zaten çağrılmış veya rampadadır.');
+      showToast('Bu araç zaten çağrılmış veya rampadadır.', 'warning');
       return;
     }
 
@@ -1730,6 +2087,7 @@ export default function App() {
       id: Date.now(),
       type: 'ADMIN_CAGRI_ISTEGI',
       vehicleId: vehicle.id,
+      depoId: vehicle.depoId || 1,
       plaka: vehicle.dorsePlaka,
       musteri: vehicle.musteri,
       soforAd: vehicle.soforAd,
@@ -1741,10 +2099,16 @@ export default function App() {
 
     setNotifications((prev) => [newNotif, ...prev]);
     saveNotificationToFirestore(newNotif);
-    alert(`${vehicle.dorsePlaka} plakalı araç için Güvenlik ekranına çağrı isteği gönderildi. Rampayı Güvenlik seçecektir.`);
+    showToast(`${vehicle.dorsePlaka} plakalı araç için Güvenlik ekranına çağrı isteği gönderildi.`, 'info');
   };
 
   const handleCancelRampCall = (vehicle: Vehicle) => {
+    const canCall = currentUser?.role === 'admin' || hasPermission(currentUser, 'canCallVehicle');
+    if (!canCall) {
+      showToast('Rampa çağrısını iptal etme yetkiniz bulunmamaktadır.', 'warning');
+      return;
+    }
+
     const notif = notifications.find((n) => n.vehicleId === vehicle.id && n.status === 'BEKLİYOR');
 
     if (vehicle.durum === 'RAMPADA' || (!notif && vehicle.rampaId)) {
@@ -1781,6 +2145,7 @@ export default function App() {
           id: Date.now(),
           type: 'CAGRI_IPTALI',
           vehicleId: vehicle.id,
+          depoId: vehicle.depoId || 1,
           plaka: vehicle.dorsePlaka,
           text: `🚨 ÇAĞRI İPTALİ: ${vehicle.dorsePlaka} (${vehicle.musteri}) araç çağrısı İPTAL EDİLDİ. Lütfen şoförü yönlendirmeyiniz!`,
           time: new Date().toLocaleTimeString('tr-TR').slice(0, 5),
@@ -1798,7 +2163,7 @@ export default function App() {
   const handleToggleAcil = (vehicle: Vehicle) => {
     const canToggle = currentUser?.role === 'admin' || hasPermission(currentUser, 'canToggleAcil');
     if (!canToggle) {
-      alert('Acil araç durumunu değiştirme yetkiniz bulunmamaktadır.');
+      showToast('Acil araç durumunu değiştirme yetkiniz bulunmamaktadır.', 'warning');
       return;
     }
     const updatedStatus = !vehicle.isAcik;
@@ -1810,15 +2175,97 @@ export default function App() {
     showToast(`${vehicle.dorsePlaka} plakalı araç durumu ${updatedStatus ? 'ACİL ARAÇ' : 'Normal Araç'} olarak güncellendi.`, 'info');
   };
 
-  const handleRampStatusChange = (ramp: Ramp, newStatus: Ramp['durum']) => {
-    const updatedRamp: Ramp = { ...ramp, durum: newStatus };
+  const handleBulkMakeReady = (targetVehicles: Vehicle[]) => {
+    const canReady = currentUser?.role === 'admin' || hasPermission(currentUser, 'canMakeReady');
+    if (!canReady) {
+      showToast("Araçları 'EVRAK HAZIR' durumuna getirme yetkiniz bulunmamaktadır.", 'warning');
+      return;
+    }
+
+    const pendingVehicles = targetVehicles.filter((v) => v.durum === 'BEKLEMEDE');
+    if (pendingVehicles.length === 0) {
+      showToast("Seçili araçlar arasında 'BEKLEMEDE' durumunda araç bulunamadı.", 'info');
+      return;
+    }
+
+    const previewPlates = pendingVehicles
+      .slice(0, 6)
+      .map((v) => v.dorsePlaka)
+      .join(', ');
+    const moreSuffix = pendingVehicles.length > 6 ? ` (+${pendingVehicles.length - 6} araç daha)` : '';
+
+    askConfirm(
+      'Toplu Evrak Hazır Onayı',
+      `Seçilen ${pendingVehicles.length} adet BEKLEMEDE durumundaki aracı tek seferde 'EVRAK HAZIR' olarak onaylamak istediğinizden emin misiniz?\n\nAraçlar: ${previewPlates}${moreSuffix}`,
+      () => {
+        const nowTs = Date.now();
+        const nowStr = new Date(nowTs).toLocaleString('tr-TR');
+        const updatedMap = new Map<number, Vehicle>();
+
+        pendingVehicles.forEach((v) => {
+          updatedMap.set(v.id, {
+            ...v,
+            durum: 'EVRAK HAZIR',
+            evrakHazirTimestamp: v.evrakHazirTimestamp || nowTs,
+            evrakKayitTarihi: v.evrakKayitTarihi || nowStr,
+            cikisTarihi: null,
+            cikisTimestamp: null
+          });
+        });
+
+        setVehicles((prev) =>
+          prev.map((v) => {
+            const updated = updatedMap.get(v.id);
+            return updated && v.durum === 'BEKLEMEDE' ? updated : v;
+          })
+        );
+
+        updatedMap.forEach((u) => {
+          saveVehicleToFirestore(u);
+        });
+
+        showToast(`${pendingVehicles.length} araç 'EVRAK HAZIR' durumuna güncellendi.`, 'success');
+      },
+      'info',
+      `Evet, ${pendingVehicles.length} Aracı Onayla`
+    );
+  };
+
+  const handleRampStatusChange = (ramp: Ramp, newStatus: Ramp['durum'], arizaNotu?: string | null) => {
+    const canManageRamps =
+      currentUser?.role === 'admin' ||
+      currentUser?.role === 'security' ||
+      hasPermission(currentUser, 'canManageRampStatus');
+    if (!canManageRamps) {
+      showToast('Rampa durumunu değiştirme yetkiniz bulunmamaktadır.', 'warning');
+      return;
+    }
+
+    const isMaintenance = newStatus === 'Arızalı' || newStatus === 'Bakımda';
+    const updatedRamp: Ramp = {
+      ...ramp,
+      durum: newStatus,
+      arizaNotu: isMaintenance ? (arizaNotu !== undefined ? arizaNotu : (ramp.arizaNotu ?? null)) : null,
+      bakimBaslangic: isMaintenance ? (ramp.bakimBaslangic || new Date().toLocaleString('tr-TR').slice(0, 16)) : null
+    };
     setRamps((prev) => prev.map((r) => (r.id === ramp.id ? updatedRamp : r)));
     saveRampToFirestore(updatedRamp);
 
     if (newStatus !== 'Dolu') {
       const v = vehicles.find((item) => item.rampaId === ramp.id && item.durum === 'RAMPADA');
       if (v) {
-        const updatedV: Vehicle = { ...v, rampaId: null, durum: 'EVRAK HAZIR', isRampayaCagrildi: false };
+        const nowTs = Date.now();
+        const nowStr = new Date(nowTs).toLocaleString('tr-TR');
+        const updatedV: Vehicle = {
+          ...v,
+          rampaId: null,
+          durum: 'EVRAK HAZIR',
+          isRampayaCagrildi: false,
+          evrakHazirTimestamp: v.evrakHazirTimestamp || nowTs,
+          evrakKayitTarihi: v.evrakKayitTarihi || nowStr,
+          rampadanCikisTarihi: nowStr,
+          rampadanCikisTimestamp: nowTs
+        };
         setVehicles((prev) =>
           prev.map((item) => (item.id === v.id ? updatedV : item))
         );
@@ -1829,19 +2276,33 @@ export default function App() {
   };
 
   const handleChangeVehicleRamp = (vehicle: Vehicle, targetRampId: number) => {
+    const canAssign =
+      currentUser?.role === 'admin' ||
+      currentUser?.role === 'security' ||
+      hasPermission(currentUser, 'canAssignRamp');
+    if (!canAssign) {
+      showToast('Rampa değiştirme yetkiniz bulunmamaktadır.', 'warning');
+      return;
+    }
+
     if (vehicle.rampaId === targetRampId) return;
+
+    const targetRamp = ramps.find((r) => r.id === targetRampId);
+    if (targetRamp && (targetRamp.depoId || 1) !== (vehicle.depoId || 1)) {
+      showToast(`${targetRamp.ad} farklı bir depoya ait! Araç yalnızca kendi deposundaki rampaya taşınabilir.`, 'warning');
+      return;
+    }
 
     // Hedef rampa başka bir araç tarafından işgal edilmiş mi kontrol et
     const occupiedByOther = vehicles.find(
       (v) => v.rampaId === targetRampId && v.durum === 'RAMPADA' && v.id !== vehicle.id
     );
     if (occupiedByOther) {
-      alert(`Hedef rampa şu anda ${occupiedByOther.dorsePlaka} plakalı araç tarafından kullanılmaktadır.`);
+      showToast(`Hedef rampa şu anda ${occupiedByOther.dorsePlaka} plakalı araç tarafından kullanılmaktadır.`, 'warning');
       return;
     }
 
     const currentRampName = getRampName(vehicle.rampaId);
-    const targetRamp = ramps.find((r) => r.id === targetRampId);
     const targetRampName = targetRamp ? targetRamp.ad : `Rampa ${targetRampId}`;
 
     askConfirm(
@@ -1849,6 +2310,7 @@ export default function App() {
       `Rampa değiştirmek istediğinizden emin misiniz?\n\n${vehicle.dorsePlaka} plakalı aracın rampasını ${currentRampName ? `${currentRampName} üzerinden ` : ''}${targetRampName} olarak değiştirmek üzeresiniz.`,
       () => {
         const nowTs = Date.now();
+        const nowStr = new Date(nowTs).toLocaleString('tr-TR');
         const oldRampId = vehicle.rampaId;
 
         const updatedVehicle: Vehicle = {
@@ -1856,6 +2318,11 @@ export default function App() {
           rampaId: targetRampId,
           durum: 'RAMPADA',
           rampadaTimestamp: nowTs,
+          rampayaGirisTarihi: nowStr,
+          rampadanCikisTarihi: null,
+          rampadanCikisTimestamp: null,
+          evrakHazirTimestamp: vehicle.evrakHazirTimestamp || nowTs,
+          evrakKayitTarihi: vehicle.evrakKayitTarihi || nowStr,
           isRampayaCagrildi: false,
           cagrildigiRampaId: null
         };
@@ -1896,6 +2363,12 @@ export default function App() {
 
   // Rampadan çıkar ve sahadan ÇIKIŞ YAPTI olarak işle
   const handleConfirmRampReleaseAndExit = (vehicle: Vehicle) => {
+    const canAuthorizeExit =
+      currentUser?.role === 'admin' || hasPermission(currentUser, 'canAuthorizeExit');
+    if (!canAuthorizeExit) {
+      showToast('Araç çıkışı onaylama yetkiniz bulunmamaktadır.', 'warning');
+      return;
+    }
     const nowTs = Date.now();
     const nowStr = new Date(nowTs).toLocaleString('tr-TR');
     const oldRampId = vehicle.rampaId;
@@ -1942,7 +2415,7 @@ export default function App() {
   const handleConfirmRampReleaseOnly = (vehicle: Vehicle) => {
     const canReleaseToReady = currentUser?.role === 'admin' || hasPermission(currentUser, 'canMakeReady') || hasPermission(currentUser, 'canReleaseRamp');
     if (!canReleaseToReady) {
-      alert("Rampadaki aracı 'EVRAK HAZIR' durumuna geri alma yetkiniz bulunmamaktadır. Bu yetki Yönetici (Admin) tarafından 'Özel Yetkiler' alanından verilebilir.");
+      showToast("Rampadaki aracı 'EVRAK HAZIR' durumuna geri alma yetkiniz bulunmamaktadır.", 'warning');
       return;
     }
 
@@ -1951,6 +2424,8 @@ export default function App() {
       "Rampadaki Aracı 'EVRAK HAZIR' Durumuna Geri Al",
       `${vehicle.dorsePlaka} plakalı araç şu anda ${rampName} üzerinde bulunmaktadır. Araç rampadan indirilip rampa 'Boş' durumuna getirilecek ve aracın durumu 'EVRAK HAZIR' olarak güncellenecektir. Onaylıyor musunuz?`,
       () => {
+        const nowTs = Date.now();
+        const nowStr = new Date(nowTs).toLocaleString('tr-TR');
         const oldRampId = vehicle.rampaId;
 
         const updatedVehicle: Vehicle = {
@@ -1959,7 +2434,10 @@ export default function App() {
           durum: 'EVRAK HAZIR',
           isRampayaCagrildi: false,
           cagrildigiRampaId: null,
-          evrakHazirTimestamp: Date.now()
+          evrakHazirTimestamp: vehicle.evrakHazirTimestamp || nowTs,
+          evrakKayitTarihi: vehicle.evrakKayitTarihi || nowStr,
+          rampadanCikisTarihi: nowStr,
+          rampadanCikisTimestamp: nowTs
         };
 
         setVehicles((prev) =>
@@ -1991,8 +2469,9 @@ export default function App() {
   };
 
   const handleCallVehicleToRamp = (vehicle: Vehicle, ramp: Ramp) => {
-    if (currentUser?.role !== 'admin') {
-      alert('Araç çağırma işlemi sadece Yönetici (Admin) tarafından yapılabilir.');
+    const canCall = currentUser?.role === 'admin' || hasPermission(currentUser, 'canCallVehicle');
+    if (!canCall) {
+      showToast('Araç çağırma işlemi için yetkiniz bulunmamaktadır.', 'warning');
       return;
     }
 
@@ -2014,6 +2493,7 @@ export default function App() {
     const notif: AppNotification = {
       id: Date.now(),
       vehicleId: vehicle.id,
+      depoId: vehicle.depoId || 1,
       plaka: vehicle.dorsePlaka,
       musteri: vehicle.musteri,
       soforAd: vehicle.soforAd,
@@ -2076,12 +2556,26 @@ export default function App() {
   };
 
   const handleAssignVehicleDirectlyToRamp = (vehicle: Vehicle, ramp: Ramp) => {
+    const canAssign =
+      currentUser?.role === 'admin' ||
+      currentUser?.role === 'security' ||
+      hasPermission(currentUser, 'canAssignRamp');
+    if (!canAssign) {
+      showToast('Doğrudan rampa atama yetkiniz bulunmamaktadır.', 'warning');
+      return;
+    }
+
+    if ((ramp.depoId || 1) !== (vehicle.depoId || 1)) {
+      showToast(`${ramp.ad} farklı bir depoya aittir. Lütfen aracın kendi deposundan rampa seçiniz.`, 'warning');
+      return;
+    }
+
     // Hedef rampa dolu mu kontrol et
     const occupiedByOther = vehicles.find(
       (v) => v.rampaId === ramp.id && v.durum === 'RAMPADA' && v.id !== vehicle.id
     );
     if (occupiedByOther) {
-      alert(`${ramp.ad} şu anda ${occupiedByOther.dorsePlaka} plakalı araç tarafından kullanılmaktadır.`);
+      showToast(`${ramp.ad} şu anda ${occupiedByOther.dorsePlaka} plakalı araç tarafından kullanılmaktadır.`, 'warning');
       return;
     }
 
@@ -2095,12 +2589,18 @@ export default function App() {
       confirmMessage,
       () => {
         const nowTs = Date.now();
+        const nowStr = new Date(nowTs).toLocaleString('tr-TR');
         const oldRampId = vehicle.rampaId;
         const updatedVehicle: Vehicle = {
           ...vehicle,
           rampaId: ramp.id,
           durum: 'RAMPADA',
           rampadaTimestamp: nowTs,
+          rampayaGirisTarihi: nowStr,
+          rampadanCikisTarihi: null,
+          rampadanCikisTimestamp: null,
+          evrakHazirTimestamp: vehicle.evrakHazirTimestamp || nowTs,
+          evrakKayitTarihi: vehicle.evrakKayitTarihi || nowStr,
           isRampayaCagrildi: false,
           cagrildigiRampaId: null
         };
@@ -2182,16 +2682,24 @@ export default function App() {
   };
 
   const handleConfirmSecurityOrientation = (notification: AppNotification, rampId: number, note: string) => {
+    const canApprove =
+      currentUser?.role === 'admin' || hasPermission(currentUser, 'canApproveCall');
+    if (!canApprove) {
+      showToast('Güvenlik rampa yönlendirmesi ve çağrı onayı yapma yetkiniz bulunmamaktadır.', 'warning');
+      return;
+    }
+
     // Hedef rampa dolu mu kontrol et
     const occupiedByOther = vehicles.find(
       (v) => v.rampaId === rampId && v.durum === 'RAMPADA' && v.id !== notification.vehicleId
     );
     if (occupiedByOther) {
-      alert(`Seçilen rampa şu anda ${occupiedByOther.dorsePlaka} plakalı araç tarafından kullanılmaktadır.`);
+      showToast(`Seçilen rampa şu anda ${occupiedByOther.dorsePlaka} plakalı araç tarafından kullanılmaktadır.`, 'warning');
       return;
     }
 
     const nowTs = Date.now();
+    const nowStr = new Date(nowTs).toLocaleString('tr-TR');
     let updatedVehicleRecord: Vehicle | null = null;
     let oldRampId: number | null = null;
 
@@ -2212,6 +2720,11 @@ export default function App() {
             rampaId: rampId,
             durum: 'RAMPADA',
             rampadaTimestamp: nowTs,
+            rampayaGirisTarihi: nowStr,
+            rampadanCikisTarihi: null,
+            rampadanCikisTimestamp: null,
+            evrakHazirTimestamp: v.evrakHazirTimestamp || nowTs,
+            evrakKayitTarihi: v.evrakKayitTarihi || nowStr,
             isRampayaCagrildi: false,
             cagrildigiRampaId: null,
             guvenlikNotlari: updatedNotes
@@ -2295,6 +2808,12 @@ export default function App() {
   };
 
   const handleSaveSecurityNoteOnly = (notification: AppNotification, note: string) => {
+    const canApprove =
+      currentUser?.role === 'admin' || hasPermission(currentUser, 'canApproveCall');
+    if (!canApprove) {
+      showToast('Güvenlik çağrısına not ekleme yetkiniz bulunmamaktadır.', 'warning');
+      return;
+    }
     const nowTs = Date.now();
     let updatedVehicleRecord: Vehicle | null = null;
 
@@ -2326,6 +2845,7 @@ export default function App() {
       id: Date.now(),
       type: 'FEEDBACK_TO_ADMIN',
       vehicleId: notification.vehicleId,
+      depoId: resolveNotifDepoId(notification),
       plaka: notification.plaka,
       text: `💬 GÜVENLİK NOTU (${notification.plaka}): "${note.trim()}"`,
       time: new Date().toLocaleTimeString('tr-TR').slice(0, 5),
@@ -2340,14 +2860,34 @@ export default function App() {
   };
 
   const handleUndoExit = (vehicle: Vehicle) => {
+    const canAuthorizeExit =
+      currentUser?.role === 'admin' || hasPermission(currentUser, 'canAuthorizeExit');
+    if (!canAuthorizeExit) {
+      showToast('Çıkış işlemini geri alma yetkiniz bulunmamaktadır.', 'warning');
+      return;
+    }
+
+    const dup = findDuplicateActiveVehicle(vehicle.dorsePlaka, vehicle.id);
+    if (dup) {
+      showToast(
+        `${vehicle.dorsePlaka} plakalı başka bir aktif kayıt zaten sahada (${dup.durum}). Çakışmayı önlemek için geri alınamadı.`,
+        'warning'
+      );
+      return;
+    }
+
     askConfirm(
       'Çıkışı Geri Al',
       `${vehicle.dorsePlaka} plakalı aracın çıkış işlemini iptal edip sahaya (EVRAK HAZIR durumuna) geri almak istediğinizden emin misiniz?`,
       () => {
+        const nowTs = Date.now();
+        const nowStr = new Date(nowTs).toLocaleString('tr-TR');
         const updatedVehicle: Vehicle = {
           ...vehicle,
           durum: 'EVRAK HAZIR',
           rampaId: null,
+          evrakHazirTimestamp: vehicle.evrakHazirTimestamp || nowTs,
+          evrakKayitTarihi: vehicle.evrakKayitTarihi || nowStr,
           cikisTarihi: null,
           cikisTimestamp: null
         };
@@ -2360,29 +2900,86 @@ export default function App() {
     );
   };
 
-  const handleSaveVehicleEdit = (updated: Vehicle) => {
+  const handleSaveVehicleEdit = (updated: Vehicle): boolean => {
+    const canEdit = currentUser?.role === 'admin' || hasPermission(currentUser, 'canEditVehicle');
+    if (!canEdit) {
+      showToast('Araç bilgilerini düzenleme yetkiniz bulunmamaktadır.', 'warning');
+      return false;
+    }
+
+    const photoCheck = validateVehiclePhotos(updated.fotograflar);
+    if (!photoCheck.valid) {
+      showToast(photoCheck.message || 'Fotoğraf boyutu veya sayısı sınırı aşıldı.', 'warning');
+      return false;
+    }
+
     const nowStr = new Date().toLocaleString('tr-TR');
     const nowTs = Date.now();
 
     const originalVehicle = vehicles.find((v) => v.id === updated.id);
 
+    if (
+      originalVehicle &&
+      originalVehicle.durum !== updated.durum &&
+      (updated.durum === 'ÇIKIŞ YAPTI' || originalVehicle.durum === 'ÇIKIŞ YAPTI')
+    ) {
+      const canAuthorizeExit = currentUser?.role === 'admin' || hasPermission(currentUser, 'canAuthorizeExit');
+      if (!canAuthorizeExit) {
+        showToast('Araç çıkış / geri alma yetkiniz bulunmamaktadır.', 'warning');
+        return false;
+      }
+    }
+
+    if (originalVehicle && Boolean(updated.isAcik) !== Boolean(originalVehicle.isAcik)) {
+      const canToggleUrgent = currentUser?.role === 'admin' || hasPermission(currentUser, 'canToggleAcil');
+      if (!canToggleUrgent) {
+        showToast('Acil araç durumunu değiştirme yetkiniz bulunmamaktadır.', 'warning');
+        return false;
+      }
+    }
+
+    // 0. Aktif araçlarda mükerrer dorse plaka kontrolü
+    if (updated.durum !== 'ÇIKIŞ YAPTI') {
+      const dup = findDuplicateActiveVehicle(updated.dorsePlaka, updated.id);
+      if (dup) {
+        showToast(
+          `${updated.dorsePlaka} plakalı araç zaten sahada aktif görünüyor (${dup.durum}). Mükerrer aktif kayıt oluşturulamaz.`,
+          'warning'
+        );
+        return false;
+      }
+    }
+
     // 1. Evrak hazır yetki kontrolü
     if (updated.durum === 'EVRAK HAZIR' && originalVehicle?.durum !== 'EVRAK HAZIR') {
       const canMakeReady = currentUser?.role === 'admin' || hasPermission(currentUser, 'canMakeReady');
       if (!canMakeReady) {
-        alert("Araç durumunu 'EVRAK HAZIR' yapma yetkiniz bulunmamaktadır. Bu yetki Yönetici (Admin) tarafından 'Özel Yetki Alanı' üzerinden tanımlanır.");
-        return;
+        showToast("Araç durumunu 'EVRAK HAZIR' yapma yetkiniz bulunmamaktadır.", 'warning');
+        return false;
       }
     }
 
-    // 2. Hedef rampa dolu mu kontrol et
+    // 2. Hedef rampa dolu mu veya yetki var mı kontrol et
     if (updated.rampaId && updated.rampaId !== originalVehicle?.rampaId) {
+      const canAssign =
+        currentUser?.role === 'admin' ||
+        currentUser?.role === 'security' ||
+        hasPermission(currentUser, 'canAssignRamp');
+      if (!canAssign) {
+        showToast('Rampa atama veya değiştirme yetkiniz bulunmamaktadır.', 'warning');
+        return false;
+      }
+      const targetRampObj = ramps.find((r) => r.id === updated.rampaId);
+      if (targetRampObj && (targetRampObj.depoId || 1) !== (updated.depoId || 1)) {
+        showToast(`${targetRampObj.ad} seçili depoya ait değil. Lütfen aynı depodan rampa seçiniz.`, 'warning');
+        return false;
+      }
       const occupiedByOther = vehicles.find(
         (v) => v.rampaId === updated.rampaId && v.durum === 'RAMPADA' && v.id !== updated.id
       );
       if (occupiedByOther) {
-        alert(`Seçilen rampa şu anda ${occupiedByOther.dorsePlaka} plakalı araç tarafından kullanılmaktadır. Lütfen boş bir rampa seçiniz.`);
-        return;
+        showToast(`Seçilen rampa şu anda ${occupiedByOther.dorsePlaka} plakalı araç tarafından kullanılmaktadır. Lütfen boş bir rampa seçiniz.`, 'warning');
+        return false;
       }
     }
 
@@ -2422,9 +3019,19 @@ export default function App() {
 
       // Rampa atandıysa veya rampa değiştiyse
       if (finalVehicle.rampaId) {
+        const rampChanged = finalVehicle.rampaId !== originalVehicle?.rampaId || originalVehicle?.durum !== 'RAMPADA';
         if (finalVehicle.durum === 'EVRAK HAZIR' || finalVehicle.durum === 'BEKLEMEDE') {
           finalVehicle.durum = 'RAMPADA';
+        }
+        if (rampChanged) {
           finalVehicle.rampadaTimestamp = nowTs;
+          finalVehicle.rampayaGirisTarihi = nowStr;
+          finalVehicle.rampadanCikisTarihi = null;
+          finalVehicle.rampadanCikisTimestamp = null;
+        }
+        if (!finalVehicle.evrakHazirTimestamp) {
+          finalVehicle.evrakHazirTimestamp = nowTs;
+          finalVehicle.evrakKayitTarihi = finalVehicle.evrakKayitTarihi || nowStr;
         }
         finalVehicle.isRampayaCagrildi = false;
         finalVehicle.cagrildigiRampaId = null;
@@ -2460,6 +3067,11 @@ export default function App() {
         removeVehicleCallNotifications(finalVehicle.id, finalVehicle.dorsePlaka);
       }
 
+      if (finalVehicle.durum === 'EVRAK HAZIR') {
+        finalVehicle.evrakHazirTimestamp = finalVehicle.evrakHazirTimestamp || nowTs;
+        finalVehicle.evrakKayitTarihi = finalVehicle.evrakKayitTarihi || nowStr;
+      }
+
       if (finalVehicle.islemTuru === 'Tahliye') {
         finalVehicle.islemTuru = 'Boşaltma';
       }
@@ -2479,8 +3091,8 @@ export default function App() {
     if (originalVehicle && (originalVehicle.durum === 'RAMPADA' || originalVehicle.rampaId) && updated.durum === 'EVRAK HAZIR') {
       const canReleaseToReady = currentUser?.role === 'admin' || hasPermission(currentUser, 'canMakeReady') || hasPermission(currentUser, 'canReleaseRamp');
       if (!canReleaseToReady) {
-        alert("Rampadaki aracı 'EVRAK HAZIR' durumuna alma yetkiniz bulunmamaktadır. Bu yetki Yönetici (Admin) tarafından 'Özel Yetkiler' alanından verilebilir.");
-        return;
+        showToast("Rampadaki aracı 'EVRAK HAZIR' durumuna alma yetkiniz bulunmamaktadır.", 'warning');
+        return false;
       }
       const rampName = getRampName(originalVehicle.rampaId);
       askConfirm(
@@ -2493,14 +3105,17 @@ export default function App() {
             durum: 'EVRAK HAZIR',
             isRampayaCagrildi: false,
             cagrildigiRampaId: null,
-            evrakHazirTimestamp: nowTs
+            evrakHazirTimestamp: originalVehicle.evrakHazirTimestamp || nowTs,
+            evrakKayitTarihi: originalVehicle.evrakKayitTarihi || nowStr,
+            rampadanCikisTarihi: nowStr,
+            rampadanCikisTimestamp: nowTs
           };
           applySave(vehicleToSave);
         },
         'warning',
         'Evet, EVRAK HAZIR Yap'
       );
-      return;
+      return true;
     }
 
     // 4. Rampadaki aracı BEKLEMEDE durumuna geri alma onay sorgusu
@@ -2515,19 +3130,21 @@ export default function App() {
             rampaId: null,
             durum: 'BEKLEMEDE',
             isRampayaCagrildi: false,
-            cagrildigiRampaId: null
+            cagrildigiRampaId: null,
+            rampadanCikisTarihi: nowStr,
+            rampadanCikisTimestamp: nowTs
           };
           applySave(vehicleToSave);
         },
         'warning',
         'Evet, BEKLEMEDE Yap'
       );
-      return;
+      return true;
     }
 
     // 5. Rampa Değişikliği / Ataması Onay Sorgusu
     if (originalVehicle && updated.rampaId && updated.rampaId !== originalVehicle.rampaId && updated.durum !== 'ÇIKIŞ YAPTI') {
-      const oldRamp = getRampName(originalVehicle.rampaId);
+      const oldRamp = originalVehicle.rampaId ? getRampName(originalVehicle.rampaId) : null;
       const newRamp = getRampName(updated.rampaId);
       const msg = oldRamp
         ? `Rampa değiştirmek istediğinizden emin misiniz?\n\n${updated.dorsePlaka} plakalı aracın rampasını ${oldRamp}'den ${newRamp}'ye taşımak istediğinizden emin misiniz?`
@@ -2542,13 +3159,19 @@ export default function App() {
         'warning',
         'Evet, Rampa Değiştir'
       );
-      return;
+      return true;
     }
 
     applySave(updated);
+    return true;
   };
 
   const handleDeleteVehicle = (vehicle: Vehicle) => {
+    const canEdit = currentUser?.role === 'admin' || hasPermission(currentUser, 'canEditVehicle');
+    if (!canEdit) {
+      showToast('Araç kaydını silme yetkiniz bulunmamaktadır.', 'warning');
+      return;
+    }
     askConfirm(
       'Aracı Kalıcı Olarak Sil',
       `${vehicle.dorsePlaka} plakalı aracı sistemden tamamen silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.`,
@@ -2623,70 +3246,132 @@ export default function App() {
   };
 
   const handleEditChatMessage = (id: number, newText: string) => {
+    const target = chatMessages.find((m) => m.id === id);
+    if (!target) return;
     const nowTime = new Date().toLocaleTimeString('tr-TR').slice(0, 5);
-    setChatMessages((prev) =>
-      prev.map((m) => {
-        if (m.id === id) {
-          const updated: ChatMessage = {
-            ...m,
-            text: newText.trim(),
-            isEdited: true,
-            editedAt: nowTime
-          };
-          saveChatMessageToFirestore(updated);
-          return updated;
-        }
-        return m;
-      })
-    );
+    const updated: ChatMessage = {
+      ...target,
+      text: newText.trim(),
+      isEdited: true,
+      editedAt: nowTime
+    };
+    setChatMessages((prev) => prev.map((m) => (m.id === id ? updated : m)));
+    saveChatMessageToFirestore(updated);
     showToast('Mesaj güncellendi.', 'success');
   };
 
-  const handleClearChatMessages = () => {
+  const handleToggleChatReaction = (id: number, emoji: string) => {
+    if (!currentUser) return;
+    const target = chatMessages.find((m) => m.id === id);
+    if (!target) return;
+    const username = currentUser.username;
+    const currentReactions: Record<string, string[]> = { ...(target.reactions || {}) };
+    const existingUsers = Array.isArray(currentReactions[emoji]) ? [...currentReactions[emoji]] : [];
+    const alreadyReacted = existingUsers.some((u) => u.trim().toLowerCase() === username.trim().toLowerCase());
+    if (alreadyReacted) {
+      const nextUsers = existingUsers.filter((u) => u.trim().toLowerCase() !== username.trim().toLowerCase());
+      if (nextUsers.length === 0) {
+        delete currentReactions[emoji];
+      } else {
+        currentReactions[emoji] = nextUsers;
+      }
+    } else {
+      currentReactions[emoji] = [...existingUsers, username];
+    }
+    const updated: ChatMessage = { ...target, reactions: currentReactions };
+    setChatMessages((prev) => prev.map((m) => (m.id === id ? updated : m)));
+    saveChatMessageToFirestore(updated);
+  };
+
+  const handleTogglePinChatMessage = (id: number) => {
+    if (!currentUser) return;
+    const target = chatMessages.find((m) => m.id === id);
+    if (!target) return;
+    const nextPinned = !target.isPinned;
+    const updated: ChatMessage = {
+      ...target,
+      isPinned: nextPinned,
+      pinnedBy: nextPinned ? currentUser.username : null
+    };
+    setChatMessages((prev) => prev.map((m) => (m.id === id ? updated : m)));
+    saveChatMessageToFirestore(updated);
+    showToast(nextPinned ? 'Mesaj kanala sabitlendi.' : 'Mesaj sabitlemesi kaldırıldı.', 'info');
+  };
+
+  const handleUpdateChatPresence = useCallback((typingInChannel: string | null) => {
+    if (!currentUser || currentUser.role === 'guest') return;
+    upsertChatPresenceInFirestore({
+      username: currentUser.username,
+      role: currentUser.role,
+      depoId: currentUser.depoId,
+      lastActiveAt: Date.now(),
+      typingInChannel,
+      typingAt: typingInChannel ? Date.now() : null
+    });
+  }, [currentUser]);
+
+  const handleClearChatMessages = (channelId?: string) => {
+    const isChannelClear = Boolean(channelId);
     askConfirm(
-      'Sohbet Geçmişini Temizle',
-      'Tüm mesajlaşma geçmişini kalıcı olarak silmek istediğinizden emin misiniz? Bu işlem tüm cihazlarda geçerli olacaktır.',
+      isChannelClear ? 'Kanal Geçmişini Temizle' : 'Sohbet Geçmişini Temizle',
+      isChannelClear
+        ? 'Bu kanaldaki tüm mesajlaşma geçmişini kalıcı olarak silmek istediğinizden emin misiniz? Bu işlem tüm cihazlarda geçerli olacaktır.'
+        : 'Tüm kanallardaki mesajlaşma geçmişini kalıcı olarak silmek istediğinizden emin misiniz? Bu işlem tüm cihazlarda geçerli olacaktır.',
       () => {
-        setChatMessages([]);
-        clearChatMessagesFromFirestore();
-        showToast('Sohbet geçmişi tüm cihazlarda temizlendi.', 'info');
+        setChatMessages((prev) => (channelId ? prev.filter((m) => (m.channelId || 'genel') !== channelId) : []));
+        clearChatMessagesFromFirestore(channelId);
+        showToast(isChannelClear ? 'Kanal geçmişi temizlendi.' : 'Tüm sohbet geçmişi temizlendi.', 'info');
       },
       'danger',
-      'Evet, Tümünü Sil'
+      isChannelClear ? 'Evet, Kanalı Temizle' : 'Evet, Tümünü Sil'
     );
   };
 
   const handleClearCompletedNotifications = () => {
-    const toDelete = notifications.filter((n) => n.status !== 'BEKLİYOR');
+    const toDelete = scopedNotifications.filter((n) => n.status !== 'BEKLİYOR');
+    if (toDelete.length === 0) {
+      showToast('Bu depoda temizlenecek tamamlanmış bildirim bulunmuyor.', 'info');
+      return;
+    }
+    const toDeleteIds = new Set(toDelete.map((n) => n.id));
     toDelete.forEach((n) => deleteNotificationFromFirestore(n.id));
-    setNotifications((prev) => prev.filter((n) => n.status === 'BEKLİYOR'));
+    setNotifications((prev) => prev.filter((n) => !toDeleteIds.has(n.id)));
     showToast(`${toDelete.length} adet tamamlanmış bildirim temizlendi.`, 'info');
   };
 
   const handleClearAllNotifications = () => {
     askConfirm(
       'Tüm Bildirimleri Temizle',
-      'Tüm çağrı ve işlem bildirimlerini kalıcı olarak silmek istediğinizden emin misiniz?',
+      'Seçili depo kapsamındaki tüm çağrı ve işlem bildirimlerini kalıcı olarak silmek istediğinizden emin misiniz?',
       () => {
-        notifications.forEach((n) => deleteNotificationFromFirestore(n.id));
-        setNotifications([]);
-        showToast('Tüm bildirimler kalıcı olarak silindi.', 'info');
+        const toDeleteIds = new Set(scopedNotifications.map((n) => n.id));
+        scopedNotifications.forEach((n) => deleteNotificationFromFirestore(n.id));
+        setNotifications((prev) => prev.filter((n) => !toDeleteIds.has(n.id)));
+        showToast('Seçili depo bildirimleri kalıcı olarak silindi.', 'info');
       }
     );
   };
 
-  const handleSendChatMessage = (msgText: string, replyTo?: ChatReply | null, mentions?: string[]) => {
+  const handleSendChatMessage = (payload: ChatSendPayload) => {
     if (!currentUser) return;
+    const nowTs = Date.now();
     const newMsg: ChatMessage = {
-      id: Date.now(),
+      id: nowTs,
       sender: currentUser.username,
       role: currentUser.role,
-      text: msgText,
-      time: new Date().toLocaleTimeString('tr-TR').slice(0, 5),
-      replyTo: replyTo || null,
-      mentions: mentions && mentions.length > 0 ? mentions : [],
+      text: payload.text || '',
+      time: new Date(nowTs).toLocaleTimeString('tr-TR').slice(0, 5),
+      channelId: payload.channelId || 'genel',
+      recipient: payload.recipient || null,
+      imageUrl: payload.imageUrl || null,
+      entityCard: payload.entityCard || null,
+      replyTo: payload.replyTo || null,
+      mentions: payload.mentions && payload.mentions.length > 0 ? payload.mentions : [],
+      reactions: {},
+      isPinned: false,
+      pinnedBy: null,
       readBy: [currentUser.username],
-      timestamp: Date.now()
+      timestamp: nowTs
     };
     setChatMessages((prev) => [...prev, newMsg]);
     saveChatMessageToFirestore(newMsg);
@@ -2717,7 +3402,12 @@ export default function App() {
   }, [currentUser]);
 
   const handleExportCsv = (list: Vehicle[]) => {
-    exportVehiclesToCsv(list, getWarehouseNameById, getRampName);
+    const canExport = currentUser?.role === 'admin' || hasPermission(currentUser, 'canExportReports');
+    if (!canExport) {
+      showToast('Rapor ve Excel/CSV dışa aktarma yetkiniz bulunmamaktadır.', 'warning');
+      return;
+    }
+    exportVehiclesToCsv(list, getWarehouseNameById, getRampName, slaSettings, showToast);
   };
 
   // 1. Render Login Screen if no user logged in
@@ -2753,7 +3443,7 @@ export default function App() {
     beklenen: 'Beklenen Araçlar Portalı',
     canli: 'Canlı Saha İzleme',
     araclar: 'Araç Yönetimi Listesi',
-    rampalar: '12 Rampa Yönetimi',
+    rampalar: 'Rampa Yönetimi',
     raporlar: 'Raporlar ve Geçmiş Kayıtlar'
   };
 
@@ -2917,6 +3607,21 @@ export default function App() {
                 className="w-full py-1.5 bg-indigo-700 hover:bg-indigo-800 text-white text-xs rounded-lg font-bold transition flex items-center justify-center gap-1.5 shadow cursor-pointer"
               >
                 <Building className="w-3 h-3 text-indigo-200" /> Depo Yönetimi (Aktif/Pasif)
+              </button>
+              <button
+                onClick={() => {
+                  setRampConfigInitialWhId(selectedDepoId > 0 ? selectedDepoId : activeWarehouses[0]?.id || 1);
+                  setShowRampConfigModal(true);
+                }}
+                className="w-full py-1.5 bg-sky-700 hover:bg-sky-800 text-white text-xs rounded-lg font-bold transition flex items-center justify-center gap-1.5 shadow cursor-pointer"
+              >
+                <WarehouseIcon className="w-3 h-3 text-sky-200" /> Depo Bazlı Rampalar
+              </button>
+              <button
+                onClick={() => setShowSlaSettingsModal(true)}
+                className="w-full py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs rounded-lg font-bold transition flex items-center justify-center gap-1.5 shadow cursor-pointer"
+              >
+                <SlidersHorizontal className="w-3 h-3 text-amber-100" /> SLA Süre Ayarları
               </button>
               <button
                 onClick={() => setShowWhatsAppModal(true)}
@@ -3085,9 +3790,9 @@ export default function App() {
             <button
               onClick={() => setActiveTab('beklenen')}
               title="Beklenen Araçlar"
-              className="px-2.5 py-1.5 md:py-2 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer relative shrink-0 h-9"
+              className="px-2.5 py-1.5 md:py-2 bg-amber-50 dark:bg-amber-950/60 hover:bg-amber-100 dark:hover:bg-amber-900/60 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800/70 text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer relative shrink-0 h-9"
             >
-              <Truck className="w-4 h-4 text-amber-600 shrink-0" />
+              <Truck className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
               <span className="hidden lg:inline">Beklenen Araçlar</span>
               {pendingExpectedVehiclesCount > 0 && (
                 <span className="bg-amber-500 text-slate-950 text-[10px] font-black px-1.5 py-0.5 rounded-full min-w-[18px] text-center leading-none">
@@ -3106,12 +3811,12 @@ export default function App() {
                     handleMarkNotificationsAsReadForMe();
                   }
                 }}
-                className="px-2.5 py-1.5 md:py-2 bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-200 text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer relative shrink-0 h-9"
+                className="px-2.5 py-1.5 md:py-2 bg-purple-50 dark:bg-purple-950/60 hover:bg-purple-100 dark:hover:bg-purple-900/60 text-purple-800 dark:text-purple-200 border border-purple-200 dark:border-purple-800/70 text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer relative shrink-0 h-9"
                 title="Rampaya Çağrılan Araçlar"
               >
                 <Megaphone
-                  className={`w-4 h-4 text-purple-600 shrink-0 ${
-                    pendingNotificationsCount > 0 ? 'animate-bounce text-amber-600' : ''
+                  className={`w-4 h-4 text-purple-600 dark:text-purple-400 shrink-0 ${
+                    pendingNotificationsCount > 0 ? 'animate-bounce text-amber-600 dark:text-amber-400' : ''
                   }`}
                 />
                 <span className="hidden lg:inline">Rampaya Çağrılan Araçlar</span>
@@ -3131,8 +3836,8 @@ export default function App() {
               )}
 
               {showNotificationMenu && (
-                <div className="fixed inset-x-2 top-16 md:absolute md:inset-x-auto md:right-0 md:top-full mt-2 w-auto md:w-[420px] max-w-[calc(100vw-1rem)] bg-white border border-slate-200 rounded-2xl shadow-2xl z-50 overflow-hidden text-xs animate-in fade-in zoom-in-95 duration-150">
-                  <div className="p-3.5 bg-slate-900 text-white font-bold flex justify-between items-center border-b border-slate-800">
+                <div className="fixed inset-x-2 top-16 md:absolute md:inset-x-auto md:right-0 md:top-full mt-2 w-auto md:w-[420px] max-w-[calc(100vw-1rem)] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl z-50 overflow-hidden text-xs animate-in fade-in zoom-in-95 duration-150">
+                  <div className="p-3.5 bg-slate-900 dark:bg-black text-white font-bold flex justify-between items-center border-b border-slate-800">
                     <span className="flex items-center gap-2">
                       <Megaphone className="w-4 h-4 text-amber-400" /> Rampaya Çağrılan Araçlar
                     </span>
@@ -3152,42 +3857,48 @@ export default function App() {
                       </button>
                     </div>
                   </div>
-                  <div className="max-h-[380px] overflow-y-auto divide-y divide-slate-100 custom-scroll">
-                    {notifications.map((n) => (
+                  <div className="max-h-[380px] overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800 custom-scroll">
+                    {scopedNotifications.map((n) => (
                       <div
                         key={n.id}
                         onClick={() => {
+                          const canApprove =
+                            currentUser.role === 'admin' || hasPermission(currentUser, 'canApproveCall');
+                          if (!canApprove) {
+                            showToast('Çağrı onaylama ve yönlendirme yetkiniz bulunmamaktadır.', 'warning');
+                            return;
+                          }
                           setSelectedSecurityNotification(n);
                           setShowSecurityActionModal(true);
                           setShowNotificationMenu(false);
                         }}
                         className={`p-3.5 transition cursor-pointer ${
                           n.status === 'BEKLİYOR'
-                            ? 'bg-amber-50/90 hover:bg-amber-100/90 border-l-4 border-amber-500'
-                            : 'bg-slate-50 text-slate-600'
+                            ? 'bg-amber-50/90 dark:bg-amber-950/30 hover:bg-amber-100/90 dark:hover:bg-amber-950/50 border-l-4 border-amber-500'
+                            : 'bg-slate-50 dark:bg-slate-800/70 text-slate-600 dark:text-slate-300'
                         }`}
                       >
                         <div className="flex justify-between items-start gap-2">
-                          <p className="font-bold text-slate-900 text-xs leading-relaxed flex-1">{n.text}</p>
+                          <p className="font-bold text-slate-900 dark:text-slate-100 text-xs leading-relaxed flex-1">{n.text}</p>
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
                               handleDeleteNotification(n.id);
                             }}
                             title="Bildirimi Sil"
-                            className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-100 rounded transition cursor-pointer shrink-0"
+                            className="p-1 text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-100 dark:hover:bg-red-950/60 rounded transition cursor-pointer shrink-0"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         </div>
 
                         {n.securityNote && (
-                          <div className="mt-2 p-2 bg-blue-50 border border-blue-200 text-blue-900 rounded-lg text-[10px]">
+                          <div className="mt-2 p-2 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800/60 text-blue-900 dark:text-blue-200 rounded-lg text-[10px]">
                             <b>Güvenlik Notu:</b> {n.securityNote}
                           </div>
                         )}
 
-                        <div className="text-[10px] text-slate-400 mt-2 flex justify-between items-center pt-1 border-t border-slate-200/50">
+                        <div className="text-[10px] text-slate-400 dark:text-slate-500 mt-2 flex justify-between items-center pt-1 border-t border-slate-200/50 dark:border-slate-700/50">
                           <span className="flex items-center gap-1">
                             <Clock3 className="w-3 h-3" /> Saat: {n.time}
                           </span>
@@ -3195,7 +3906,7 @@ export default function App() {
                             className={`px-2 py-0.5 rounded-full font-extrabold text-[9px] ${
                               n.status === 'BEKLİYOR'
                                 ? 'bg-amber-500 text-slate-900'
-                                : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                                : 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700/60'
                             }`}
                           >
                             {n.status === 'BEKLİYOR' ? 'BEKLİYOR' : 'İŞLEM YAPILDI'}
@@ -3203,9 +3914,9 @@ export default function App() {
                         </div>
                       </div>
                     ))}
-                    {notifications.length === 0 && (
-                      <div className="p-8 text-center text-slate-400 text-xs">
-                        Henüz yeni çağrı bildirimi bulunmuyor.
+                    {scopedNotifications.length === 0 && (
+                      <div className="p-8 text-center text-slate-400 dark:text-slate-500 text-xs">
+                        Seçili depo için çağrı bildirimi bulunmuyor.
                       </div>
                     )}
                   </div>
@@ -3241,7 +3952,7 @@ export default function App() {
               }
               className={`flex px-2 sm:px-2.5 md:px-3 py-1.5 md:py-2 text-xs font-bold rounded-xl transition items-center gap-1.5 cursor-pointer shrink-0 ${
                 pushPermission === 'granted'
-                  ? 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200'
+                  ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-200 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 border border-indigo-200 dark:border-indigo-800'
                   : 'bg-amber-500 text-slate-950 font-black hover:bg-amber-400 border border-amber-400 shadow-sm animate-pulse'
               }`}
             >
@@ -3280,41 +3991,42 @@ export default function App() {
               title={isSoundEnabled ? 'Sesli Uyarılar Açık (Tıklayınca Sessize Alır)' : 'Sesli Uyarılar Kapalı (Tıklayınca Açar)'}
               className={`hidden md:flex px-2.5 md:px-3 py-2 text-xs font-semibold rounded-xl transition items-center gap-1.5 cursor-pointer ${
                 isSoundEnabled
-                  ? 'bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200'
-                  : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                  ? 'bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/60 border border-blue-200 dark:border-blue-800'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
               }`}
             >
-              {isSoundEnabled ? <Volume2 className="w-3.5 h-3.5 text-blue-600" /> : <VolumeX className="w-3.5 h-3.5 text-slate-400" />}
+              {isSoundEnabled ? <Volume2 className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" /> : <VolumeX className="w-3.5 h-3.5 text-slate-400" />}
               <span className="hidden lg:inline">{isSoundEnabled ? 'Ses Açık' : 'Sessiz'}</span>
             </button>
 
             {/* Yenile butonu (Masaüstü) */}
             <button
               onClick={handleRefreshData}
-              className="hidden md:flex px-2.5 md:px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl transition items-center gap-1.5 cursor-pointer"
+              className="hidden md:flex px-2.5 md:px-3.5 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold rounded-xl transition items-center gap-1.5 cursor-pointer"
             >
               <RotateCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
               <span className="hidden lg:inline">Yenile</span>
             </button>
 
             {/* Yeni Araç Kaydı butonu */}
-            {currentUser.role !== 'guest' && (
-              <button
-                onClick={handleOpenNewVehicleDirectly}
-                className="px-3 md:px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs md:text-sm font-semibold rounded-xl shadow-md transition flex items-center gap-1.5 cursor-pointer shadow-blue-500/20"
-              >
-                <Plus className="w-4 h-4" />
-                <span className="hidden sm:inline">Yeni Araç</span>
-              </button>
-            )}
+            {currentUser.role !== 'guest' &&
+              (currentUser.role === 'admin' || hasPermission(currentUser, 'canCreateVehicle')) && (
+                <button
+                  onClick={handleOpenNewVehicleDirectly}
+                  className="px-3 md:px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs md:text-sm font-semibold rounded-xl shadow-md transition flex items-center gap-1.5 cursor-pointer shadow-blue-500/20"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span className="hidden sm:inline">Yeni Araç</span>
+                </button>
+              )}
 
             {/* Mobil Menü Butonu (Yönetici İşlemleri, Ayarlar & Çıkış) */}
             <button
               onClick={() => setShowMobileAdminMenu(true)}
-              className="md:hidden p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition flex items-center justify-center cursor-pointer border border-slate-200"
+              className="md:hidden p-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl transition flex items-center justify-center cursor-pointer border border-slate-200 dark:border-slate-700"
               title="Yönetim & Hızlı İşlemler Menüsü"
             >
-              <Menu className="w-4 h-4 text-slate-800" />
+              <Menu className="w-4 h-4 text-slate-800 dark:text-slate-200" />
             </button>
           </div>
         </header>
@@ -3352,8 +4064,9 @@ export default function App() {
           {activeTab === 'dashboard' && (
             <DashboardView
               vehicles={currentWarehouseVehicles}
-              ramps={ramps}
+              ramps={currentWarehouseRamps}
               pendingExpectedCount={pendingExpectedVehiclesCount}
+              slaSettings={slaSettings}
               onNavigateTab={(tab) => setActiveTab(tab)}
               getRampName={getRampName}
               onOpenDetailModal={(v) => {
@@ -3369,8 +4082,19 @@ export default function App() {
               selectedDepoId={selectedDepoId}
               currentUser={currentUser}
               getWarehouseNameById={getWarehouseNameById}
-              onOpenAddModal={() => setShowAddExpectedModal(true)}
+              onNotify={showToast}
+              onOpenAddModal={() => {
+                if (!(currentUser.role === 'admin' || hasPermission(currentUser, 'canManageExpected'))) {
+                  showToast('Beklenen araç ekleme yetkiniz bulunmamaktadır.', 'warning');
+                  return;
+                }
+                setShowAddExpectedModal(true);
+              }}
               onOpenEditModal={(exp) => {
+                if (!(currentUser.role === 'admin' || hasPermission(currentUser, 'canManageExpected'))) {
+                  showToast('Beklenen araç düzenleme yetkiniz bulunmamaktadır.', 'warning');
+                  return;
+                }
                 setSelectedExpectedVehicleForEdit(exp);
                 setShowEditExpectedModal(true);
               }}
@@ -3384,6 +4108,8 @@ export default function App() {
           {activeTab === 'canli' && (
             <LiveTrackingView
               vehicles={currentWarehouseVehicles}
+              currentUser={currentUser}
+              slaSettings={slaSettings}
               getRampName={getRampName}
               onOpenDetailModal={(v) => {
                 setSelectedDetailVehicle(v);
@@ -3399,8 +4125,16 @@ export default function App() {
               vehicles={currentWarehouseVehicles}
               ramps={ramps}
               currentUser={currentUser}
+              slaSettings={slaSettings}
+              selectedDepoId={selectedDepoId}
+              getWarehouseNameById={getWarehouseNameById}
+              onNotify={showToast}
               onOpenNewVehicleModal={handleOpenNewVehicleDirectly}
               onOpenEditModal={(v) => {
+                if (!(currentUser.role === 'admin' || hasPermission(currentUser, 'canEditVehicle'))) {
+                  showToast('Araç bilgilerini düzenleme yetkiniz bulunmamaktadır.', 'warning');
+                  return;
+                }
                 setSelectedVehicleForEdit(v);
                 setShowEditVehicleModal(true);
               }}
@@ -3413,6 +4147,8 @@ export default function App() {
                 setShowPhotoGalleryModal(true);
               }}
               onUpdateStatus={handleUpdateVehicleStatus}
+              onBulkMakeReady={handleBulkMakeReady}
+              onExportCsv={handleExportCsv}
               onAssignRamp={handleAssignRamp}
               onSendAdminCallRequest={handleSendAdminCallRequest}
               onCancelRampCall={handleCancelRampCall}
@@ -3422,12 +4158,16 @@ export default function App() {
 
           {activeTab === 'rampalar' && (
             <RampManagementView
-              ramps={ramps}
+              ramps={currentWarehouseRamps}
               vehicles={vehicles}
+              warehouses={warehouses}
+              selectedDepoId={selectedDepoId}
+              slaSettings={slaSettings}
               currentUser={currentUser}
               onRampStatusChange={handleRampStatusChange}
               onChangeVehicleRamp={handleChangeVehicleRamp}
               onReleaseRampVehicle={handleReleaseRampVehicle}
+              onAuthorizeExitVehicle={(v) => handleUpdateVehicleStatus(v, 'ÇIKIŞ YAPTI')}
               onOpenRampAssignModal={(r) => {
                 setSelectedRampForAssign(r);
                 setShowRampAssignModal(true);
@@ -3436,6 +4176,23 @@ export default function App() {
                 setSelectedDetailVehicle(v);
                 setShowDetailViewModal(true);
               }}
+              onOpenPhotoGallery={(v) => {
+                setSelectedVehicleForPhoto(v);
+                setShowPhotoGalleryModal(true);
+              }}
+              onOpenRampManager={
+                currentUser.role === 'admin'
+                  ? () => {
+                      setRampConfigInitialWhId(selectedDepoId > 0 ? selectedDepoId : activeWarehouses[0]?.id || 1);
+                      setShowRampConfigModal(true);
+                    }
+                  : undefined
+              }
+              onOpenSlaSettings={
+                currentUser.role === 'admin'
+                  ? () => setShowSlaSettingsModal(true)
+                  : undefined
+              }
             />
           )}
 
@@ -3443,6 +4200,7 @@ export default function App() {
             <ReportsView
               vehicles={currentWarehouseVehicles}
               currentUser={currentUser}
+              slaSettings={slaSettings}
               getRampName={getRampName}
               onExportCsv={handleExportCsv}
               onOpenDetailModal={(v) => {
@@ -3458,13 +4216,25 @@ export default function App() {
       {/* Canlı Saha Sohbeti Widget'ı */}
       <ChatWidget
         chatMessages={chatMessages}
+        chatPresences={chatPresences}
         currentUser={currentUser}
         users={users}
+        vehicles={vehicles}
+        ramps={ramps}
+        warehouses={warehouses}
         onSendMessage={handleSendChatMessage}
         onEditMessage={handleEditChatMessage}
         onDeleteMessage={handleDeleteChatMessage}
+        onToggleReaction={handleToggleChatReaction}
+        onTogglePinMessage={handleTogglePinChatMessage}
         onClearMessages={handleClearChatMessages}
         onMarkMessagesAsRead={handleMarkChatMessagesAsRead}
+        onUpdatePresence={handleUpdateChatPresence}
+        onNavigateToVehicle={(v) => {
+          setSelectedDetailVehicle(v);
+          setShowDetailViewModal(true);
+        }}
+        onNavigateToRamp={() => setActiveTab('rampalar')}
       />
 
       {/* ================= MODALLAR ================= */}
@@ -3476,6 +4246,7 @@ export default function App() {
         selectedDepoId={selectedDepoId}
         customers={customers}
         onAddNewCustomer={handleAddNewCustomerByName}
+        onNotify={showToast}
         onSave={handleSaveExpectedVehicle}
       />
 
@@ -3490,6 +4261,7 @@ export default function App() {
         warehouses={warehouses}
         customers={customers}
         onAddNewCustomer={handleAddNewCustomerByName}
+        onNotify={showToast}
         onSave={handleUpdateExpectedVehicle}
       />
 
@@ -3498,6 +4270,8 @@ export default function App() {
         notification={selectedSecurityNotification}
         ramps={ramps}
         vehicles={vehicles}
+        currentUser={currentUser}
+        onNotify={showToast}
         onClose={() => {
           setSelectedSecurityNotification(null);
           setShowSecurityActionModal(false);
@@ -3514,6 +4288,7 @@ export default function App() {
         warehouses={warehouses}
         currentUser={currentUser}
         getWarehouseNameById={getWarehouseNameById}
+        onNotify={showToast}
         onAddUser={handleAddUser}
         onEditUser={handleEditUser}
         onDeleteUser={handleDeleteUser}
@@ -3521,8 +4296,10 @@ export default function App() {
 
       {/* 4. Detaylı Araç Bilgi & Fotoğraf İnceleme Modalı */}
       <DetailViewModal
-        vehicle={selectedDetailVehicle}
-        rampName={getRampName(selectedDetailVehicle?.rampaId)}
+        vehicle={liveSelectedDetailVehicle}
+        rampName={getRampName(liveSelectedDetailVehicle?.rampaId)}
+        warehouseName={liveSelectedDetailVehicle ? getWarehouseNameById(liveSelectedDetailVehicle.depoId) : undefined}
+        slaSettings={slaSettings}
         onClose={() => {
           setSelectedDetailVehicle(null);
           setShowDetailViewModal(false);
@@ -3574,6 +4351,7 @@ export default function App() {
         initialValues={newVehicleInitialValues}
         customers={customers}
         onAddNewCustomer={handleAddNewCustomerByName}
+        onNotify={showToast}
         onSave={handleSaveNewVehicle}
       />
 
@@ -3597,12 +4375,17 @@ export default function App() {
           currentUser={currentUser}
           customers={customers}
           onAddNewCustomer={handleAddNewCustomerByName}
+          onNotify={showToast}
           onClose={() => {
             setSelectedVehicleForEdit(null);
             setShowEditVehicleModal(false);
           }}
           onSave={handleSaveVehicleEdit}
-          onDelete={currentUser?.role === 'admin' ? handleDeleteVehicle : undefined}
+          onDelete={
+            currentUser?.role === 'admin' || hasPermission(currentUser, 'canEditVehicle')
+              ? handleDeleteVehicle
+              : undefined
+          }
         />
       )}
 
@@ -3622,6 +4405,7 @@ export default function App() {
         isOpen={showPasswordModal}
         onClose={() => setShowPasswordModal(false)}
         users={users}
+        onNotify={showToast}
         onChangePassword={handleChangePassword}
       />
 
@@ -3659,6 +4443,35 @@ export default function App() {
         onToggleStatus={handleToggleWarehouseStatus}
         onAddWarehouse={handleAddWarehouse}
         onEditWarehouse={handleEditWarehouse}
+        onManageWarehouseRamps={(whId) => {
+          setShowWarehouseModal(false);
+          setRampConfigInitialWhId(whId);
+          setShowRampConfigModal(true);
+        }}
+      />
+
+      {/* 12.1 Depo Bazlı Rampa Yönetimi Modalı (Admin) */}
+      <RampConfigModal
+        isOpen={showRampConfigModal}
+        onClose={() => setShowRampConfigModal(false)}
+        warehouses={warehouses}
+        ramps={ramps}
+        vehicles={vehicles}
+        initialWarehouseId={rampConfigInitialWhId}
+        onNotify={showToast}
+        onAddRamp={handleAddRampForWarehouse}
+        onSeedDefaultRamps={handleSeedDefaultRampsForWarehouse}
+        onRenameRamp={handleRenameRamp}
+        onDeleteRamp={handleDeleteRamp}
+      />
+
+      {/* 12.2 SLA Hedef Süre Ayarları Modalı (Admin) */}
+      <SlaSettingsModal
+        isOpen={showSlaSettingsModal}
+        onClose={() => setShowSlaSettingsModal(false)}
+        slaSettings={slaSettings}
+        onNotify={showToast}
+        onSave={handleSaveSlaSettings}
       />
 
       {/* 13. WhatsApp Grubu Entegrasyon Ayarları Modalı */}
@@ -3705,16 +4518,16 @@ export default function App() {
             className="fixed inset-0"
             onClick={() => setShowMobileAdminMenu(false)}
           />
-          <div className="relative bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl p-5 shadow-2xl border border-slate-200 space-y-4 max-h-[85vh] overflow-y-auto">
+          <div className="relative bg-white dark:bg-slate-900 w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl p-5 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4 max-h-[85vh] overflow-y-auto">
             {/* Üst Bar / Kullanıcı Bilgisi */}
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-2xl bg-blue-600 text-white font-black flex items-center justify-center text-sm shadow-md">
                   {currentUser.username.substring(0, 2).toUpperCase()}
                 </div>
                 <div>
-                  <h4 className="font-bold text-slate-900 text-sm">{currentUser.username}</h4>
-                  <span className="text-[11px] font-semibold text-blue-600 capitalize flex items-center gap-1">
+                  <h4 className="font-bold text-slate-900 dark:text-slate-100 text-sm">{currentUser.username}</h4>
+                  <span className="text-[11px] font-semibold text-blue-600 dark:text-blue-400 capitalize flex items-center gap-1">
                     <Shield className="w-3.5 h-3.5" />
                     <span>{currentUser.role === 'admin' ? 'Yönetici (Admin)' : currentUser.role}</span>
                   </span>
@@ -3722,7 +4535,7 @@ export default function App() {
               </div>
               <button
                 onClick={() => setShowMobileAdminMenu(false)}
-                className="p-2 text-slate-400 hover:text-slate-700 rounded-full hover:bg-slate-100 cursor-pointer"
+                className="p-2 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
               >
                 <XIcon className="w-5 h-5" />
               </button>
@@ -3731,7 +4544,7 @@ export default function App() {
             {/* Yönetici Hızlı İşlemleri */}
             {currentUser.role === 'admin' && (
               <div className="space-y-2">
-                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Yönetici İşlemleri</p>
+                <p className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Yönetici İşlemleri</p>
                 
                 {/* Siyah Mod / Normal Mod Hızlı Geçiş */}
                 <div className="flex items-center justify-between p-3.5 bg-slate-100 dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700">
@@ -3760,10 +4573,10 @@ export default function App() {
                     setShowMobileAdminMenu(false);
                     setShowCustomerModal(true);
                   }}
-                  className="w-full p-3.5 bg-teal-50 hover:bg-teal-100 text-teal-900 rounded-2xl font-bold text-xs flex items-center justify-between border border-teal-200 transition cursor-pointer"
+                  className="w-full p-3.5 bg-teal-50 dark:bg-teal-950/50 hover:bg-teal-100 dark:hover:bg-teal-900/60 text-teal-900 dark:text-teal-200 rounded-2xl font-bold text-xs flex items-center justify-between border border-teal-200 dark:border-teal-800/70 transition cursor-pointer"
                 >
                   <span className="flex items-center gap-2.5">
-                    <Briefcase className="w-4 h-4 text-teal-600" />
+                    <Briefcase className="w-4 h-4 text-teal-600 dark:text-teal-400" />
                     <span>Firma / Müşteri Yönetimi</span>
                   </span>
                   <span className="text-[10px] bg-teal-600 text-white px-2 py-0.5 rounded-full font-semibold">Tanımlamalar</span>
@@ -3774,10 +4587,10 @@ export default function App() {
                     setShowMobileAdminMenu(false);
                     setShowUserManagementModal(true);
                   }}
-                  className="w-full p-3.5 bg-blue-50 hover:bg-blue-100 text-blue-800 rounded-2xl font-bold text-xs flex items-center justify-between border border-blue-200 transition cursor-pointer"
+                  className="w-full p-3.5 bg-blue-50 dark:bg-blue-950/50 hover:bg-blue-100 dark:hover:bg-blue-900/60 text-blue-800 dark:text-blue-200 rounded-2xl font-bold text-xs flex items-center justify-between border border-blue-200 dark:border-blue-800/70 transition cursor-pointer"
                 >
                   <span className="flex items-center gap-2.5">
-                    <Users className="w-4 h-4 text-blue-600" />
+                    <Users className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                     <span>Kullanıcı & İzin Yönetimi</span>
                   </span>
                   <span className="text-[10px] bg-blue-600 text-white px-2 py-0.5 rounded-full font-semibold">Kutucuklu İzinler</span>
@@ -3788,10 +4601,10 @@ export default function App() {
                     setShowMobileAdminMenu(false);
                     window.dispatchEvent(new CustomEvent('open-chat-widget'));
                   }}
-                  className="w-full p-3.5 bg-blue-50 hover:bg-blue-100 text-blue-900 rounded-2xl font-bold text-xs flex items-center justify-between border border-blue-200 transition cursor-pointer"
+                  className="w-full p-3.5 bg-blue-50 dark:bg-blue-950/50 hover:bg-blue-100 dark:hover:bg-blue-900/60 text-blue-900 dark:text-blue-200 rounded-2xl font-bold text-xs flex items-center justify-between border border-blue-200 dark:border-blue-800/70 transition cursor-pointer"
                 >
                   <span className="flex items-center gap-2.5">
-                    <MessageSquare className="w-4 h-4 text-blue-600" />
+                    <MessageSquare className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                     <span>Saha & Güvenlik Sohbeti</span>
                   </span>
                   {unreadChatCount > 0 ? (
@@ -3808,10 +4621,10 @@ export default function App() {
                     setShowMobileAdminMenu(false);
                     setShowWarehouseModal(true);
                   }}
-                  className="w-full p-3.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-900 rounded-2xl font-bold text-xs flex items-center justify-between border border-indigo-200 transition cursor-pointer"
+                  className="w-full p-3.5 bg-indigo-50 dark:bg-indigo-950/50 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-indigo-900 dark:text-indigo-200 rounded-2xl font-bold text-xs flex items-center justify-between border border-indigo-200 dark:border-indigo-800/70 transition cursor-pointer"
                 >
                   <span className="flex items-center gap-2.5">
-                    <Building className="w-4 h-4 text-indigo-600" />
+                    <Building className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
                     <span>Depo & Saha Yönetimi</span>
                   </span>
                   <span className="text-[10px] bg-indigo-600 text-white px-2 py-0.5 rounded-full font-semibold">Aktif / Pasif</span>
@@ -3820,12 +4633,41 @@ export default function App() {
                 <button
                   onClick={() => {
                     setShowMobileAdminMenu(false);
-                    setShowWhatsAppModal(true);
+                    setRampConfigInitialWhId(selectedDepoId > 0 ? selectedDepoId : activeWarehouses[0]?.id || 1);
+                    setShowRampConfigModal(true);
                   }}
-                  className="w-full p-3.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-900 rounded-2xl font-bold text-xs flex items-center justify-between border border-emerald-200 transition cursor-pointer"
+                  className="w-full p-3.5 bg-sky-50 dark:bg-sky-950/50 hover:bg-sky-100 dark:hover:bg-sky-900/60 text-sky-900 dark:text-sky-200 rounded-2xl font-bold text-xs flex items-center justify-between border border-sky-200 dark:border-sky-800/70 transition cursor-pointer"
                 >
                   <span className="flex items-center gap-2.5">
-                    <MessageSquare className="w-4 h-4 text-emerald-600" />
+                    <WarehouseIcon className="w-4 h-4 text-sky-600 dark:text-sky-400" />
+                    <span>Depo Bazlı Rampalar</span>
+                  </span>
+                  <span className="text-[10px] bg-sky-600 text-white px-2 py-0.5 rounded-full font-semibold">{currentWarehouseRamps.length} Rampa</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    setShowMobileAdminMenu(false);
+                    setShowSlaSettingsModal(true);
+                  }}
+                  className="w-full p-3.5 bg-amber-50 dark:bg-amber-950/50 hover:bg-amber-100 dark:hover:bg-amber-900/60 text-amber-900 dark:text-amber-200 rounded-2xl font-bold text-xs flex items-center justify-between border border-amber-200 dark:border-amber-800/70 transition cursor-pointer"
+                >
+                  <span className="flex items-center gap-2.5">
+                    <SlidersHorizontal className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                    <span>SLA Hedef Süre Ayarları</span>
+                  </span>
+                  <span className="text-[10px] bg-amber-600 text-white px-2 py-0.5 rounded-full font-semibold">Ayarla</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    setShowMobileAdminMenu(false);
+                    setShowWhatsAppModal(true);
+                  }}
+                  className="w-full p-3.5 bg-emerald-50 dark:bg-emerald-950/50 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 text-emerald-900 dark:text-emerald-200 rounded-2xl font-bold text-xs flex items-center justify-between border border-emerald-200 dark:border-emerald-800/70 transition cursor-pointer"
+                >
+                  <span className="flex items-center gap-2.5">
+                    <MessageSquare className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
                     <span>WhatsApp Grubu API Entegrasyonu</span>
                   </span>
                   <span className="text-[10px] bg-emerald-600 text-white px-2 py-0.5 rounded-full font-semibold">
@@ -3838,10 +4680,10 @@ export default function App() {
                     setShowMobileAdminMenu(false);
                     setShowPushSettingsModal(true);
                   }}
-                  className="w-full p-3.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-900 rounded-2xl font-bold text-xs flex items-center justify-between border border-indigo-200 transition cursor-pointer"
+                  className="w-full p-3.5 bg-indigo-50 dark:bg-indigo-950/50 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-indigo-900 dark:text-indigo-200 rounded-2xl font-bold text-xs flex items-center justify-between border border-indigo-200 dark:border-indigo-800/70 transition cursor-pointer"
                 >
                   <span className="flex items-center gap-2.5">
-                    <Bell className="w-4 h-4 text-indigo-600" />
+                    <Bell className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
                     <span>Web Push / Kayan Bildirimler</span>
                   </span>
                   <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${
@@ -3856,7 +4698,7 @@ export default function App() {
                     setShowMobileAdminMenu(false);
                     setShowPasswordModal(true);
                   }}
-                  className="w-full p-3.5 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-2xl font-bold text-xs flex items-center justify-between border border-slate-200 transition cursor-pointer"
+                  className="w-full p-3.5 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-2xl font-bold text-xs flex items-center justify-between border border-slate-200 dark:border-slate-700 transition cursor-pointer"
                 >
                   <span className="flex items-center gap-2.5">
                     <Key className="w-4 h-4 text-amber-500" />
@@ -3869,16 +4711,16 @@ export default function App() {
 
             {/* Depo / Saha Görünümü */}
             <div className="space-y-2">
-              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Depo / Saha Seçimi</p>
+              <p className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Depo / Saha Seçimi</p>
               <div className="relative">
-                <WarehouseIcon className="w-4 h-4 absolute left-3.5 top-3.5 text-blue-600 pointer-events-none" />
+                <WarehouseIcon className="w-4 h-4 absolute left-3.5 top-3.5 text-blue-600 dark:text-blue-400 pointer-events-none" />
                 <select
                   value={selectedDepoId}
                   onChange={(e) => {
                     setSelectedDepoId(Number(e.target.value));
                     setShowMobileAdminMenu(false);
                   }}
-                  className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold text-slate-800 outline-none"
+                  className="w-full pl-10 pr-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl text-xs font-bold text-slate-800 dark:text-slate-100 outline-none"
                 >
                   {currentUser.role === 'admin' && (
                     <option value={0}>🌐 Tüm Depolar (Genel Görünüm)</option>
@@ -3894,7 +4736,7 @@ export default function App() {
 
             {/* Sistem Kontrolleri */}
             <div className="space-y-2">
-              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Sistem Ayarları</p>
+              <p className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Sistem Ayarları</p>
               <div className="grid grid-cols-2 gap-2">
                 <button
                   onClick={() => {
@@ -3902,11 +4744,11 @@ export default function App() {
                   }}
                   className={`p-3 rounded-2xl border font-bold text-xs flex items-center justify-center gap-2 transition cursor-pointer ${
                     isSoundEnabled
-                      ? 'bg-blue-50 text-blue-700 border-blue-200'
-                      : 'bg-slate-50 text-slate-500 border-slate-200'
+                      ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800'
+                      : 'bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700'
                   }`}
                 >
-                  {isSoundEnabled ? <Volume2 className="w-4 h-4 text-blue-600" /> : <VolumeX className="w-4 h-4" />}
+                  {isSoundEnabled ? <Volume2 className="w-4 h-4 text-blue-600 dark:text-blue-400" /> : <VolumeX className="w-4 h-4" />}
                   <span>{isSoundEnabled ? 'Ses Açık' : 'Sessiz'}</span>
                 </button>
 
@@ -3915,7 +4757,7 @@ export default function App() {
                     handleRefreshData();
                     setShowMobileAdminMenu(false);
                   }}
-                  className="p-3 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-2xl border border-slate-200 font-bold text-xs flex items-center justify-center gap-2 transition cursor-pointer"
+                  className="p-3 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-2xl border border-slate-200 dark:border-slate-700 font-bold text-xs flex items-center justify-center gap-2 transition cursor-pointer"
                 >
                   <RotateCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
                   <span>Verileri Yenile</span>
@@ -3923,8 +4765,8 @@ export default function App() {
               </div>
 
               {/* Bulut Bağlantı Durumu */}
-              <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200 flex items-center justify-between text-xs">
-                <span className="flex items-center gap-2 text-slate-600 font-medium">
+              <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-between text-xs">
+                <span className="flex items-center gap-2 text-slate-600 dark:text-slate-300 font-medium">
                   {isFirebaseConnected ? (
                     <Cloud className="w-4 h-4 text-emerald-500" />
                   ) : (
@@ -3933,7 +4775,7 @@ export default function App() {
                   <span>Bulut Senkronizasyonu</span>
                 </span>
                 <span className={`text-[10px] font-extrabold px-2.5 py-1 rounded-full ${
-                  isFirebaseConnected ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
+                  isFirebaseConnected ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300' : 'bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300'
                 }`}>
                   {isFirebaseConnected ? 'Firebase Canlı' : 'Bağlanıyor...'}
                 </span>
@@ -3941,13 +4783,13 @@ export default function App() {
             </div>
 
             {/* Çıkış Yap */}
-            <div className="pt-2 border-t border-slate-100">
+            <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
               <button
                 onClick={() => {
                   setShowMobileAdminMenu(false);
                   handleLogout();
                 }}
-                className="w-full py-3.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-2xl font-bold text-xs flex items-center justify-center gap-2 transition cursor-pointer"
+                className="w-full py-3.5 bg-red-50 dark:bg-red-950/50 hover:bg-red-100 dark:hover:bg-red-900/60 text-red-600 dark:text-red-400 rounded-2xl font-bold text-xs flex items-center justify-center gap-2 transition cursor-pointer"
               >
                 <LogOut className="w-4 h-4" />
                 <span>Güvenli Çıkış Yap</span>
@@ -3959,7 +4801,7 @@ export default function App() {
 
       {/* 12. Floating Toast Bildirimi */}
       {toast && (
-        <div className="fixed top-4 right-4 z-50 max-w-sm w-full transition-all">
+        <div className="fixed top-4 right-4 z-[80] max-w-sm w-full transition-all">
           <div
             className={`p-4 rounded-2xl shadow-2xl border flex items-start gap-3 text-xs font-semibold ${
               toast.type === 'success'

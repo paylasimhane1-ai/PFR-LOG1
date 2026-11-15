@@ -38,8 +38,18 @@ export interface User {
 
 export interface Ramp {
   id: number;
+  depoId?: number;
   ad: string;
   durum: 'Boş' | 'Dolu' | 'Arızalı' | 'Bakımda';
+  arizaNotu?: string | null;
+  bakimBaslangic?: string | null;
+}
+
+export interface SlaSettings {
+  bosaltmaMinutes: number;
+  yuklemeMinutes: number;
+  tahliyeMinutes: number;
+  warningThresholdPercent: number;
 }
 
 export interface Customer {
@@ -113,6 +123,7 @@ export interface ExpectedVehicle {
 
 export interface AppNotification {
   id: number;
+  depoId?: number;
   type?: string;
   vehicleId?: number;
   plaka?: string;
@@ -135,18 +146,43 @@ export interface ChatReply {
   text: string;
 }
 
+export interface ChatEntityCard {
+  type: 'vehicle' | 'ramp';
+  id: number;
+  title: string;
+  subtitle?: string;
+  status?: string;
+  extra?: string;
+}
+
 export interface ChatMessage {
   id: number;
   sender: string;
   role: string;
   text: string;
   time: string;
+  channelId?: string;
+  recipient?: string | null;
   replyTo?: ChatReply | null;
   mentions?: string[];
   readBy?: string[];
   timestamp?: number;
   isEdited?: boolean;
   editedAt?: string;
+  imageUrl?: string | null;
+  entityCard?: ChatEntityCard | null;
+  reactions?: Record<string, string[]>;
+  isPinned?: boolean;
+  pinnedBy?: string | null;
+}
+
+export interface ChatPresence {
+  username: string;
+  role: string;
+  depoId?: number;
+  lastActiveAt: number;
+  typingInChannel?: string | null;
+  typingAt?: number | null;
 }
 
 export type WhatsAppProvider = 'webhook' | 'greenapi' | 'ultramsg' | 'twilio' | 'sharelink';

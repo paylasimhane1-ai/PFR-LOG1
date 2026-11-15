@@ -1,12 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { Vehicle } from '../types';
+import { SlaSettings, User, Vehicle } from '../types';
 import { cleanPhone, cleanPhoneForWa, getStatusBadgeClass, getDurationText, getDepoKayitTarihi, getEvrakKayitTarihi, getRampaGirisTarihi, getRampaCikisTarihi } from '../utils/helpers';
+import { hasPermission } from '../utils/permissions';
 import { RampSlaIndicator } from './RampSlaIndicator';
 import { getVehicleStageTimes } from '../utils/slaHelpers';
 import { Search, Eye, RotateCcw, X, Megaphone, Phone, MessageSquare, Warehouse as WarehouseIcon, Clock, Truck, LogIn, LogOut, Flame, FileCheck, ArrowRight } from 'lucide-react';
 
 interface LiveTrackingViewProps {
   vehicles: Vehicle[];
+  currentUser?: User | null;
+  slaSettings?: SlaSettings;
   getRampName: (id: number | null | undefined) => string;
   onOpenDetailModal: (v: Vehicle) => void;
   onUndoExit: (v: Vehicle) => void;
@@ -15,12 +18,16 @@ interface LiveTrackingViewProps {
 
 export const LiveTrackingView: React.FC<LiveTrackingViewProps> = ({
   vehicles,
+  currentUser,
+  slaSettings,
   getRampName,
   onOpenDetailModal,
   onUndoExit,
   onCancelRampCall
 }) => {
   const [now, setNow] = useState<number>(Date.now());
+  const canUndoExit = currentUser?.role === 'admin' || hasPermission(currentUser, 'canAuthorizeExit');
+  const canCancelCall = currentUser?.role === 'admin' || hasPermission(currentUser, 'canCallVehicle');
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 15000);
@@ -137,7 +144,7 @@ export const LiveTrackingView: React.FC<LiveTrackingViewProps> = ({
         <div className="md:hidden space-y-2">
           {sortedList.map((v) => {
             const isExited = v.durum === 'ÇIKIŞ YAPTI';
-            const stage = getVehicleStageTimes(v, now);
+            const stage = getVehicleStageTimes(v, now, slaSettings);
             const isRampOverdue = v.durum === 'RAMPADA' && stage.isOverdue;
 
             return (
@@ -260,7 +267,7 @@ export const LiveTrackingView: React.FC<LiveTrackingViewProps> = ({
                 {/* Rampadaki Araçlar için Canlı Gecikme Sayacı */}
                 {v.durum === 'RAMPADA' && (
                   <div className="pt-1">
-                    <RampSlaIndicator vehicle={v} />
+                    <RampSlaIndicator vehicle={v} slaSettings={slaSettings} />
                   </div>
                 )}
 
@@ -302,15 +309,17 @@ export const LiveTrackingView: React.FC<LiveTrackingViewProps> = ({
                     <span className="flex items-center gap-1.5">
                       <Megaphone className="w-3.5 h-3.5" /> Rampaya Çağrıldı ({getRampName(v.cagrildigiRampaId || v.rampaId)})
                     </span>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onCancelRampCall(v);
-                      }}
-                      className="px-2 py-0.5 rounded-md bg-red-700 text-white font-bold text-[9px] cursor-pointer"
-                    >
-                      İptal Et
-                    </button>
+                    {canCancelCall && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onCancelRampCall(v);
+                        }}
+                        className="px-2 py-0.5 rounded-md bg-red-700 text-white font-bold text-[9px] cursor-pointer"
+                      >
+                        İptal Et
+                      </button>
+                    )}
                   </div>
                 )}
 
@@ -326,7 +335,7 @@ export const LiveTrackingView: React.FC<LiveTrackingViewProps> = ({
                     >
                       <Eye className="w-3.5 h-3.5 text-blue-500" /> İncele ({v.fotograflar?.length || 0})
                     </button>
-                    {isExited && (
+                    {isExited && canUndoExit && (
                       <button
                         onClick={() => onUndoExit(v)}
                         className="px-2.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl font-bold text-[11px] transition flex items-center gap-1 cursor-pointer"
@@ -367,7 +376,7 @@ export const LiveTrackingView: React.FC<LiveTrackingViewProps> = ({
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {sortedList.map((v) => {
                 const isExited = v.durum === 'ÇIKIŞ YAPTI';
-                const stage = getVehicleStageTimes(v, now);
+                const stage = getVehicleStageTimes(v, now, slaSettings);
                 const isRampOverdue = v.durum === 'RAMPADA' && stage.isOverdue;
 
                 return (
@@ -489,7 +498,7 @@ export const LiveTrackingView: React.FC<LiveTrackingViewProps> = ({
                         </div>
                         {v.durum === 'RAMPADA' && (
                           <div>
-                            <RampSlaIndicator vehicle={v} compact={true} />
+                            <RampSlaIndicator vehicle={v} compact={true} slaSettings={slaSettings} />
                           </div>
                         )}
                       </div>
@@ -504,16 +513,18 @@ export const LiveTrackingView: React.FC<LiveTrackingViewProps> = ({
                           <span className="flex items-center gap-1">
                             <Megaphone className="w-3 h-3" /> Rampaya Çağrıldı
                           </span>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onCancelRampCall(v);
-                            }}
-                            className="w-4 h-4 rounded-full bg-red-700 hover:bg-red-800 text-white flex items-center justify-center text-[9px] cursor-pointer"
-                            title="Çağrıyı İptal Et (X)"
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
+                          {canCancelCall && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onCancelRampCall(v);
+                              }}
+                              className="w-4 h-4 rounded-full bg-red-700 hover:bg-red-800 text-white flex items-center justify-center text-[9px] cursor-pointer"
+                              title="Çağrıyı İptal Et (X)"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          )}
                         </div>
                       )}
                     </td>
@@ -525,7 +536,7 @@ export const LiveTrackingView: React.FC<LiveTrackingViewProps> = ({
                       >
                         <Eye className="w-3 h-3 text-blue-400" /> İncele ({v.fotograflar ? v.fotograflar.length : 0})
                       </button>
-                      {isExited && (
+                      {isExited && canUndoExit && (
                         <button
                           onClick={() => onUndoExit(v)}
                           className="px-2 py-0.5 bg-amber-600 hover:bg-amber-700 text-white text-[9px] rounded font-bold transition flex items-center gap-1 mx-auto cursor-pointer"

@@ -28,6 +28,7 @@ export const initialUsers: User[] = [
 
 export const initialRamps: Ramp[] = Array.from({ length: 12 }, (_, i) => ({
   id: i + 1,
+  depoId: 1,
   ad: `Rampa ${i + 1}`,
   durum: 'Boş'
 }));

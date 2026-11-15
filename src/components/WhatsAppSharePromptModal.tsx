@@ -50,6 +50,7 @@ export const WhatsAppSharePromptModal: React.FC<WhatsAppSharePromptModalProps> =
   useEffect(() => {
     if (options) {
       setEditedText(formatVehicleWhatsAppMessage(options));
+      setPasteNotice(false);
     }
   }, [options]);
 
@@ -76,10 +77,6 @@ export const WhatsAppSharePromptModal: React.FC<WhatsAppSharePromptModalProps> =
         setTimeout(() => setPhotoCopied(false), 3000);
       }
     }
-  };
-
-  const handleOpenWhatsAppText = () => {
-    window.open(shareUrl, '_blank');
   };
 
   const isIOS = isIOSDevice();
@@ -111,20 +108,17 @@ export const WhatsAppSharePromptModal: React.FC<WhatsAppSharePromptModalProps> =
         }
 
         // 2. Web Share desteklenmiyorsa (Masaüstü Web):
-        // Fotoğrafı ve açıklamayı panoya kopyala, fotoğrafı indir ve WhatsApp Web'i aç
+        // Fotoğrafı ve açıklamayı panoya kopyala, fotoğrafı indir ve doğrudan WhatsApp Web bağlantısını göster
         const ok = await copyPhotoToClipboard(photos[0]);
         if (ok) setPhotoCopied(true);
-        setPasteNotice(true);
         await handleDownloadPhotos();
-
-        // WhatsApp Web'i aç
-        window.open('https://web.whatsapp.com', '_blank');
+        setPasteNotice(true);
       } else {
-        window.open(shareUrl, '_blank');
+        setPasteNotice(true);
       }
     } catch (err) {
       console.warn('Dosya eki paylaşımı:', err);
-      window.open(shareUrl, '_blank');
+      setPasteNotice(true);
     } finally {
       setIsSharingFiles(false);
     }
@@ -188,34 +182,34 @@ export const WhatsAppSharePromptModal: React.FC<WhatsAppSharePromptModalProps> =
             <div
               className={`p-3 rounded-2xl flex items-center gap-2.5 border text-xs ${
                 apiSuccess
-                  ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
-                  : 'bg-amber-50 border-amber-200 text-amber-800'
+                  ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200'
+                  : 'bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200'
               }`}
             >
-              <ShieldCheck className="w-4 h-4 shrink-0 text-emerald-600" />
+              <ShieldCheck className="w-4 h-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
               <span>{apiMessage}</span>
             </div>
           )}
 
           {/* Quick Summary Cards */}
-          <div className="grid grid-cols-2 gap-2.5 bg-slate-50 p-3.5 rounded-2xl border border-slate-200">
+          <div className="grid grid-cols-2 gap-2.5 bg-slate-50 dark:bg-slate-800/70 p-3.5 rounded-2xl border border-slate-200 dark:border-slate-700">
             <div>
               <span className="text-[10px] text-slate-400 font-semibold block uppercase">Müşteri</span>
-              <span className="font-bold text-slate-800 truncate block text-xs">{vehicle.musteri || '-'}</span>
+              <span className="font-bold text-slate-800 dark:text-slate-100 truncate block text-xs">{vehicle.musteri || '-'}</span>
             </div>
             <div>
               <span className="text-[10px] text-slate-400 font-semibold block uppercase">İşlem Türü</span>
-              <span className="font-bold text-blue-600 block text-xs">{vehicle.islemTuru}</span>
+              <span className="font-bold text-blue-600 dark:text-blue-400 block text-xs">{vehicle.islemTuru}</span>
             </div>
             <div>
               <span className="text-[10px] text-slate-400 font-semibold block uppercase">Araç Plakası</span>
-              <span className="font-black text-slate-900 block text-xs font-mono">{vehicle.dorsePlaka}</span>
+              <span className="font-black text-slate-900 dark:text-white block text-xs font-mono">{vehicle.dorsePlaka}</span>
             </div>
             <div>
               <span className="text-[10px] text-slate-400 font-semibold block uppercase">
                 {eventType === 'ramp_assigned' ? 'Yönlendirilen Rampa' : 'Ek Fotoğraflar'}
               </span>
-              <span className="font-bold text-emerald-700 block text-xs">
+              <span className="font-bold text-emerald-700 dark:text-emerald-400 block text-xs">
                 {eventType === 'ramp_assigned'
                   ? rampName || 'Rampa'
                   : photos.length > 0
@@ -227,16 +221,16 @@ export const WhatsAppSharePromptModal: React.FC<WhatsAppSharePromptModalProps> =
 
           {/* Fotoğraf Eki Küçük Önizleme (Varsa) */}
           {photos.length > 0 && (
-            <div className="bg-emerald-50/70 border border-emerald-200 rounded-2xl p-3 space-y-2">
+            <div className="bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-2xl p-3 space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-[11px] font-bold text-emerald-900 flex items-center gap-1.5">
-                  <Paperclip className="w-3.5 h-3.5 text-emerald-700" />
+                <span className="text-[11px] font-bold text-emerald-900 dark:text-emerald-200 flex items-center gap-1.5">
+                  <Paperclip className="w-3.5 h-3.5 text-emerald-700 dark:text-emerald-400" />
                   Eklenecek Fotoğraflar ({photos.length} Adet)
                 </span>
                 <button
                   type="button"
                   onClick={handleDownloadPhotos}
-                  className="text-[10px] font-bold text-emerald-800 hover:text-emerald-950 flex items-center gap-1 cursor-pointer bg-white px-2 py-0.5 rounded border border-emerald-300"
+                  className="text-[10px] font-bold text-emerald-800 dark:text-emerald-200 hover:text-emerald-950 dark:hover:text-white flex items-center gap-1 cursor-pointer bg-white dark:bg-slate-800 px-2 py-0.5 rounded border border-emerald-300 dark:border-emerald-700"
                 >
                   <Download className="w-3 h-3" />
                   <span>İndir</span>
@@ -245,7 +239,7 @@ export const WhatsAppSharePromptModal: React.FC<WhatsAppSharePromptModalProps> =
 
               <div className="flex gap-2 overflow-x-auto pb-1 custom-scroll">
                 {photos.slice(0, 4).map((p, idx) => (
-                  <div key={idx} className="relative w-14 h-14 rounded-xl overflow-hidden border border-emerald-300 shrink-0 shadow-xs">
+                  <div key={idx} className="relative w-14 h-14 rounded-xl overflow-hidden border border-emerald-300 dark:border-emerald-700 shrink-0 shadow-xs">
                     <img src={p} alt={`Fotoğraf ${idx + 1}`} className="w-full h-full object-cover" />
                     <span className="absolute bottom-0 right-0 bg-black/70 text-white text-[8px] font-mono px-1 rounded-tl">
                       #{idx + 1}
@@ -271,13 +265,29 @@ export const WhatsAppSharePromptModal: React.FC<WhatsAppSharePromptModalProps> =
                     Paylaşım butonuna bastığınızda açıklama metni <strong>otomatik olarak panonuza kopyalanır</strong>. WhatsApp açıldığında gerekirse metin kutusuna doğrudan <strong>&apos;Yapıştır&apos;</strong> yapabilirsiniz.
                   </p>
                 </div>
-                {pasteNotice && (
-                  <div className="mt-1.5 p-2 bg-emerald-100 border border-emerald-400 rounded-lg text-emerald-900 font-bold text-[10px] flex items-center gap-1.5 animate-pulse">
-                    <Check className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
-                    <span>Fotoğraf ve açıklama hazırlandı! Açılan WhatsApp Web ekranında Ctrl+V ile yapıştırarak fotoğrafı açıklamasıyla birlikte gönderebilirsiniz.</span>
-                  </div>
-                )}
               </div>
+            </div>
+          )}
+
+          {pasteNotice && (
+            <div className="p-3 bg-emerald-100 dark:bg-emerald-950/60 border border-emerald-400 dark:border-emerald-700 rounded-xl text-emerald-900 dark:text-emerald-100 font-bold text-[11px] space-y-2">
+              <div className="flex items-start gap-2">
+                <Check className="w-4 h-4 text-emerald-700 dark:text-emerald-400 shrink-0 mt-0.5" />
+                <span>
+                  {photos.length > 0
+                    ? 'Fotoğraf ve açıklama panoya kopyalandı / indirildi! Aşağıdaki bağlantıdan WhatsApp Web\'i açıp Ctrl+V ile gönderebilirsiniz.'
+                    : 'Mesaj metni hazırlandı! Aşağıdaki bağlantıdan doğrudan WhatsApp\'ta açabilirsiniz.'}
+                </span>
+              </div>
+              <a
+                href={photos.length > 0 ? 'https://web.whatsapp.com' : shareUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-extrabold transition shadow-xs"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                <span>{photos.length > 0 ? "WhatsApp Web'i Aç" : "WhatsApp'ta Aç"}</span>
+              </a>
             </div>
           )}
 
@@ -285,15 +295,15 @@ export const WhatsAppSharePromptModal: React.FC<WhatsAppSharePromptModalProps> =
           <div className="space-y-1.5">
             <div className="flex items-center justify-between px-1">
               <div className="flex items-center gap-1.5">
-                <Edit3 className="w-3.5 h-3.5 text-emerald-700" />
-                <span className="text-[11px] font-bold text-slate-800">Mesaj Metnini Düzenle / Düzelt:</span>
+                <Edit3 className="w-3.5 h-3.5 text-emerald-700 dark:text-emerald-400" />
+                <span className="text-[11px] font-bold text-slate-800 dark:text-slate-100">Mesaj Metnini Düzenle / Düzelt:</span>
               </div>
               <div className="flex items-center gap-2">
                 {editedText !== originalMessageText && (
                   <button
                     type="button"
                     onClick={handleResetText}
-                    className="text-[10px] text-amber-700 hover:text-amber-800 flex items-center gap-1 cursor-pointer font-medium"
+                    className="text-[10px] text-amber-700 dark:text-amber-400 hover:text-amber-800 dark:hover:text-amber-300 flex items-center gap-1 cursor-pointer font-medium"
                     title="Orijinal mesaja geri dön"
                   >
                     <RotateCcw className="w-3 h-3" />
@@ -303,7 +313,7 @@ export const WhatsAppSharePromptModal: React.FC<WhatsAppSharePromptModalProps> =
                 <button
                   type="button"
                   onClick={handleCopyText}
-                  className="text-[11px] text-emerald-600 hover:text-emerald-700 font-semibold flex items-center gap-1 cursor-pointer"
+                  className="text-[11px] text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 font-semibold flex items-center gap-1 cursor-pointer"
                 >
                   {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
                   {copied ? 'Kopyalandı!' : 'Metni Kopyala'}
@@ -320,18 +330,18 @@ export const WhatsAppSharePromptModal: React.FC<WhatsAppSharePromptModalProps> =
                 placeholder="Mesaj metnini burada düzenleyebilirsiniz..."
               />
             </div>
-            <p className="text-[10px] text-slate-500 px-1">
+            <p className="text-[10px] text-slate-500 dark:text-slate-400 px-1">
               💡 Mesaj içeriğini göndermeden önce yukarıdaki kutucuktan serbestçe değiştirebilirsiniz. Gönder butonuna basıldığında düzenlenen güncel metin iletilecektir.
             </p>
           </div>
         </div>
 
         {/* Footer Actions */}
-        <div className="bg-slate-50 px-5 py-4 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
+        <div className="bg-slate-50 dark:bg-slate-800/70 px-5 py-4 border-t border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
           <button
             type="button"
             onClick={onClose}
-            className="w-full sm:w-auto px-4 py-2.5 rounded-xl border border-slate-300 text-slate-600 hover:bg-slate-100 font-semibold text-xs transition cursor-pointer order-2 sm:order-1"
+            className="w-full sm:w-auto px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 font-semibold text-xs transition cursor-pointer order-2 sm:order-1"
           >
             Kapat
           </button>
@@ -340,9 +350,9 @@ export const WhatsAppSharePromptModal: React.FC<WhatsAppSharePromptModalProps> =
             <button
               type="button"
               onClick={handleCopyText}
-              className="px-3 py-2.5 rounded-xl border border-slate-300 text-slate-700 bg-white hover:bg-slate-50 font-bold text-xs flex items-center justify-center gap-1.5 transition cursor-pointer shadow-xs"
+              className="px-3 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 font-bold text-xs flex items-center justify-center gap-1.5 transition cursor-pointer shadow-xs"
             >
-              {copied ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4 text-slate-600" />}
+              {copied ? <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400" /> : <Copy className="w-4 h-4 text-slate-600 dark:text-slate-300" />}
               <span>{copied ? 'Kopyalandı' : 'Açıklamayı Kopyala'}</span>
             </button>
 
@@ -350,10 +360,10 @@ export const WhatsAppSharePromptModal: React.FC<WhatsAppSharePromptModalProps> =
               <button
                 type="button"
                 onClick={handleCopyPhoto}
-                className="px-3 py-2.5 rounded-xl border border-blue-200 text-blue-800 bg-blue-50 hover:bg-blue-100 font-bold text-xs flex items-center justify-center gap-1.5 transition cursor-pointer shadow-xs"
+                className="px-3 py-2.5 rounded-xl border border-blue-200 dark:border-blue-800 text-blue-800 dark:text-blue-200 bg-blue-50 dark:bg-blue-950/50 hover:bg-blue-100 dark:hover:bg-blue-900/60 font-bold text-xs flex items-center justify-center gap-1.5 transition cursor-pointer shadow-xs"
                 title="Fotoğrafı panoya kopyala (Ctrl+V ile yapıştırmak için)"
               >
-                {photoCopied ? <Check className="w-4 h-4 text-blue-600" /> : <ImageIcon className="w-4 h-4 text-blue-600" />}
+                {photoCopied ? <Check className="w-4 h-4 text-blue-600 dark:text-blue-400" /> : <ImageIcon className="w-4 h-4 text-blue-600 dark:text-blue-400" />}
                 <span>{photoCopied ? 'Fotoğraf Kopyalandı' : 'Fotoğrafı Kopyala'}</span>
               </button>
             )}
@@ -393,15 +403,16 @@ export const WhatsAppSharePromptModal: React.FC<WhatsAppSharePromptModalProps> =
                 <span>{isSharingFiles ? 'Hazırlanıyor...' : 'Fotoğrafı Açıklamasıyla Paylaş'}</span>
               </button>
             ) : (
-              <button
-                type="button"
-                onClick={handleOpenWhatsAppText}
+              <a
+                href={shareUrl}
+                target="_blank"
+                rel="noopener noreferrer"
                 className="flex-1 sm:flex-none px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-black text-xs flex items-center justify-center gap-2 transition shadow-lg shadow-emerald-600/30 cursor-pointer"
               >
                 <MessageSquare className="w-4 h-4" />
                 <span>WhatsApp'ta Paylaş</span>
                 <ExternalLink className="w-3.5 h-3.5 opacity-80" />
-              </button>
+              </a>
             )}
           </div>
         </div>

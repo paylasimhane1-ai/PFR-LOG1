@@ -8,10 +8,12 @@ import {
   UserPermissions,
   UserRole,
   AppNotification,
-  Customer
+  Customer,
+  SlaSettings
 } from '../types';
 import { CustomerAutocomplete } from './CustomerAutocomplete';
 import { VehicleLifecycleTimeline } from './RampSlaIndicator';
+import { DEFAULT_SLA_SETTINGS } from '../utils/slaHelpers';
 import {
   cleanPhone,
   getStatusBadgeClass,
@@ -22,7 +24,9 @@ import {
   getDepoKayitTarihi,
   getRampaGirisTarihi,
   getRampaCikisTarihi,
-  compressImageFile
+  compressImageFile,
+  MAX_VEHICLE_PHOTOS,
+  validateVehiclePhotos
 } from '../utils/helpers';
 import {
   PERMISSIONS_LIST,
@@ -59,6 +63,7 @@ import {
   Lock,
   Shield,
   Sliders,
+  SlidersHorizontal,
   CheckSquare,
   Square,
   ChevronDown,
@@ -87,6 +92,7 @@ interface AddExpectedVehicleModalProps {
   selectedDepoId: number;
   customers?: Customer[];
   onAddNewCustomer?: (name: string) => void;
+  onNotify?: (msg: string, type?: 'success' | 'info' | 'warning') => void;
   onSave: (vehicle: Omit<ExpectedVehicle, 'id' | 'durum' | 'kabulTarihi'>) => void;
 }
 
@@ -97,6 +103,7 @@ export const AddExpectedVehicleModal: React.FC<AddExpectedVehicleModalProps> = (
   selectedDepoId,
   customers = [],
   onAddNewCustomer = () => {},
+  onNotify,
   onSave
 }) => {
   const [form, setForm] = useState({
@@ -119,7 +126,7 @@ export const AddExpectedVehicleModal: React.FC<AddExpectedVehicleModalProps> = (
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.dorsePlaka.trim() && !form.musteri.trim()) {
-      alert('Lütfen en az bir Plaka veya Müşteri bilgisi giriniz.');
+      onNotify?.('Lütfen en az bir Plaka veya Müşteri bilgisi giriniz.', 'warning');
       return;
     }
     onSave({
@@ -318,6 +325,7 @@ interface EditExpectedVehicleModalProps {
   warehouses: Warehouse[];
   customers?: Customer[];
   onAddNewCustomer?: (name: string) => void;
+  onNotify?: (msg: string, type?: 'success' | 'info' | 'warning') => void;
   onSave: (updated: ExpectedVehicle) => void;
 }
 
@@ -328,6 +336,7 @@ export const EditExpectedVehicleModal: React.FC<EditExpectedVehicleModalProps> =
   warehouses,
   customers = [],
   onAddNewCustomer = () => {},
+  onNotify,
   onSave
 }) => {
   const [form, setForm] = useState<ExpectedVehicle | null>(null);
@@ -343,7 +352,7 @@ export const EditExpectedVehicleModal: React.FC<EditExpectedVehicleModalProps> =
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.dorsePlaka?.trim() && !form.musteri?.trim()) {
-      alert('Lütfen en az bir Plaka veya Müşteri bilgisi giriniz.');
+      onNotify?.('Lütfen en az bir Plaka veya Müşteri bilgisi giriniz.', 'warning');
       return;
     }
     onSave({
@@ -540,6 +549,8 @@ interface SecurityActionModalProps {
   notification: AppNotification | null;
   ramps: Ramp[];
   vehicles?: Vehicle[];
+  currentUser?: User | null;
+  onNotify?: (msg: string, type?: 'success' | 'info' | 'warning') => void;
   onClose: () => void;
   onConfirm: (notification: AppNotification, rampId: number, note: string) => void;
   onSaveNoteOnly: (notification: AppNotification, note: string) => void;
@@ -549,6 +560,8 @@ export const SecurityActionModal: React.FC<SecurityActionModalProps> = ({
   notification,
   ramps,
   vehicles,
+  currentUser,
+  onNotify,
   onClose,
   onConfirm,
   onSaveNoteOnly
@@ -556,10 +569,16 @@ export const SecurityActionModal: React.FC<SecurityActionModalProps> = ({
   const [selectedRampId, setSelectedRampId] = useState<number | null>(notification?.rampId || null);
   const [note, setNote] = useState('');
 
+  useEffect(() => {
+    setSelectedRampId(notification?.rampId || null);
+    setNote('');
+  }, [notification?.id, notification?.rampId]);
+
   if (!notification) return null;
 
+  const canApproveCall = currentUser?.role === 'admin' || hasPermission(currentUser, 'canApproveCall');
   const targetVehicle = vehicles?.find((v) => v.id === notification.vehicleId);
-  const vehicleDepoId = targetVehicle?.depoId;
+  const vehicleDepoId = notification.depoId || targetVehicle?.depoId;
 
   const freeRamps = ramps.filter(
     (r) =>
@@ -585,17 +604,17 @@ export const SecurityActionModal: React.FC<SecurityActionModalProps> = ({
         </div>
 
         <div className="p-5 space-y-4 text-xs">
-          <div className="bg-amber-50 border border-amber-200 p-3 rounded-xl space-y-1">
-            <p className="font-bold text-slate-800 text-sm flex items-center gap-1">
-              <Building className="w-3.5 h-3.5 text-amber-600" /> {notification.musteri}
+          <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 p-3 rounded-xl space-y-1">
+            <p className="font-bold text-slate-800 dark:text-slate-100 text-sm flex items-center gap-1">
+              <Building className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" /> {notification.musteri}
             </p>
-            <p className="font-semibold text-slate-700">Şoför: {notification.soforAd || '-'}</p>
-            <div className="font-semibold text-slate-700 flex items-center justify-between">
+            <p className="font-semibold text-slate-700 dark:text-slate-300">Şoför: {notification.soforAd || '-'}</p>
+            <div className="font-semibold text-slate-700 dark:text-slate-300 flex items-center justify-between">
               <span>Tel: {notification.soforTel || '-'}</span>
               {notification.soforTel && (
                 <a
                   href={`tel:${cleanPhone(notification.soforTel)}`}
-                  className="px-2 py-0.5 bg-emerald-600 text-white rounded font-bold text-[10px] flex items-center gap-1"
+                  className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded font-bold text-[10px] flex items-center gap-1"
                 >
                   <PhoneCall className="w-3 h-3" /> Şoförü Ara
                 </a>
@@ -603,14 +622,21 @@ export const SecurityActionModal: React.FC<SecurityActionModalProps> = ({
             </div>
           </div>
 
+          {!canApproveCall && (
+            <div className="p-2.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-xl text-[11px] text-amber-900 dark:text-amber-200 font-semibold">
+              Çağrı onaylama ve sürücü yönlendirme yetkiniz kapalıdır. Yalnızca görüntüleyebilirsiniz.
+            </div>
+          )}
+
           <div>
-            <label className="block font-bold text-slate-700 mb-1 flex items-center gap-1">
-              <WarehouseIcon className="w-3.5 h-3.5 text-blue-600" /> Yanaştırılacak Rampayı Seçin:
+            <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1">
+              <WarehouseIcon className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" /> Yanaştırılacak Rampayı Seçin:
             </label>
             <select
               value={selectedRampId ?? ''}
+              disabled={!canApproveCall}
               onChange={(e) => setSelectedRampId(e.target.value ? Number(e.target.value) : null)}
-              className="w-full border border-slate-200 rounded-xl p-2.5 outline-none font-bold text-slate-800 bg-slate-50 focus:bg-white"
+              className="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 outline-none font-bold text-slate-800 dark:text-slate-100 bg-slate-50 dark:bg-slate-800 focus:bg-white dark:focus:bg-slate-800 disabled:opacity-60"
             >
               <option value="">-- Uygun Boş Rampa Seçiniz --</option>
               {freeRamps.map((r) => (
@@ -622,38 +648,51 @@ export const SecurityActionModal: React.FC<SecurityActionModalProps> = ({
           </div>
 
           <div>
-            <label className="block font-bold text-slate-700 mb-1">Güvenlik Geri Bildirim Notu Ekle:</label>
+            <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Güvenlik Geri Bildirim Notu Ekle:</label>
             <textarea
               rows={2}
               value={note}
+              disabled={!canApproveCall}
               onChange={(e) => setNote(e.target.value)}
               placeholder="Örn: Şoför sahadaydı, yönlendirildi / Şoföre ulaşıldı..."
-              className="w-full border border-slate-200 rounded-xl p-2.5 outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 disabled:opacity-60"
             />
           </div>
 
           <div className="space-y-2 pt-2">
             <button
+              type="button"
+              disabled={!canApproveCall}
               onClick={() => {
+                if (!canApproveCall) {
+                  onNotify?.('Çağrı onaylama ve yönlendirme yetkiniz bulunmamaktadır.', 'warning');
+                  return;
+                }
                 if (!selectedRampId) {
-                  alert('Lütfen yanaştırılacak bir rampa seçiniz.');
+                  onNotify?.('Lütfen yanaştırılacak bir rampa seçiniz.', 'warning');
                   return;
                 }
                 onConfirm(notification, selectedRampId, note);
               }}
-              className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl transition shadow-md flex items-center justify-center gap-2 cursor-pointer"
+              className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-xl transition shadow-md flex items-center justify-center gap-2 cursor-pointer"
             >
               <UserCheck className="w-4 h-4" /> Rampayı Seç & Yönlendirmeyi Onayla
             </button>
             <button
+              type="button"
+              disabled={!canApproveCall}
               onClick={() => {
+                if (!canApproveCall) {
+                  onNotify?.('Çağrı geri bildirim notu kaydetme yetkiniz bulunmamaktadır.', 'warning');
+                  return;
+                }
                 if (!note.trim()) {
-                  alert('Lütfen bir not giriniz.');
+                  onNotify?.('Lütfen bir not giriniz.', 'warning');
                   return;
                 }
                 onSaveNoteOnly(notification, note);
               }}
-              className="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl transition cursor-pointer"
+              className="w-full py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed text-slate-700 dark:text-slate-200 font-semibold rounded-xl transition cursor-pointer"
             >
               Sadece Geri Bildirim Notunu Kaydet
             </button>
@@ -674,6 +713,7 @@ interface UserManagementModalProps {
   warehouses: Warehouse[];
   currentUser: User | null;
   getWarehouseNameById: (id: number) => string;
+  onNotify?: (msg: string, type?: 'success' | 'info' | 'warning') => void;
   onAddUser: (newUser: User) => void;
   onEditUser: (user: User) => void;
   onDeleteUser: (user: User) => void;
@@ -686,6 +726,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
   warehouses,
   currentUser,
   getWarehouseNameById,
+  onNotify,
   onAddUser,
   onEditUser,
   onDeleteUser
@@ -794,7 +835,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
     const uname = form.username.trim();
     const pwd = form.password.trim();
     if (!uname || !pwd) {
-      alert('Kullanıcı adı ve şifre zorunludur.');
+      onNotify?.('Kullanıcı adı ve şifre zorunludur.', 'warning');
       return;
     }
 
@@ -814,7 +855,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
       handleCancelEdit();
     } else {
       if (users.some((u) => u.username.toLowerCase() === uname.toLowerCase())) {
-        alert('Bu kullanıcı adı zaten mevcut.');
+        onNotify?.('Bu kullanıcı adı zaten mevcut.', 'warning');
         return;
       }
       onAddUser({
@@ -989,7 +1030,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                               <h5 className="font-extrabold text-sm text-slate-900 dark:text-slate-100">
                                 {u.username}
                               </h5>
-                              <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
                                 {u.role === 'personel' ? 'Operasyon / Personel' : 'Güvenlik Görevlisi'}
                               </span>
                             </div>
@@ -1006,7 +1047,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                           className={`px-4 py-2 rounded-xl text-xs font-black flex items-center justify-center gap-2 transition active:scale-95 cursor-pointer shadow-md ${
                             hasMakeReady
                               ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/30'
-                              : 'bg-slate-100 hover:bg-amber-100 text-slate-700 hover:text-amber-900 border border-slate-300'
+                              : 'bg-slate-100 dark:bg-slate-700 hover:bg-amber-100 dark:hover:bg-amber-950/60 text-slate-700 dark:text-slate-200 hover:text-amber-900 dark:hover:text-amber-200 border border-slate-300 dark:border-slate-600'
                           }`}
                           title={
                             hasMakeReady
@@ -1032,8 +1073,8 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                       <div
                         className={`p-2.5 rounded-xl border text-[11px] flex items-center justify-between ${
                           hasMakeReady
-                            ? 'bg-emerald-50/70 border-emerald-200 text-emerald-900'
-                            : 'bg-amber-50/70 border-amber-200 text-amber-900'
+                            ? 'bg-emerald-50/70 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200'
+                            : 'bg-amber-50/70 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-200'
                         }`}
                       >
                         <div className="flex items-center gap-2">
@@ -1068,14 +1109,14 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                                 onClick={() => handleDirectToggleUserPermission(u, p.key)}
                                 className={`p-1.5 rounded-lg border text-left flex items-center justify-between gap-1 transition active:scale-95 cursor-pointer ${
                                   isPermitted
-                                    ? 'bg-blue-50/80 border-blue-200 text-blue-900 font-semibold'
-                                    : 'bg-slate-50 border-slate-200 text-slate-400 line-through'
+                                    ? 'bg-blue-50/80 dark:bg-blue-950/40 border-blue-200 dark:border-blue-800 text-blue-900 dark:text-blue-200 font-semibold'
+                                    : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-400 dark:text-slate-500 line-through'
                                 }`}
                                 title={`${p.title}: Tıklayarak izin durumunu değiştir`}
                               >
                                 <div className="flex items-center gap-1 min-w-0">
                                   {isPermitted ? (
-                                    <Check className="w-3 h-3 text-blue-600 shrink-0" />
+                                    <Check className="w-3 h-3 text-blue-600 dark:text-blue-400 shrink-0" />
                                   ) : (
                                     <X className="w-3 h-3 text-slate-400 shrink-0" />
                                   )}
@@ -1083,7 +1124,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                                 </div>
                                 <span
                                   className={`text-[8px] px-1 py-0.2 rounded font-extrabold shrink-0 ${
-                                    isPermitted ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-600'
+                                    isPermitted ? 'bg-blue-600 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
                                   }`}
                                 >
                                   {isPermitted ? 'Açık' : 'Kapalı'}
@@ -1098,7 +1139,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                 })}
 
               {users.filter((u) => u.role !== 'admin' && u.role !== 'guest').length === 0 && (
-                <div className="p-8 text-center bg-slate-50 rounded-2xl border border-slate-200 text-slate-400 text-xs">
+                <div className="p-8 text-center bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-700 text-slate-400 text-xs">
                   Sistemde tanımlı operasyon veya güvenlik personeli bulunmamaktadır.
                 </div>
               )}
@@ -1112,21 +1153,21 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
             {/* User Form */}
             <form
               onSubmit={handleSubmit}
-              className="bg-slate-50/70 p-4 border border-slate-200 rounded-2xl space-y-4 shadow-sm"
+              className="bg-slate-50/70 dark:bg-slate-800/50 p-4 border border-slate-200 dark:border-slate-700 rounded-2xl space-y-4 shadow-sm"
             >
-              <div className="flex items-center justify-between font-bold text-slate-800 pb-2 border-b border-slate-200">
+              <div className="flex items-center justify-between font-bold text-slate-800 dark:text-slate-100 pb-2 border-b border-slate-200 dark:border-slate-700">
                 <span className="flex items-center gap-1.5 text-sm">
                   {editingUser ? (
                     <>
-                      <Edit className="w-4 h-4 text-amber-600" />
-                      <span className="text-amber-700">Kullanıcı Yetkilerini Düzenle:</span>
-                      <span className="font-mono bg-amber-100 text-amber-900 px-2 py-0.5 rounded text-xs">
+                      <Edit className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                      <span className="text-amber-700 dark:text-amber-300">Kullanıcı Yetkilerini Düzenle:</span>
+                      <span className="font-mono bg-amber-100 dark:bg-amber-950/60 text-amber-900 dark:text-amber-200 px-2 py-0.5 rounded text-xs">
                         {editingUser.username}
                       </span>
                     </>
                   ) : (
                     <>
-                      <Plus className="w-4 h-4 text-blue-600" />
+                      <Plus className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                       Yeni Kullanıcı & Yetki Tanımla
                     </>
                   )}
@@ -1135,7 +1176,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                   <button
                     type="button"
                     onClick={handleCancelEdit}
-                    className="px-2.5 py-1 text-[11px] text-red-600 hover:bg-red-50 rounded-lg font-bold transition cursor-pointer"
+                    className="px-2.5 py-1 text-[11px] text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 rounded-lg font-bold transition cursor-pointer"
                   >
                     Düzenlemeden Vazgeç
                   </button>
@@ -1145,7 +1186,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
               {/* Basic Info Inputs */}
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                  <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
                     Kullanıcı Adı *
                   </label>
                   <input
@@ -1154,12 +1195,12 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                     value={form.username}
                     onChange={(e) => setForm({ ...form, username: e.target.value })}
                     required
-                    className="w-full border border-slate-300 rounded-xl p-2 font-semibold bg-white outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full border border-slate-300 dark:border-slate-700 rounded-xl p-2 font-semibold bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                  <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
                     Giriş Şifresi *
                   </label>
                   <input
@@ -1168,18 +1209,18 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                     value={form.password}
                     onChange={(e) => setForm({ ...form, password: e.target.value })}
                     required
-                    className="w-full border border-slate-300 rounded-xl p-2 font-semibold bg-white outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full border border-slate-300 dark:border-slate-700 rounded-xl p-2 font-semibold bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                  <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
                     Kullanıcı Rolü *
                   </label>
                   <select
                     value={form.role}
                     onChange={(e) => handleRoleChange(e.target.value as UserRole)}
-                    className="w-full border border-slate-300 rounded-xl p-2 font-semibold bg-white outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full border border-slate-300 dark:border-slate-700 rounded-xl p-2 font-semibold bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="admin">Yönetici (Tüm Yetkiler Açık)</option>
                     <option value="personel">Operasyon / Personel (Özel Yetkili)</option>
@@ -1189,13 +1230,13 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                  <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
                     Yetkili Saha / Depo
                   </label>
                   <select
                     value={form.depoId}
                     onChange={(e) => setForm({ ...form, depoId: Number(e.target.value) })}
-                    className="w-full border border-slate-300 rounded-xl p-2 font-semibold bg-white outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full border border-slate-300 dark:border-slate-700 rounded-xl p-2 font-semibold bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     <option value={0}>Tüm Sahalara / Depolara Yetkili</option>
                     {warehouses.map((d) => (
@@ -1209,16 +1250,16 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
 
               {/* Checkbox-based Permissions Section */}
               <div className="pt-2">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 mb-3 border-b border-slate-200">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 mb-3 border-b border-slate-200 dark:border-slate-700">
                   <div>
-                    <h4 className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
-                      <CheckSquare className="w-4 h-4 text-blue-600" />
+                    <h4 className="font-bold text-slate-800 dark:text-slate-100 text-xs flex items-center gap-1.5">
+                      <CheckSquare className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                       Kutucuklu Özel Yetki İzinleri
-                      <span className="font-normal text-slate-500 text-[11px]">
+                      <span className="font-normal text-slate-500 dark:text-slate-400 text-[11px]">
                         ({form.role === 'admin' ? 'Yönetici Tüm Yetkilere Sahiptir' : `${countActivePermissions(form.permissions, form.role)} / ${ALL_PERMISSIONS_KEYS.length} Seçili`})
                       </span>
                     </h4>
-                    <p className="text-[10px] text-slate-500">
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400">
                       Operasyon / Personel kullanıcılarına kutucukları işaretleyerek veya butonlarla özel yetki tanımlayınız.
                     </p>
                   </div>
@@ -1228,21 +1269,21 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                       <button
                         type="button"
                         onClick={handleSelectAll}
-                        className="px-2 py-1 bg-blue-50 text-blue-700 hover:bg-blue-100 font-bold rounded-lg transition border border-blue-200 cursor-pointer"
+                        className="px-2 py-1 bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/50 font-bold rounded-lg transition border border-blue-200 dark:border-blue-800 cursor-pointer"
                       >
                         Tümünü Seç
                       </button>
                       <button
                         type="button"
                         onClick={handleDeselectAll}
-                        className="px-2 py-1 bg-slate-100 text-slate-600 hover:bg-slate-200 font-semibold rounded-lg transition border border-slate-200 cursor-pointer"
+                        className="px-2 py-1 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 font-semibold rounded-lg transition border border-slate-200 dark:border-slate-700 cursor-pointer"
                       >
                         Tümünü Kaldır
                       </button>
                       <button
                         type="button"
                         onClick={handleResetToRoleDefault}
-                        className="px-2 py-1 bg-amber-50 text-amber-800 hover:bg-amber-100 font-bold rounded-lg transition border border-amber-200 cursor-pointer"
+                        className="px-2 py-1 bg-amber-50 dark:bg-amber-950/50 text-amber-800 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/50 font-bold rounded-lg transition border border-amber-200 dark:border-amber-800 cursor-pointer"
                       >
                         Role Göre Varsayılan
                       </button>
@@ -1252,13 +1293,13 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
 
                 {/* Role-specific Banners */}
                 {form.role === 'admin' && (
-                  <div className="p-3 bg-purple-50 border border-purple-200 rounded-xl flex items-center gap-3 text-purple-900 mb-3">
+                  <div className="p-3 bg-purple-50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800 rounded-xl flex items-center gap-3 text-purple-900 dark:text-purple-200 mb-3">
                     <div className="w-8 h-8 rounded-lg bg-purple-600 text-white flex items-center justify-center shrink-0">
                       <Lock className="w-4 h-4" />
                     </div>
                     <div>
                       <p className="font-bold text-xs">Yönetici (Admin) Tam Erişim Modu</p>
-                      <p className="text-[11px] text-purple-700">
+                      <p className="text-[11px] text-purple-700 dark:text-purple-300">
                         Yöneticiler sistemdeki tüm araç girişleri, evrak onayları, rampa yönetimi, kullanıcı tanımlama ve anons işlemlerine sınırsız tam yetkilidir.
                       </p>
                     </div>
@@ -1266,13 +1307,13 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                 )}
 
                 {form.role === 'guest' && (
-                  <div className="p-3 bg-slate-100 border border-slate-300 rounded-xl flex items-center gap-3 text-slate-800 mb-3">
+                  <div className="p-3 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl flex items-center gap-3 text-slate-800 dark:text-slate-200 mb-3">
                     <div className="w-8 h-8 rounded-lg bg-slate-700 text-white flex items-center justify-center shrink-0">
                       <ShieldAlert className="w-4 h-4" />
                     </div>
                     <div>
                       <p className="font-bold text-xs">Misafir (Salt Okunur) Modu</p>
-                      <p className="text-[11px] text-slate-600">
+                      <p className="text-[11px] text-slate-600 dark:text-slate-400">
                         Misafir kullanıcılar panoları ve araç durumlarını sadece izleyebilir; veri ekleme, düzenleme veya silme yapamazlar.
                       </p>
                     </div>
@@ -1286,12 +1327,12 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                     return (
                       <div
                         key={cat.id}
-                        className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm space-y-2.5"
+                        className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-2.5"
                       >
-                        <div className="flex items-center gap-2 pb-1.5 border-b border-slate-100">
+                        <div className="flex items-center gap-2 pb-1.5 border-b border-slate-100 dark:border-slate-800">
                           <CatIcon className={`w-4 h-4 ${cat.color} shrink-0`} />
                           <div>
-                            <h5 className="font-bold text-slate-800 text-[11px]">{cat.title}</h5>
+                            <h5 className="font-bold text-slate-800 dark:text-slate-100 text-[11px]">{cat.title}</h5>
                             <p className="text-[9px] text-slate-400">{cat.desc}</p>
                           </div>
                         </div>
@@ -1313,14 +1354,14 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                                 onClick={() => handleTogglePermission(p.key)}
                                 className={`flex items-start gap-2.5 p-2 rounded-lg border transition select-none cursor-pointer ${
                                   isDisabled
-                                    ? 'opacity-70 bg-slate-50 border-slate-200 cursor-not-allowed'
+                                    ? 'opacity-70 bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 cursor-not-allowed'
                                     : isChecked
                                     ? isMakeReady
-                                      ? 'bg-emerald-50/90 border-emerald-400 text-slate-900 shadow-xs ring-1 ring-emerald-400'
-                                      : 'bg-blue-50/70 border-blue-200 text-slate-900 shadow-xs'
+                                      ? 'bg-emerald-50/90 dark:bg-emerald-950/40 border-emerald-400 dark:border-emerald-700 text-slate-900 dark:text-emerald-100 shadow-xs ring-1 ring-emerald-400 dark:ring-emerald-700'
+                                      : 'bg-blue-50/70 dark:bg-blue-950/35 border-blue-200 dark:border-blue-800 text-slate-900 dark:text-blue-100 shadow-xs'
                                     : isMakeReady
-                                    ? 'bg-amber-50/40 border-amber-300 text-slate-700'
-                                    : 'bg-white border-slate-200 hover:bg-slate-50 text-slate-700'
+                                    ? 'bg-amber-50/40 dark:bg-amber-950/20 border-amber-300 dark:border-amber-800 text-slate-700 dark:text-slate-200'
+                                    : 'bg-white dark:bg-slate-800/40 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300'
                                 }`}
                               >
                                 <input
@@ -1337,16 +1378,16 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                                       {p.title || p.label}
                                     </span>
                                     {isChecked ? (
-                                      <span className={`text-[9px] font-extrabold px-1.5 py-0.2 rounded shrink-0 ${isMakeReady ? 'bg-emerald-100 text-emerald-800' : 'bg-blue-100 text-blue-700'}`}>
+                                      <span className={`text-[9px] font-extrabold px-1.5 py-0.2 rounded shrink-0 ${isMakeReady ? 'bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-200' : 'bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-200'}`}>
                                         İzinli
                                       </span>
                                     ) : (
-                                      <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-slate-100 text-slate-500 shrink-0">
+                                      <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 shrink-0">
                                         İzinsiz
                                       </span>
                                     )}
                                   </div>
-                                  <p className="text-[10px] text-slate-500 mt-0.5 leading-tight">
+                                  <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5 leading-tight">
                                     {p.description}
                                   </p>
                                 </div>
@@ -1388,35 +1429,35 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
             {/* User List with Permissions Inspection & Direct Toggle Buttons */}
             <div>
               <div className="flex items-center justify-between mb-2">
-                <h4 className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
-                  <Users className="w-4 h-4 text-slate-600" />
+                <h4 className="font-bold text-slate-800 dark:text-slate-100 text-xs flex items-center gap-1.5">
+                  <Users className="w-4 h-4 text-slate-600 dark:text-slate-400" />
                   Mevcut Sistem Kullanıcıları & İzin Durumları ({users.length})
                 </h4>
-                <span className="text-[10px] text-slate-500">
+                <span className="text-[10px] text-slate-500 dark:text-slate-400">
                   Her kullanıcının kutucuk yetkilerini inceleyebilir ve izin butonlarıyla değiştirebilirsiniz
                 </span>
               </div>
 
-              <div className="divide-y border border-slate-200 rounded-2xl overflow-hidden bg-white shadow-sm">
+              <div className="divide-y divide-slate-200 dark:divide-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden bg-white dark:bg-slate-900 shadow-sm">
                 {users.map((u) => {
                   const isExpanded = expandedUserPerms === u.username;
                   const activePermsCount = countActivePermissions(u.permissions, u.role);
                   const hasMakeReady = hasPermission(u, 'canMakeReady');
 
                   return (
-                    <div key={u.username} className="bg-white hover:bg-slate-50/50 transition">
+                    <div key={u.username} className="bg-white dark:bg-slate-900 hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition">
                       <div className="p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-bold text-slate-800 text-xs">{u.username}</span>
+                          <span className="font-bold text-slate-800 dark:text-slate-100 text-xs">{u.username}</span>
                           <span
                             className={`text-[10px] px-2 py-0.5 rounded font-bold capitalize ${
                               u.role === 'admin'
-                                ? 'bg-purple-100 text-purple-700 border border-purple-200'
+                                ? 'bg-purple-100 dark:bg-purple-950/50 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800'
                                 : u.role === 'personel'
-                                ? 'bg-blue-100 text-blue-700 border border-blue-200'
+                                ? 'bg-blue-100 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800'
                                 : u.role === 'security'
-                                ? 'bg-amber-100 text-amber-800 border border-amber-200'
-                                : 'bg-slate-100 text-slate-700 border border-slate-200'
+                                ? 'bg-amber-100 dark:bg-amber-950/50 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800'
+                                : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700'
                             }`}
                           >
                             {u.role === 'personel'
@@ -1428,7 +1469,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                               : 'Misafir'}
                           </span>
 
-                          <span className="text-[9px] px-1.5 py-0.5 bg-slate-100 text-slate-700 font-semibold rounded border border-slate-200">
+                          <span className="text-[9px] px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold rounded border border-slate-200 dark:border-slate-700">
                             {getWarehouseNameById(u.depoId)}
                           </span>
 
@@ -1439,8 +1480,8 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                               onClick={() => handleDirectToggleUserPermission(u, 'canMakeReady')}
                               className={`px-2 py-0.5 rounded-lg text-[10px] font-extrabold flex items-center gap-1.5 transition cursor-pointer border ${
                                 hasMakeReady
-                                  ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-300 shadow-2xs'
-                                  : 'bg-slate-100 hover:bg-amber-50 text-slate-600 hover:text-amber-800 border-slate-300'
+                                  ? 'bg-emerald-50 dark:bg-emerald-950/50 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 text-emerald-800 dark:text-emerald-200 border-emerald-300 dark:border-emerald-700 shadow-2xs'
+                                  : 'bg-slate-100 dark:bg-slate-800 hover:bg-amber-50 dark:hover:bg-amber-950/40 text-slate-600 dark:text-slate-300 hover:text-amber-800 dark:hover:text-amber-200 border-slate-300 dark:border-slate-600'
                               }`}
                               title={
                                 hasMakeReady
@@ -1451,7 +1492,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                               {hasMakeReady ? (
                                 <>
                                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                                  <Check className="w-3 h-3 text-emerald-600" />
+                                  <Check className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
                                   <span>Evrak Hazır: İzinli</span>
                                 </>
                               ) : (
@@ -1469,7 +1510,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                             onClick={() =>
                               setExpandedUserPerms(isExpanded ? null : u.username)
                             }
-                            className="text-[10px] px-2 py-0.5 bg-slate-100 hover:bg-blue-50 text-blue-700 font-bold rounded-lg border border-slate-200 transition flex items-center gap-1 cursor-pointer"
+                            className="text-[10px] px-2 py-0.5 bg-slate-100 dark:bg-slate-800 hover:bg-blue-50 dark:hover:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-bold rounded-lg border border-slate-200 dark:border-slate-700 transition flex items-center gap-1 cursor-pointer"
                           >
                             <span>
                               {u.role === 'admin'
@@ -1490,7 +1531,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                           </span>
                           <button
                             onClick={() => handleStartEdit(u)}
-                            className="px-2.5 py-1 bg-amber-100 hover:bg-amber-200 text-amber-900 rounded-lg font-bold text-[10px] transition flex items-center gap-1 cursor-pointer"
+                            className="px-2.5 py-1 bg-amber-100 dark:bg-amber-950/60 hover:bg-amber-200 dark:hover:bg-amber-900/70 text-amber-900 dark:text-amber-200 rounded-lg font-bold text-[10px] transition flex items-center gap-1 cursor-pointer"
                             title="Kullanıcıyı ve Yetkilerini Düzenle"
                           >
                             <Edit className="w-3 h-3" /> Yetkileri Düzenle
@@ -1498,12 +1539,12 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                           <button
                             onClick={() => {
                               if (currentUser?.username === u.username) {
-                                alert('Şu an oturum açmış olduğunuz kendi kullanıcınızı silemezsiniz.');
+                                onNotify?.('Şu an oturum açmış olduğunuz kendi kullanıcınızı silemezsiniz.', 'warning');
                                 return;
                               }
                               onDeleteUser(u);
                             }}
-                            className="p-1.5 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg font-bold text-[10px] transition cursor-pointer"
+                            className="p-1.5 bg-red-100 dark:bg-red-950/60 hover:bg-red-200 dark:hover:bg-red-900/70 text-red-700 dark:text-red-300 rounded-lg font-bold text-[10px] transition cursor-pointer"
                             title="Kullanıcıyı Sil"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -1513,10 +1554,10 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
 
                       {/* Expanded Permissions Overview with Interactive Toggle Buttons */}
                       {isExpanded && (
-                        <div className="p-3 bg-slate-50/80 border-t border-slate-200 text-[10px]">
-                          <p className="font-bold text-slate-700 mb-2 flex items-center justify-between">
+                        <div className="p-3 bg-slate-50/80 dark:bg-slate-800/50 border-t border-slate-200 dark:border-slate-700 text-[10px]">
+                          <p className="font-bold text-slate-700 dark:text-slate-200 mb-2 flex items-center justify-between">
                             <span className="flex items-center gap-1.5">
-                              <CheckSquare className="w-3.5 h-3.5 text-blue-600" />
+                              <CheckSquare className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
                               {u.username} Kullanıcısının Tanımlı İzin Durumu:
                             </span>
                             <span className="text-[9px] text-slate-400">
@@ -1545,17 +1586,17 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                                   } ${
                                     isPermitted
                                       ? isMakeReady
-                                        ? 'bg-emerald-100/90 border-emerald-500 text-emerald-950 font-black shadow-xs ring-1 ring-emerald-400'
-                                        : 'bg-emerald-50 border-emerald-200 text-emerald-900 font-bold'
+                                        ? 'bg-emerald-100/90 dark:bg-emerald-950/60 border-emerald-500 dark:border-emerald-700 text-emerald-950 dark:text-emerald-100 font-black shadow-xs ring-1 ring-emerald-400 dark:ring-emerald-700'
+                                        : 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200 font-bold'
                                       : isMakeReady
-                                      ? 'bg-amber-50/80 border-amber-300 text-amber-900 font-semibold'
-                                      : 'bg-slate-100/70 border-slate-200 text-slate-400 line-through'
+                                      ? 'bg-amber-50/80 dark:bg-amber-950/40 border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200 font-semibold'
+                                      : 'bg-slate-100/70 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-400 dark:text-slate-500 line-through'
                                   }`}
                                   title={canToggle ? `${p.title}: Tıklayarak izin durumunu anında değiştirin` : p.title}
                                 >
                                   <div className="flex items-center gap-1 min-w-0">
                                     {isPermitted ? (
-                                      <Check className="w-3 h-3 text-emerald-600 shrink-0" />
+                                      <Check className="w-3 h-3 text-emerald-600 dark:text-emerald-400 shrink-0" />
                                     ) : (
                                       <X className="w-3 h-3 text-slate-400 shrink-0" />
                                     )}
@@ -1566,7 +1607,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                                       className={`text-[8px] px-1 py-0.2 rounded font-extrabold shrink-0 ${
                                         isPermitted
                                           ? 'bg-emerald-600 text-white'
-                                          : 'bg-slate-200 text-slate-600'
+                                          : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
                                       }`}
                                     >
                                       {isPermitted ? 'Açık' : 'Kapalı'}
@@ -1587,10 +1628,10 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
         )}
 
         {/* Footer */}
-        <div className="p-3 bg-slate-50 border-t border-slate-200 flex justify-end">
+        <div className="p-3 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-200 dark:border-slate-800 flex justify-end">
           <button
             onClick={onClose}
-            className="px-5 py-2 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-xl text-xs cursor-pointer transition"
+            className="px-5 py-2 bg-slate-800 hover:bg-slate-900 dark:bg-slate-700 dark:hover:bg-slate-600 text-white font-bold rounded-xl text-xs cursor-pointer transition"
           >
             Kapat
           </button>
@@ -1606,6 +1647,8 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
 interface DetailViewModalProps {
   vehicle: Vehicle | null;
   rampName?: string;
+  warehouseName?: string;
+  slaSettings?: SlaSettings;
   onClose: () => void;
   onOpenPhotoGallery: (v: Vehicle) => void;
   onShareWhatsApp?: (v: Vehicle) => void;
@@ -1614,6 +1657,8 @@ interface DetailViewModalProps {
 export const DetailViewModal: React.FC<DetailViewModalProps> = ({
   vehicle,
   rampName,
+  warehouseName,
+  slaSettings,
   onClose,
   onOpenPhotoGallery,
   onShareWhatsApp
@@ -1653,7 +1698,7 @@ export const DetailViewModal: React.FC<DetailViewModalProps> = ({
         <div className="p-3.5 sm:p-5 overflow-y-auto space-y-3.5 text-xs custom-scroll">
           {/* Araç Temel Bilgi Kartı */}
           <div className="bg-slate-50 dark:bg-slate-800/60 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700/60 shadow-2xs">
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2.5">
               <div>
                 <span className="text-slate-400 dark:text-slate-400 font-semibold block text-[10px]">Müşteri Firması</span>
                 <span className="font-bold text-slate-800 dark:text-slate-100 truncate block">{vehicle.musteri}</span>
@@ -1671,6 +1716,12 @@ export const DetailViewModal: React.FC<DetailViewModalProps> = ({
                 <span className="font-semibold text-slate-700 dark:text-slate-300 font-mono block">{vehicle.konteynirNo || 'Yok'}</span>
               </div>
               <div>
+                <span className="text-slate-400 dark:text-slate-400 font-semibold block text-[10px]">Depo / Tesis</span>
+                <span className="font-semibold text-slate-700 dark:text-slate-200 truncate block">
+                  {warehouseName || `Depo #${vehicle.depoId || 1}`}
+                </span>
+              </div>
+              <div>
                 <span className="text-slate-400 dark:text-slate-400 font-semibold block text-[10px]">Şoför Ad Soyad</span>
                 <span className="font-semibold text-slate-700 dark:text-slate-300 block">{vehicle.soforAd}</span>
               </div>
@@ -1678,10 +1729,14 @@ export const DetailViewModal: React.FC<DetailViewModalProps> = ({
                 <span className="text-slate-400 dark:text-slate-400 font-semibold block text-[10px]">Şoför Telefonu</span>
                 <a
                   href={`tel:${cleanPhone(vehicle.soforTel)}`}
-                  className="font-bold text-emerald-600 dark:text-emerald-400 hover:underline inline-block"
+                  className="font-bold text-emerald-600 dark:text-emerald-400 hover:underline inline-block font-mono"
                 >
                   {vehicle.soforTel}
                 </a>
+              </div>
+              <div>
+                <span className="text-slate-400 dark:text-slate-400 font-semibold block text-[10px]">Şoför TC No</span>
+                <span className="font-semibold text-slate-700 dark:text-slate-300 font-mono block">{vehicle.soforTc || '-'}</span>
               </div>
               <div>
                 <span className="text-slate-400 dark:text-slate-400 font-semibold block text-[10px]">Depo & İşlem</span>
@@ -1772,7 +1827,7 @@ export const DetailViewModal: React.FC<DetailViewModalProps> = ({
              ARAÇ DETAYI: SÜREÇ VE YAŞAM DÖNGÜSÜ ZAMAN ÇİZELGESİ
              (Depo Kayıt, Evrak Hazırlık, Rampa Giriş ve Çıkış Tarih & Süreleri)
              ========================================================= */}
-          <VehicleLifecycleTimeline vehicle={vehicle} rampName={rampName} />
+          <VehicleLifecycleTimeline vehicle={vehicle} rampName={rampName} slaSettings={slaSettings} />
         </div>
 
         {/* Modal Alt Kapat Çubuğu */}
@@ -1859,6 +1914,12 @@ export const RampAssignModal: React.FC<RampAssignModalProps> = ({
     return b.id - a.id;
   });
 
+  const canCall = currentUser?.role === 'admin' || hasPermission(currentUser, 'canCallVehicle');
+  const canAssign =
+    currentUser?.role === 'admin' ||
+    currentUser?.role === 'security' ||
+    hasPermission(currentUser, 'canAssignRamp');
+
   return (
     <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
       <div className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden max-h-[85vh] flex flex-col border border-slate-200 dark:border-slate-800 transition-colors">
@@ -1876,13 +1937,13 @@ export const RampAssignModal: React.FC<RampAssignModalProps> = ({
           </button>
         </div>
 
-        <div className="p-4 bg-slate-50 border-b border-slate-200">
+        <div className="p-4 bg-slate-50 dark:bg-slate-800/70 border-b border-slate-200 dark:border-slate-800">
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Plaka, Müşteri, Şoför veya İşlem Türü Ara..."
-            className="w-full px-4 py-2 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500 outline-none bg-white"
+            className="w-full px-4 py-2 border border-slate-200 dark:border-slate-700 rounded-xl text-xs focus:ring-2 focus:ring-blue-500 outline-none bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100"
           />
         </div>
 
@@ -1892,18 +1953,18 @@ export const RampAssignModal: React.FC<RampAssignModalProps> = ({
               key={v.id}
               className={`p-3 border rounded-xl transition flex items-center justify-between shadow-sm ${
                 v.isAcik
-                  ? 'border-red-500 bg-red-50/60'
-                  : 'bg-white border-slate-200 hover:border-blue-500 hover:bg-blue-50/50'
+                  ? 'border-red-500 bg-red-50/60 dark:bg-red-950/30'
+                  : 'bg-white dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 hover:border-blue-500 hover:bg-blue-50/50 dark:hover:bg-blue-950/30'
               }`}
             >
               <div>
-                <div className="flex items-center gap-2">
-                  <span className="font-bold text-xs text-slate-800">{v.dorsePlaka}</span>
-                  <span className="text-[10px] px-1.5 py-0.5 bg-blue-100 text-blue-700 font-bold rounded">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-bold text-xs text-slate-800 dark:text-slate-100">{v.dorsePlaka}</span>
+                  <span className="text-[10px] px-1.5 py-0.5 bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 font-bold rounded">
                     {v.islemTuru}
                   </span>
                   {(v.depoTuru || '').toLowerCase().includes('serbest') && v.durum !== 'EVRAK HAZIR' && (
-                    <span className="text-[9px] px-1.5 py-0.5 bg-emerald-100 text-emerald-800 font-extrabold rounded border border-emerald-300">
+                    <span className="text-[9px] px-1.5 py-0.5 bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 font-extrabold rounded border border-emerald-300 dark:border-emerald-700">
                       Serbest Depo (Doğrudan Atanabilir)
                     </span>
                   )}
@@ -1913,41 +1974,43 @@ export const RampAssignModal: React.FC<RampAssignModalProps> = ({
                     </span>
                   )}
                 </div>
-                <p className="text-xs font-semibold text-slate-600 mt-0.5">{v.musteri}</p>
+                <p className="text-xs font-semibold text-slate-600 dark:text-slate-300 mt-0.5">{v.musteri}</p>
                 <p className="text-[10px] text-slate-400">
                   Şoför: {v.soforAd} ({v.soforTel})
                 </p>
               </div>
 
-              <div className="flex gap-1.5">
-                {currentUser?.role === 'admin' && (
+              <div className="flex gap-1.5 shrink-0">
+                {canCall && (
                   <button
                     onClick={() => onCall(v, ramp)}
                     className="px-2.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-slate-900 font-extrabold text-[10px] rounded-lg transition shadow-sm flex items-center gap-1 cursor-pointer"
-                    title="Güvenlik ve Sahaya Bildirim Düşer (Sadece Admin)"
+                    title="Güvenlik ve Sahaya Bildirim Düşer"
                   >
                     Çağır
                   </button>
                 )}
-                <button
-                  onClick={() => onAssign(v, ramp)}
-                  className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-[10px] rounded-lg transition shadow-md shadow-blue-500/20 cursor-pointer"
-                >
-                  Ata
-                </button>
+                {canAssign && (
+                  <button
+                    onClick={() => onAssign(v, ramp)}
+                    className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-[10px] rounded-lg transition shadow-md shadow-blue-500/20 cursor-pointer"
+                  >
+                    Ata
+                  </button>
+                )}
               </div>
             </div>
           ))}
 
           {filtered.length === 0 && (
             <div className="text-center py-8 px-4 text-slate-400 text-xs space-y-2">
-              <p className="font-semibold text-slate-600">
+              <p className="font-semibold text-slate-600 dark:text-slate-300">
                 {search.trim()
                   ? 'Arama kriterine uygun araç bulunamadı.'
                   : "Bu rampa için çağrılabilecek 'EVRAK HAZIR' durumunda araç bulunamadı."}
               </p>
               {!search.trim() && (
-                <p className="text-[11px] text-slate-500">
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">
                   Bekleme sahasındaki araçların evrakları tamamlandığında, Araç Yönetimi ekranından durumunu &apos;EVRAK HAZIR&apos; yaparak buraya atayabilirsiniz.
                 </p>
               )}
@@ -1972,7 +2035,8 @@ interface NewVehicleModalProps {
   initialValues?: Partial<Vehicle> | null;
   customers?: Customer[];
   onAddNewCustomer?: (name: string) => void;
-  onSave: (vehicleData: Partial<Vehicle>) => void;
+  onNotify?: (msg: string, type?: 'success' | 'info' | 'warning') => void;
+  onSave: (vehicleData: Partial<Vehicle>) => boolean | void;
 }
 
 export const NewVehicleModal: React.FC<NewVehicleModalProps> = ({
@@ -1985,6 +2049,7 @@ export const NewVehicleModal: React.FC<NewVehicleModalProps> = ({
   initialValues,
   customers = [],
   onAddNewCustomer = () => {},
+  onNotify,
   onSave
 }) => {
   const [form, setForm] = useState({
@@ -1994,6 +2059,7 @@ export const NewVehicleModal: React.FC<NewVehicleModalProps> = ({
     konteynirNo: initialValues?.konteynirNo || '',
     soforAd: initialValues?.soforAd || '',
     soforTel: initialValues?.soforTel || '',
+    soforTc: initialValues?.soforTc || '',
     nakliyeFirmasi: initialValues?.nakliyeFirmasi || '',
     musteri: initialValues?.musteri || '',
     depoTuru: (initialValues?.depoTuru as 'Antrepo' | 'Serbest Depo') || 'Antrepo',
@@ -2013,6 +2079,7 @@ export const NewVehicleModal: React.FC<NewVehicleModalProps> = ({
         konteynirNo: initialValues?.konteynirNo || '',
         soforAd: initialValues?.soforAd || '',
         soforTel: initialValues?.soforTel || '',
+        soforTc: initialValues?.soforTc || '',
         nakliyeFirmasi: initialValues?.nakliyeFirmasi || '',
         musteri: initialValues?.musteri || '',
         depoTuru: (initialValues?.depoTuru as 'Antrepo' | 'Serbest Depo') || 'Antrepo',
@@ -2048,19 +2115,34 @@ export const NewVehicleModal: React.FC<NewVehicleModalProps> = ({
     const files = e.target.files;
     if (!files || !files.length) return;
 
+    const fileList = Array.from(files) as File[];
+    if (form.fotograflar.length + fileList.length > MAX_VEHICLE_PHOTOS) {
+      onNotify?.(`Bir araç için en fazla ${MAX_VEHICLE_PHOTOS} fotoğraf yüklenebilir.`, 'warning');
+      e.target.value = '';
+      return;
+    }
+
     try {
       const compressedPhotos: string[] = [];
-      const fileList = Array.from(files) as File[];
       for (const file of fileList) {
         const compressed = await compressImageFile(file);
         compressedPhotos.push(compressed);
       }
+      const nextPhotos = [...form.fotograflar, ...compressedPhotos];
+      const validation = validateVehiclePhotos(nextPhotos);
+      if (!validation.valid) {
+        onNotify?.(validation.message, 'warning');
+        return;
+      }
       setForm((prev) => ({
         ...prev,
-        fotograflar: [...prev.fotograflar, ...compressedPhotos]
+        fotograflar: nextPhotos
       }));
-    } catch (err) {
-      console.error('Fotoğraf sıkıştırma hatası:', err);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Fotoğraf sıkıştırılamadı.';
+      onNotify?.(msg, 'warning');
+    } finally {
+      e.target.value = '';
     }
   };
 
@@ -2074,11 +2156,13 @@ export const NewVehicleModal: React.FC<NewVehicleModalProps> = ({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.dorsePlaka.trim()) {
-      alert('Dorse Plakası zorunludur.');
+      onNotify?.('Dorse Plakası zorunludur.', 'warning');
       return;
     }
-    onSave(form);
-    onClose();
+    const saved = onSave(form);
+    if (saved !== false) {
+      onClose();
+    }
   };
 
   return (
@@ -2190,6 +2274,17 @@ export const NewVehicleModal: React.FC<NewVehicleModalProps> = ({
               />
             </div>
             <div>
+              <label className="block font-semibold text-slate-600 dark:text-slate-300 mb-1">Şoför TC Kimlik No (Opsiyonel)</label>
+              <input
+                type="text"
+                maxLength={11}
+                value={form.soforTc}
+                onChange={(e) => setForm({ ...form, soforTc: e.target.value.replace(/\D/g, '').slice(0, 11) })}
+                className="w-full border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 font-mono bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100"
+                placeholder="11 Haneli TC No"
+              />
+            </div>
+            <div>
               <label className="block font-semibold text-slate-600 dark:text-slate-300 mb-1">Nakliye Firması</label>
               <input
                 type="text"
@@ -2240,7 +2335,7 @@ export const NewVehicleModal: React.FC<NewVehicleModalProps> = ({
               </select>
             </div>
 
-            {currentUser?.role === 'admin' && (
+            {(currentUser?.role === 'admin' || hasPermission(currentUser, 'canToggleAcil')) && (
               <div className="flex items-center gap-2 pt-5">
                 <label className="relative inline-flex items-center cursor-pointer">
                   <input
@@ -2681,8 +2776,9 @@ interface EditVehicleModalProps {
   currentUser: User | null;
   customers?: Customer[];
   onAddNewCustomer?: (name: string) => void;
+  onNotify?: (msg: string, type?: 'success' | 'info' | 'warning') => void;
   onClose: () => void;
-  onSave: (updated: Vehicle) => void;
+  onSave: (updated: Vehicle) => boolean | void;
   onDelete?: (vehicle: Vehicle) => void;
 }
 
@@ -2693,6 +2789,7 @@ export const EditVehicleModal: React.FC<EditVehicleModalProps> = ({
   currentUser,
   customers = [],
   onAddNewCustomer = () => {},
+  onNotify,
   onClose,
   onSave,
   onDelete
@@ -2706,6 +2803,7 @@ export const EditVehicleModal: React.FC<EditVehicleModalProps> = ({
       konteynirNo: vehicle.konteynirNo || '',
       soforAd: vehicle.soforAd || '',
       soforTel: vehicle.soforTel || '',
+      soforTc: vehicle.soforTc || '',
       musteri: vehicle.musteri || '',
       nakliyeFirmasi: vehicle.nakliyeFirmasi || '',
       depoTuru: vehicle.depoTuru || 'Antrepo',
@@ -2726,6 +2824,7 @@ export const EditVehicleModal: React.FC<EditVehicleModalProps> = ({
         konteynirNo: vehicle.konteynirNo || '',
         soforAd: vehicle.soforAd || '',
         soforTel: vehicle.soforTel || '',
+        soforTc: vehicle.soforTc || '',
         musteri: vehicle.musteri || '',
         nakliyeFirmasi: vehicle.nakliyeFirmasi || '',
         depoTuru: vehicle.depoTuru || 'Antrepo',
@@ -2747,27 +2846,51 @@ export const EditVehicleModal: React.FC<EditVehicleModalProps> = ({
     );
   };
 
+  const canMakeReady = currentUser?.role === 'admin' || hasPermission(currentUser, 'canMakeReady');
+  const canEditVehicle = currentUser?.role === 'admin' || hasPermission(currentUser, 'canEditVehicle');
+  const canAuthorizeExit = currentUser?.role === 'admin' || hasPermission(currentUser, 'canAuthorizeExit');
+  const canAssignRampPermission =
+    currentUser?.role === 'admin' ||
+    currentUser?.role === 'security' ||
+    hasPermission(currentUser, 'canAssignRamp');
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || !files.length) return;
 
+    const currentCount = form.fotograflar?.length || 0;
+    const fileList = Array.from(files) as File[];
+    if (currentCount + fileList.length > MAX_VEHICLE_PHOTOS) {
+      onNotify?.(`Bir araç için en fazla ${MAX_VEHICLE_PHOTOS} fotoğraf yüklenebilir.`, 'warning');
+      e.target.value = '';
+      return;
+    }
+
     try {
       const compressedPhotos: string[] = [];
-      const fileList = Array.from(files) as File[];
       for (const file of fileList) {
         const compressed = await compressImageFile(file);
         compressedPhotos.push(compressed);
+      }
+      const nextPhotos = [...(form.fotograflar || []), ...compressedPhotos];
+      const validation = validateVehiclePhotos(nextPhotos);
+      if (!validation.valid) {
+        onNotify?.(validation.message, 'warning');
+        return;
       }
       setForm((prev) =>
         prev
           ? {
               ...prev,
-              fotograflar: [...(prev.fotograflar || []), ...compressedPhotos]
+              fotograflar: nextPhotos
             }
           : null
       );
-    } catch (err) {
-      console.error('Fotoğraf sıkıştırma hatası:', err);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Fotoğraf sıkıştırılamadı.';
+      onNotify?.(msg, 'warning');
+    } finally {
+      e.target.value = '';
     }
   };
 
@@ -2782,16 +2905,22 @@ export const EditVehicleModal: React.FC<EditVehicleModalProps> = ({
     );
   };
 
-  const canMakeReady = currentUser?.role === 'admin' || hasPermission(currentUser, 'canMakeReady');
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canEditVehicle) {
+      onNotify?.('Araç bilgilerini düzenleme yetkiniz bulunmamaktadır.', 'warning');
+      return;
+    }
     if (!form.dorsePlaka.trim()) {
-      alert('Dorse Plakası zorunludur.');
+      onNotify?.('Dorse Plakası zorunludur.', 'warning');
       return;
     }
     if (form.durum === 'EVRAK HAZIR' && vehicle.durum !== 'EVRAK HAZIR' && !canMakeReady) {
-      alert("Bir aracın durumunu 'EVRAK HAZIR' yapma yetkiniz bulunmamaktadır. Bu yetki Yönetici (Admin) tarafından 'Özel Yetkiler' alanından tanımlanabilir.");
+      onNotify?.("Bir aracın durumunu 'EVRAK HAZIR' yapma yetkiniz bulunmamaktadır.", 'warning');
+      return;
+    }
+    if (form.durum === 'ÇIKIŞ YAPTI' && vehicle.durum !== 'ÇIKIŞ YAPTI' && !canAuthorizeExit) {
+      onNotify?.('Araç çıkış onayı verme yetkiniz bulunmamaktadır.', 'warning');
       return;
     }
     onSave(form);
@@ -2899,6 +3028,18 @@ export const EditVehicleModal: React.FC<EditVehicleModalProps> = ({
             </div>
 
             <div>
+              <label className="block font-semibold text-slate-600 dark:text-slate-300 mb-1">Şoför TC Kimlik No</label>
+              <input
+                type="text"
+                maxLength={11}
+                value={form.soforTc || ''}
+                onChange={(e) => setForm({ ...form, soforTc: e.target.value.replace(/\D/g, '').slice(0, 11) })}
+                className="w-full border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 font-mono bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100"
+                placeholder="11 Haneli TC No"
+              />
+            </div>
+
+            <div>
               <label className="block font-semibold text-slate-600 dark:text-slate-300 mb-1">Nakliye Firması</label>
               <input
                 type="text"
@@ -2960,8 +3101,12 @@ export const EditVehicleModal: React.FC<EditVehicleModalProps> = ({
                 <option value="EVRAK HAZIR" disabled={!canMakeReady && form.durum !== 'EVRAK HAZIR'}>
                   EVRAK HAZIR {!canMakeReady && form.durum !== 'EVRAK HAZIR' ? '(Yetki Gerekir)' : ''}
                 </option>
-                <option value="RAMPADA">RAMPADA</option>
-                <option value="ÇIKIŞ YAPTI">ÇIKIŞ YAPTI</option>
+                <option value="RAMPADA" disabled={!canAssignRampPermission && form.durum !== 'RAMPADA'}>
+                  RAMPADA {!canAssignRampPermission && form.durum !== 'RAMPADA' ? '(Yetki Gerekir)' : ''}
+                </option>
+                <option value="ÇIKIŞ YAPTI" disabled={!canAuthorizeExit && form.durum !== 'ÇIKIŞ YAPTI'}>
+                  ÇIKIŞ YAPTI {!canAuthorizeExit && form.durum !== 'ÇIKIŞ YAPTI' ? '(Yetki Gerekir)' : ''}
+                </option>
               </select>
             </div>
 
@@ -2977,7 +3122,9 @@ export const EditVehicleModal: React.FC<EditVehicleModalProps> = ({
               {(() => {
                 const isSerbest = (form.depoTuru || '').toLowerCase().includes('serbest');
                 const isSecurityOrAdmin = currentUser?.role === 'security' || currentUser?.role === 'admin';
-                const canAssignRamp = form.durum === 'EVRAK HAZIR' || form.durum === 'RAMPADA' || (isSerbest && isSecurityOrAdmin);
+                const canAssignRamp =
+                  canAssignRampPermission &&
+                  (form.durum === 'EVRAK HAZIR' || form.durum === 'RAMPADA' || (isSerbest && isSecurityOrAdmin));
 
                 return (
                   <select
@@ -3044,7 +3191,7 @@ export const EditVehicleModal: React.FC<EditVehicleModalProps> = ({
             {form.fotograflar && form.fotograflar.length > 0 && (
               <div className="flex flex-wrap gap-3">
                 {form.fotograflar.map((img, idx) => (
-                  <div key={idx} className="relative w-16 h-16 rounded-xl overflow-hidden border group">
+                  <div key={idx} className="relative w-16 h-16 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 group">
                     <img src={img} alt={`Fotoğraf ${idx + 1}`} className="w-full h-full object-cover" />
                     <button
                       type="button"
@@ -3059,14 +3206,14 @@ export const EditVehicleModal: React.FC<EditVehicleModalProps> = ({
             )}
           </div>
 
-          <div className="pt-4 border-t border-slate-100 flex items-center justify-between gap-3">
-            {onDelete ? (
+          <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3">
+            {onDelete && canEditVehicle ? (
               <button
                 type="button"
                 onClick={() => onDelete(vehicle)}
-                className="px-4 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl font-semibold transition cursor-pointer flex items-center gap-1.5"
+                className="px-4 py-2 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/50 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 rounded-xl font-semibold transition cursor-pointer flex items-center gap-1.5"
               >
-                <Trash2 className="w-3.5 h-3.5 text-rose-600" /> Aracı Sil
+                <Trash2 className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" /> Aracı Sil
               </button>
             ) : <div />}
 
@@ -3074,13 +3221,14 @@ export const EditVehicleModal: React.FC<EditVehicleModalProps> = ({
               <button
                 type="button"
                 onClick={onClose}
-                className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-xl font-semibold cursor-pointer"
+                className="px-4 py-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl font-semibold cursor-pointer"
               >
                 İptal
               </button>
               <button
                 type="submit"
-                className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl shadow-md shadow-blue-500/20 cursor-pointer"
+                disabled={!canEditVehicle}
+                className="px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold rounded-xl shadow-md shadow-blue-500/20 cursor-pointer"
               >
                 Değişiklikleri Kaydet
               </button>
@@ -3099,6 +3247,7 @@ interface PasswordModalProps {
   isOpen: boolean;
   onClose: () => void;
   users: User[];
+  onNotify?: (msg: string, type?: 'success' | 'info' | 'warning') => void;
   onChangePassword: (username: string, newPass: string) => void;
 }
 
@@ -3106,6 +3255,7 @@ export const PasswordModal: React.FC<PasswordModalProps> = ({
   isOpen,
   onClose,
   users,
+  onNotify,
   onChangePassword
 }) => {
   const [targetUser, setTargetUser] = useState(users[0]?.username || '');
@@ -3116,7 +3266,7 @@ export const PasswordModal: React.FC<PasswordModalProps> = ({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newPassword.trim()) {
-      alert('Lütfen geçerli bir şifre giriniz.');
+      onNotify?.('Lütfen geçerli bir şifre giriniz.', 'warning');
       return;
     }
     onChangePassword(targetUser, newPassword.trim());
@@ -3209,6 +3359,9 @@ export const ReleaseRampVehicleModal: React.FC<ReleaseRampVehicleModalProps> = (
 }) => {
   if (!isOpen || !vehicle) return null;
 
+  const canAuthorizeExit =
+    currentUser?.role === 'admin' || hasPermission(currentUser, 'canAuthorizeExit');
+
   return (
     <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
       <div className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-2xl shadow-2xl max-w-md w-full p-5 space-y-4 border border-slate-100 dark:border-slate-800 transition-colors">
@@ -3269,17 +3422,23 @@ export const ReleaseRampVehicleModal: React.FC<ReleaseRampVehicleModalProps> = (
 
         {/* Eylem Butonları */}
         <div className="space-y-2 pt-1">
-          <button
-            type="button"
-            onClick={() => onReleaseAndExit(vehicle)}
-            className="w-full py-2.5 px-4 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl text-xs flex items-center gap-2.5 shadow-md shadow-red-500/20 cursor-pointer transition active:scale-[0.99]"
-          >
-            <LogOut className="w-4 h-4 shrink-0" />
-            <div className="text-left">
-              <div>Rampadan Çıkar & Sahadan Çıkış Yap</div>
-              <div className="text-[10px] font-normal text-red-100">Aracı rampadan indirir ve sahadan ÇIKIŞ YAPTI olarak işler</div>
+          {canAuthorizeExit ? (
+            <button
+              type="button"
+              onClick={() => onReleaseAndExit(vehicle)}
+              className="w-full py-2.5 px-4 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl text-xs flex items-center gap-2.5 shadow-md shadow-red-500/20 cursor-pointer transition active:scale-[0.99]"
+            >
+              <LogOut className="w-4 h-4 shrink-0" />
+              <div className="text-left">
+                <div>Rampadan Çıkar & Sahadan Çıkış Yap</div>
+                <div className="text-[10px] font-normal text-red-100">Aracı rampadan indirir ve sahadan ÇIKIŞ YAPTI olarak işler</div>
+              </div>
+            </button>
+          ) : (
+            <div className="p-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-[10px] text-slate-500 dark:text-slate-400 text-center">
+              ℹ️ Sahadan çıkış yapma yetkisi yalnızca Çıkış Onayı yetkisine sahip kullanıcılardadır.
             </div>
-          </button>
+          )}
 
           {currentUser?.role === 'admin' || hasPermission(currentUser, 'canMakeReady') || hasPermission(currentUser, 'canReleaseRamp') ? (
             <button
@@ -3339,7 +3498,7 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[70]">
       <div className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-2xl shadow-2xl max-w-sm w-full p-5 space-y-3 border border-slate-100 dark:border-slate-800 transition-colors">
         <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-2.5">
           <h3 className="font-bold text-slate-800 dark:text-slate-100 text-sm flex items-center gap-1.5">
@@ -3391,6 +3550,7 @@ interface WarehouseManagementModalProps {
   onToggleStatus: (warehouseId: number) => void;
   onAddWarehouse: (name: string) => void;
   onEditWarehouse: (id: number, newName: string) => void;
+  onManageWarehouseRamps?: (warehouseId: number) => void;
 }
 
 export const WarehouseManagementModal: React.FC<WarehouseManagementModalProps> = ({
@@ -3399,7 +3559,8 @@ export const WarehouseManagementModal: React.FC<WarehouseManagementModalProps> =
   warehouses,
   onToggleStatus,
   onAddWarehouse,
-  onEditWarehouse
+  onEditWarehouse,
+  onManageWarehouseRamps
 }) => {
   const [newWarehouseName, setNewWarehouseName] = useState('');
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -3452,40 +3613,40 @@ export const WarehouseManagementModal: React.FC<WarehouseManagementModalProps> =
         </div>
 
         {/* Content */}
-        <div className="p-4 sm:p-6 overflow-y-auto space-y-4 text-xs custom-scroll">
+        <div className="p-4 sm:p-6 overflow-y-auto space-y-4 text-xs custom-scroll bg-white dark:bg-slate-900">
           {/* Bilgi ve İstatistik Kutusu */}
-          <div className="bg-blue-50/70 border border-blue-200 rounded-xl p-3.5 space-y-2">
+          <div className="bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800/60 rounded-xl p-3.5 space-y-2">
             <div className="flex items-center justify-between flex-wrap gap-2">
-              <span className="font-bold text-blue-900 flex items-center gap-1.5">
-                <Info className="w-4 h-4 text-blue-600 shrink-0" />
+              <span className="font-bold text-blue-900 dark:text-blue-200 flex items-center gap-1.5">
+                <Info className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
                 Görünürlük Kuralları
               </span>
               <div className="flex items-center gap-2">
-                <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-full font-bold text-[10px]">
+                <span className="px-2 py-0.5 bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700/60 rounded-full font-bold text-[10px]">
                   {activeCount} Aktif Depo
                 </span>
                 {passiveCount > 0 && (
-                  <span className="px-2 py-0.5 bg-rose-100 text-rose-800 border border-rose-300 rounded-full font-bold text-[10px]">
+                  <span className="px-2 py-0.5 bg-rose-100 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300 border border-rose-300 dark:border-rose-700/60 rounded-full font-bold text-[10px]">
                     {passiveCount} Pasif Depo
                   </span>
                 )}
               </div>
             </div>
-            <p className="text-[11px] text-blue-800 leading-relaxed">
+            <p className="text-[11px] text-blue-800 dark:text-blue-300 leading-relaxed">
               Pasif edilen depolar; şoför/misafir giriş ekranında, araç kabul formlarında, rapor filtrelerinde ve üst depo seçicilerinde <b>tamamen gizlenir</b>. Yalnızca <b>aktif</b> olan depolar listelenir.
             </p>
           </div>
 
           {/* Yeni Depo Ekleme Formu */}
-          <form onSubmit={handleAddSubmit} className="bg-slate-50 border border-slate-200 rounded-xl p-3 sm:p-4 space-y-2">
-            <label className="font-bold text-slate-700 block text-xs">Yeni Depo / Tesis Ekle</label>
+          <form onSubmit={handleAddSubmit} className="bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl p-3 sm:p-4 space-y-2">
+            <label className="font-bold text-slate-700 dark:text-slate-200 block text-xs">Yeni Depo / Tesis Ekle</label>
             <div className="flex gap-2">
               <input
                 type="text"
                 value={newWarehouseName}
                 onChange={(e) => setNewWarehouseName(e.target.value)}
                 placeholder="Örn: Depo 4 - Soğuk Hava Sahası..."
-                className="flex-1 px-3 py-2 border border-slate-300 rounded-xl bg-white outline-none focus:ring-2 focus:ring-blue-500 text-xs text-slate-800 font-medium"
+                className="flex-1 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-900 outline-none focus:ring-2 focus:ring-blue-500 text-xs text-slate-800 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 font-medium"
               />
               <button
                 type="submit"
@@ -3499,12 +3660,12 @@ export const WarehouseManagementModal: React.FC<WarehouseManagementModalProps> =
 
           {/* Depo Listesi */}
           <div className="space-y-2">
-            <h4 className="font-bold text-slate-700 text-xs flex items-center justify-between">
+            <h4 className="font-bold text-slate-700 dark:text-slate-200 text-xs flex items-center justify-between">
               <span>Mevcut Depolar ({warehouses.length})</span>
-              <span className="text-[10px] text-slate-400 font-normal">Aktif/Pasif durumunu tek tıkla değiştirebilirsiniz</span>
+              <span className="text-[10px] text-slate-400 dark:text-slate-500 font-normal">Aktif/Pasif durumunu tek tıkla değiştirebilirsiniz</span>
             </h4>
 
-            <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden bg-white shadow-sm">
+            <div className="divide-y divide-slate-100 dark:divide-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden bg-white dark:bg-slate-900 shadow-sm">
               {warehouses.map((w) => {
                 const isAktif = w.aktif !== false;
                 const isEditing = editingId === w.id;
@@ -3513,15 +3674,15 @@ export const WarehouseManagementModal: React.FC<WarehouseManagementModalProps> =
                   <div
                     key={w.id}
                     className={`p-3 sm:p-3.5 transition flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
-                      isAktif ? 'bg-white hover:bg-slate-50/70' : 'bg-slate-50/90 opacity-85'
+                      isAktif ? 'bg-white dark:bg-slate-900 hover:bg-slate-50/70 dark:hover:bg-slate-800/60' : 'bg-slate-50/90 dark:bg-slate-800/40 opacity-85'
                     }`}
                   >
                     <div className="flex items-center gap-3 min-w-0 flex-1">
                       <div
                         className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 font-extrabold text-xs ${
                           isAktif
-                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                            : 'bg-slate-200 text-slate-600 border border-slate-300'
+                            ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-700/60'
+                            : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-300 dark:border-slate-600'
                         }`}
                       >
                         #{w.id}
@@ -3533,7 +3694,7 @@ export const WarehouseManagementModal: React.FC<WarehouseManagementModalProps> =
                             type="text"
                             value={editingName}
                             onChange={(e) => setEditingName(e.target.value)}
-                            className="flex-1 px-2.5 py-1.5 border border-blue-400 rounded-lg bg-white outline-none text-xs font-bold text-slate-800"
+                            className="flex-1 px-2.5 py-1.5 border border-blue-400 dark:border-blue-500 rounded-lg bg-white dark:bg-slate-900 outline-none text-xs font-bold text-slate-800 dark:text-slate-100"
                             autoFocus
                           />
                           <button
@@ -3546,7 +3707,7 @@ export const WarehouseManagementModal: React.FC<WarehouseManagementModalProps> =
                           <button
                             type="button"
                             onClick={() => setEditingId(null)}
-                            className="px-2 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-[11px] cursor-pointer"
+                            className="px-2 py-1.5 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-600 dark:text-slate-200 rounded-lg text-[11px] cursor-pointer"
                           >
                             İptal
                           </button>
@@ -3554,20 +3715,20 @@ export const WarehouseManagementModal: React.FC<WarehouseManagementModalProps> =
                       ) : (
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-bold text-slate-800 text-xs truncate">{w.ad}</span>
+                            <span className="font-bold text-slate-800 dark:text-slate-100 text-xs truncate">{w.ad}</span>
                             {isAktif ? (
-                              <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full font-bold text-[9px] flex items-center gap-1">
+                              <span className="px-2 py-0.5 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-700/60 rounded-full font-bold text-[9px] flex items-center gap-1">
                                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                                 Aktif (Görünür)
                               </span>
                             ) : (
-                              <span className="px-2 py-0.5 bg-rose-50 text-rose-700 border border-rose-200 rounded-full font-bold text-[9px] flex items-center gap-1">
-                                <EyeOff className="w-3 h-3 text-rose-500" />
+                              <span className="px-2 py-0.5 bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-700/60 rounded-full font-bold text-[9px] flex items-center gap-1">
+                                <EyeOff className="w-3 h-3 text-rose-500 dark:text-rose-400" />
                                 Pasif (Gizli)
                               </span>
                             )}
                           </div>
-                          <p className="text-[10px] text-slate-400 mt-0.5">
+                          <p className="text-[10px] text-slate-400 dark:text-slate-400 mt-0.5">
                             {isAktif
                               ? 'Bu depo sistem genelinde açık ve araç kabulüne uygundur.'
                               : 'Bu depo kullanıcılardan gizlenmiştir, işlem kabul etmez.'}
@@ -3578,11 +3739,21 @@ export const WarehouseManagementModal: React.FC<WarehouseManagementModalProps> =
 
                     {!isEditing && (
                       <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                        {onManageWarehouseRamps && (
+                          <button
+                            type="button"
+                            onClick={() => onManageWarehouseRamps(w.id)}
+                            title="Bu Depoya Ait Rampaları Yönet"
+                            className="px-2.5 py-1.5 text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 dark:hover:bg-blue-900/60 rounded-xl transition border border-blue-200 dark:border-blue-800 cursor-pointer font-bold text-[11px] flex items-center gap-1"
+                          >
+                            <WarehouseIcon className="w-3.5 h-3.5" /> Rampalar
+                          </button>
+                        )}
                         <button
                           type="button"
                           onClick={() => handleStartEdit(w)}
                           title="Depo Adını Düzenle"
-                          className="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition border border-slate-200 cursor-pointer"
+                          className="p-2 text-slate-500 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/50 rounded-xl transition border border-slate-200 dark:border-slate-700 cursor-pointer"
                         >
                           <Edit className="w-3.5 h-3.5" />
                         </button>
@@ -3592,13 +3763,13 @@ export const WarehouseManagementModal: React.FC<WarehouseManagementModalProps> =
                           onClick={() => onToggleStatus(w.id)}
                           className={`px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition cursor-pointer shadow-sm ${
                             isAktif
-                              ? 'bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 hover:border-rose-300'
+                              ? 'bg-rose-50 dark:bg-rose-950/60 hover:bg-rose-100 dark:hover:bg-rose-900/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 hover:border-rose-300'
                               : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/20'
                           }`}
                         >
                           {isAktif ? (
                             <>
-                              <EyeOff className="w-3.5 h-3.5 text-rose-600" />
+                              <EyeOff className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />
                               <span>Pasif Et</span>
                             </>
                           ) : (
@@ -3618,13 +3789,423 @@ export const WarehouseManagementModal: React.FC<WarehouseManagementModalProps> =
         </div>
 
         {/* Footer */}
-        <div className="p-3 sm:p-4 bg-slate-50 border-t border-slate-200 flex justify-end shrink-0">
+        <div className="p-3 sm:p-4 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-200 dark:border-slate-800 flex justify-end shrink-0">
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white font-semibold text-xs rounded-xl shadow transition cursor-pointer"
+            className="px-4 py-2 bg-slate-800 dark:bg-slate-700 hover:bg-slate-900 dark:hover:bg-slate-600 text-white font-semibold text-xs rounded-xl shadow transition cursor-pointer"
           >
             Tamamlandı / Kapat
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+/* =========================================================
+   13. SLA HEDEF SÜRE AYARLARI MODALI (ADMIN)
+   ========================================================= */
+interface SlaSettingsModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  slaSettings: SlaSettings;
+  onNotify?: (msg: string, type?: 'success' | 'info' | 'warning') => void;
+  onSave: (newSettings: SlaSettings) => void;
+}
+
+export const SlaSettingsModal: React.FC<SlaSettingsModalProps> = ({
+  isOpen,
+  onClose,
+  slaSettings,
+  onNotify,
+  onSave
+}) => {
+  const [form, setForm] = useState<SlaSettings>(slaSettings || DEFAULT_SLA_SETTINGS);
+
+  useEffect(() => {
+    if (isOpen) {
+      setForm(slaSettings || DEFAULT_SLA_SETTINGS);
+    }
+  }, [isOpen, slaSettings]);
+
+  if (!isOpen) return null;
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (
+      form.bosaltmaMinutes < 5 ||
+      form.yuklemeMinutes < 5 ||
+      form.tahliyeMinutes < 5 ||
+      form.warningThresholdPercent < 50 ||
+      form.warningThresholdPercent > 99
+    ) {
+      onNotify?.('Hedef süreler en az 5 dakika, uyarı eşiği %50-%99 arasında olmalıdır.', 'warning');
+      return;
+    }
+    onSave(form);
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+      <div className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-2xl shadow-2xl max-w-md w-full overflow-hidden border border-slate-200 dark:border-slate-800 transition-colors">
+        <div className="p-4 sm:p-5 bg-slate-900 text-white flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-400/30 flex items-center justify-center">
+              <SlidersHorizontal className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="font-bold text-sm">SLA Hedef Süre Ayarları</h3>
+              <p className="text-[10px] text-slate-300">İşlem türüne göre rampa gecikme limitleri</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="text-slate-400 hover:text-white cursor-pointer">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-5 space-y-4 text-xs">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block font-bold text-slate-700 dark:text-slate-200 mb-1">
+                Boşaltma Hedefi (Dk)
+              </label>
+              <input
+                type="number"
+                min={5}
+                max={1440}
+                value={form.bosaltmaMinutes}
+                onChange={(e) => setForm({ ...form, bosaltmaMinutes: Number(e.target.value) })}
+                className="w-full border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 font-mono font-bold bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-slate-100 outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            <div>
+              <label className="block font-bold text-slate-700 dark:text-slate-200 mb-1">
+                Yükleme Hedefi (Dk)
+              </label>
+              <input
+                type="number"
+                min={5}
+                max={1440}
+                value={form.yuklemeMinutes}
+                onChange={(e) => setForm({ ...form, yuklemeMinutes: Number(e.target.value) })}
+                className="w-full border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 font-mono font-bold bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-slate-100 outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            <div>
+              <label className="block font-bold text-slate-700 dark:text-slate-200 mb-1">
+                Tahliye Hedefi (Dk)
+              </label>
+              <input
+                type="number"
+                min={5}
+                max={1440}
+                value={form.tahliyeMinutes}
+                onChange={(e) => setForm({ ...form, tahliyeMinutes: Number(e.target.value) })}
+                className="w-full border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 font-mono font-bold bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-slate-100 outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            <div>
+              <label className="block font-bold text-slate-700 dark:text-slate-200 mb-1">
+                Uyarı Eşiği (%)
+              </label>
+              <input
+                type="number"
+                min={50}
+                max={99}
+                value={form.warningThresholdPercent}
+                onChange={(e) => setForm({ ...form, warningThresholdPercent: Number(e.target.value) })}
+                className="w-full border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 font-mono font-bold bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-slate-100 outline-none focus:ring-2 focus:ring-amber-500"
+              />
+            </div>
+          </div>
+
+          <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-xl text-[11px] text-amber-900 dark:text-amber-200 leading-relaxed">
+            Bu limitler aşılınca rampa kartları, araç detay zaman çizelgesi ve dashboard kırmızı gecikme uyarısı verir. Uyarı eşiği oranına ulaşıldığında ise sarı uyarı durumuna geçer.
+          </div>
+
+          <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800">
+            <button
+              type="button"
+              onClick={() => setForm(DEFAULT_SLA_SETTINGS)}
+              className="px-3 py-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl font-semibold cursor-pointer"
+            >
+              Varsayılana Dön
+            </button>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 rounded-xl font-semibold cursor-pointer"
+              >
+                İptal
+              </button>
+              <button
+                type="submit"
+                className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow cursor-pointer"
+              >
+                Kaydet & Uygula
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+/* =========================================================
+   14. DEPO BAZLI RAMPA YÖNETİMİ MODALI (ADMIN)
+   ========================================================= */
+interface RampConfigModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  warehouses: Warehouse[];
+  ramps: Ramp[];
+  vehicles: Vehicle[];
+  initialWarehouseId?: number;
+  onNotify?: (msg: string, type?: 'success' | 'info' | 'warning') => void;
+  onAddRamp: (depoId: number, name: string) => void;
+  onSeedDefaultRamps: (depoId: number, count: number) => void;
+  onRenameRamp: (ramp: Ramp, newName: string) => void;
+  onDeleteRamp: (ramp: Ramp) => void;
+}
+
+export const RampConfigModal: React.FC<RampConfigModalProps> = ({
+  isOpen,
+  onClose,
+  warehouses,
+  ramps,
+  vehicles,
+  initialWarehouseId,
+  onNotify,
+  onAddRamp,
+  onSeedDefaultRamps,
+  onRenameRamp,
+  onDeleteRamp
+}) => {
+  const [selectedWhId, setSelectedWhId] = useState<number>(initialWarehouseId || warehouses[0]?.id || 1);
+  const [newRampName, setNewRampName] = useState('');
+  const [seedCount, setSeedCount] = useState<number>(12);
+  const [editingRampId, setEditingRampId] = useState<number | null>(null);
+  const [editingRampName, setEditingRampName] = useState('');
+
+  useEffect(() => {
+    if (isOpen) {
+      if (initialWarehouseId && initialWarehouseId > 0) {
+        setSelectedWhId(initialWarehouseId);
+      } else if (warehouses[0]?.id) {
+        setSelectedWhId(warehouses[0].id);
+      }
+      setEditingRampId(null);
+      setNewRampName('');
+    }
+  }, [isOpen, initialWarehouseId, warehouses]);
+
+  if (!isOpen) return null;
+
+  const warehouseRamps = ramps.filter((r) => (r.depoId || 1) === selectedWhId);
+
+  const handleAdd = (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = newRampName.trim();
+    if (!trimmed) {
+      onNotify?.('Lütfen bir rampa adı giriniz.', 'warning');
+      return;
+    }
+    onAddRamp(selectedWhId, trimmed);
+    setNewRampName('');
+  };
+
+  return (
+    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 z-50">
+      <div className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-2xl shadow-2xl max-w-2xl w-full overflow-hidden max-h-[90vh] flex flex-col border border-slate-200 dark:border-slate-800 transition-colors">
+        <div className="p-4 sm:p-5 bg-slate-900 text-white flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-blue-600/20 text-blue-400 border border-blue-500/30 flex items-center justify-center">
+              <WarehouseIcon className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="font-bold text-sm sm:text-base">Depo Bazlı Rampa Yönetimi</h3>
+              <p className="text-[11px] text-slate-300">Her depo için bağımsız rampa havuzu oluşturun ve düzenleyin</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="text-slate-400 hover:text-white cursor-pointer p-1">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="p-4 sm:p-5 overflow-y-auto space-y-4 text-xs custom-scroll">
+          <div>
+            <label className="block font-bold text-slate-700 dark:text-slate-200 mb-1">İşlem Yapılacak Depo / Tesis</label>
+            <select
+              value={selectedWhId}
+              onChange={(e) => {
+                setSelectedWhId(Number(e.target.value));
+                setEditingRampId(null);
+              }}
+              className="w-full border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 font-bold bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-slate-100 outline-none"
+            >
+              {warehouses.map((w) => (
+                <option key={w.id} value={w.id}>
+                  {w.ad} ({ramps.filter((r) => (r.depoId || 1) === w.id).length} Rampa)
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <form onSubmit={handleAdd} className="bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-xl p-3 space-y-2">
+              <label className="block font-bold text-slate-700 dark:text-slate-200">Tek Rampa Ekle</label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={newRampName}
+                  onChange={(e) => setNewRampName(e.target.value)}
+                  placeholder={`Örn: Rampa ${warehouseRamps.length + 1}`}
+                  className="flex-1 border border-slate-300 dark:border-slate-600 rounded-xl px-3 py-1.5 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 outline-none"
+                />
+                <button
+                  type="submit"
+                  className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl cursor-pointer flex items-center gap-1 shrink-0"
+                >
+                  <Plus className="w-3.5 h-3.5" /> Ekle
+                </button>
+              </div>
+            </form>
+
+            <div className="bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-xl p-3 space-y-2">
+              <label className="block font-bold text-slate-700 dark:text-slate-200">Hızlı Toplu Rampa Oluştur</label>
+              <div className="flex gap-2 items-center">
+                <input
+                  type="number"
+                  min={1}
+                  max={30}
+                  value={seedCount}
+                  onChange={(e) => setSeedCount(Number(e.target.value))}
+                  className="w-20 border border-slate-300 dark:border-slate-600 rounded-xl px-2.5 py-1.5 font-mono font-bold bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={() => onSeedDefaultRamps(selectedWhId, seedCount)}
+                  className="flex-1 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl cursor-pointer transition"
+                >
+                  {seedCount} Rampa Ekle
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <h4 className="font-bold text-slate-700 dark:text-slate-200">
+                Bu Depoya Tanımlı Rampalar ({warehouseRamps.length})
+              </h4>
+              <span className="text-[10px] text-slate-400">Aktif aracı olan rampalar silinemez</span>
+            </div>
+
+            {warehouseRamps.length === 0 ? (
+              <div className="p-6 text-center border border-dashed border-slate-300 dark:border-slate-700 rounded-xl text-slate-500 dark:text-slate-400">
+                Bu depo için henüz rampa tanımlanmamış. Yukarıdan tekli veya toplu rampa ekleyebilirsiniz.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {warehouseRamps.map((r) => {
+                  const hasActiveVehicle = vehicles.some((v) => v.rampaId === r.id && v.durum === 'RAMPADA');
+                  const isEditing = editingRampId === r.id;
+
+                  return (
+                    <div
+                      key={r.id}
+                      className="p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/60 flex items-center justify-between gap-2"
+                    >
+                      {isEditing ? (
+                        <div className="flex items-center gap-1.5 flex-1">
+                          <input
+                            type="text"
+                            value={editingRampName}
+                            onChange={(e) => setEditingRampName(e.target.value)}
+                            className="flex-1 px-2 py-1 border border-blue-400 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 text-xs font-bold outline-none"
+                            autoFocus
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (!editingRampName.trim()) return;
+                              onRenameRamp(r, editingRampName.trim());
+                              setEditingRampId(null);
+                            }}
+                            className="px-2 py-1 bg-emerald-600 text-white rounded-lg font-bold text-[10px] cursor-pointer"
+                          >
+                            Kaydet
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEditingRampId(null)}
+                            className="px-2 py-1 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg text-[10px] cursor-pointer"
+                          >
+                            İptal
+                          </button>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="font-mono font-bold text-slate-900 dark:text-slate-100 truncate">{r.ad}</span>
+                            <span
+                              className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${
+                                r.durum === 'Boş'
+                                  ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
+                                  : r.durum === 'Dolu'
+                                  ? 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300'
+                                  : 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
+                              }`}
+                            >
+                              {r.durum}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingRampId(r.id);
+                                setEditingRampName(r.ad);
+                              }}
+                              className="p-1.5 text-slate-500 hover:text-blue-600 dark:text-slate-400 dark:hover:text-blue-400 rounded-lg cursor-pointer"
+                              title="Rampa Adını Düzenle"
+                            >
+                              <Edit className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              disabled={hasActiveVehicle || r.durum === 'Dolu'}
+                              onClick={() => onDeleteRamp(r)}
+                              className="p-1.5 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg disabled:opacity-35 disabled:cursor-not-allowed cursor-pointer"
+                              title={hasActiveVehicle || r.durum === 'Dolu' ? 'Dolu rampa silinemez' : 'Rampayı Sil'}
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="p-3 sm:p-4 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-200 dark:border-slate-800 flex justify-end shrink-0">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 bg-slate-800 hover:bg-slate-900 dark:bg-slate-700 text-white font-semibold text-xs rounded-xl cursor-pointer"
+          >
+            Kapat
           </button>
         </div>
       </div>

@@ -1,4 +1,5 @@
-import { Vehicle } from '../types';
+import { SlaSettings, Vehicle } from '../types';
+import { parseTurkishDateTime } from './helpers';
 
 export interface VehicleStageTimes {
   // Aşamalar
@@ -25,16 +26,26 @@ export interface VehicleStageTimes {
   status: 'NORMAL' | 'WARNING' | 'OVERDUE';
 }
 
-// İşlem türüne göre varsayılan hedef rampa işlem süreleri (dakika)
-export const DEFAULT_SLA_TARGETS: Record<string, number> = {
-  'Boşaltma': 60,
-  'Yükleme': 90,
-  'Tahliye': 60
+export const DEFAULT_SLA_SETTINGS: SlaSettings = {
+  bosaltmaMinutes: 60,
+  yuklemeMinutes: 90,
+  tahliyeMinutes: 60,
+  warningThresholdPercent: 80
 };
 
-export function getTargetMinutesForProcess(islemTuru?: string): number {
-  if (!islemTuru) return 60;
-  return DEFAULT_SLA_TARGETS[islemTuru] || 60;
+// İşlem türüne göre varsayılan hedef rampa işlem süreleri (dakika)
+export const DEFAULT_SLA_TARGETS: Record<string, number> = {
+  'Boşaltma': DEFAULT_SLA_SETTINGS.bosaltmaMinutes,
+  'Yükleme': DEFAULT_SLA_SETTINGS.yuklemeMinutes,
+  'Tahliye': DEFAULT_SLA_SETTINGS.tahliyeMinutes
+};
+
+export function getTargetMinutesForProcess(islemTuru?: string, slaSettings?: SlaSettings): number {
+  const settings = slaSettings || DEFAULT_SLA_SETTINGS;
+  if (islemTuru === 'Boşaltma') return Math.max(5, settings.bosaltmaMinutes || 60);
+  if (islemTuru === 'Yükleme') return Math.max(5, settings.yuklemeMinutes || 90);
+  if (islemTuru === 'Tahliye') return Math.max(5, settings.tahliyeMinutes || 60);
+  return Math.max(5, DEFAULT_SLA_TARGETS[islemTuru || ''] || 60);
 }
 
 export function formatMinutesToText(minutes: number | null | undefined): string {
@@ -52,16 +63,26 @@ export function formatMinutesToText(minutes: number | null | undefined): string 
 /**
  * Bir aracın tüm yaşam döngüsü aşama sürelerini ve rampa gecikme durumunu hesaplar.
  */
-export function getVehicleStageTimes(vehicle: Vehicle, now: number = Date.now()): VehicleStageTimes {
-  const targetMinutes = getTargetMinutesForProcess(vehicle.islemTuru);
+export function getVehicleStageTimes(
+  vehicle: Vehicle,
+  now: number = Date.now(),
+  slaSettings?: SlaSettings
+): VehicleStageTimes {
+  const targetMinutes = getTargetMinutesForProcess(vehicle.islemTuru, slaSettings);
   const targetText = `${targetMinutes} Dk`;
+  const warningRatio = Math.min(0.99, Math.max(0.5, (slaSettings?.warningThresholdPercent ?? DEFAULT_SLA_SETTINGS.warningThresholdPercent) / 100));
+
+  const evrakReadyTs =
+    vehicle.evrakHazirTimestamp ||
+    parseTurkishDateTime(vehicle.evrakKayitTarihi) ||
+    null;
 
   // 1. Tesis Kaydı -> Evrak Hazır Süresi
   let evrakHazirlikMinutes: number | null = null;
   let evrakHazirlikText = '-';
 
-  if (vehicle.evrakHazirTimestamp && vehicle.girisTimestamp) {
-    const diff = Math.max(0, vehicle.evrakHazirTimestamp - vehicle.girisTimestamp);
+  if (evrakReadyTs && vehicle.girisTimestamp) {
+    const diff = Math.max(0, evrakReadyTs - vehicle.girisTimestamp);
     evrakHazirlikMinutes = Math.floor(diff / (1000 * 60));
     evrakHazirlikText = formatMinutesToText(evrakHazirlikMinutes);
   } else if (vehicle.durum === 'BEKLEMEDE' && vehicle.girisTimestamp) {
@@ -77,11 +98,10 @@ export function getVehicleStageTimes(vehicle: Vehicle, now: number = Date.now())
   // Rampaya giriş referans zamanı
   let rampStartTs = vehicle.rampadaTimestamp || null;
   if (!rampStartTs && vehicle.rampayaGirisTarihi) {
-    const parsed = Date.parse(vehicle.rampayaGirisTarihi);
-    if (!isNaN(parsed)) rampStartTs = parsed;
+    rampStartTs = parseTurkishDateTime(vehicle.rampayaGirisTarihi);
   }
 
-  const evrakEndTs = vehicle.evrakHazirTimestamp || vehicle.girisTimestamp;
+  const evrakEndTs = evrakReadyTs || vehicle.girisTimestamp;
 
   if (rampStartTs && evrakEndTs) {
     const diff = Math.max(0, rampStartTs - evrakEndTs);
@@ -104,7 +124,14 @@ export function getVehicleStageTimes(vehicle: Vehicle, now: number = Date.now())
   let status: 'NORMAL' | 'WARNING' | 'OVERDUE' = 'NORMAL';
 
   if (rampStartTs) {
-    const rampEndTs = vehicle.rampadanCikisTimestamp || (vehicle.durum === 'RAMPADA' ? now : null);
+    const rampExitParsed =
+      vehicle.rampadanCikisTimestamp ||
+      parseTurkishDateTime(vehicle.rampadanCikisTarihi) ||
+      (vehicle.durum === 'ÇIKIŞ YAPTI'
+        ? vehicle.cikisTimestamp || parseTurkishDateTime(vehicle.cikisTarihi)
+        : null);
+    const rampEndTs = rampExitParsed || (vehicle.durum === 'RAMPADA' ? now : null);
+
     if (rampEndTs) {
       const diff = Math.max(0, rampEndTs - rampStartTs);
       rampaIslemMinutes = Math.floor(diff / (1000 * 60));
@@ -120,7 +147,7 @@ export function getVehicleStageTimes(vehicle: Vehicle, now: number = Date.now())
         status = 'OVERDUE';
       } else {
         remainingMinutes = targetMinutes - rampaIslemMinutes;
-        if (rampaIslemMinutes >= targetMinutes * 0.8) {
+        if (rampaIslemMinutes >= targetMinutes * warningRatio) {
           status = 'WARNING';
         } else {
           status = 'NORMAL';
@@ -130,7 +157,7 @@ export function getVehicleStageTimes(vehicle: Vehicle, now: number = Date.now())
   }
 
   // 4. Toplam Tesiste Kalma Süresi
-  const exitTs = vehicle.cikisTimestamp || now;
+  const exitTs = vehicle.cikisTimestamp || parseTurkishDateTime(vehicle.cikisTarihi) || now;
   const totalDiff = Math.max(0, exitTs - vehicle.girisTimestamp);
   const toplamTesisMinutes = Math.floor(totalDiff / (1000 * 60));
   const toplamTesisText = formatMinutesToText(toplamTesisMinutes);

@@ -1,5 +1,5 @@
-import React from 'react';
-import { Vehicle, Ramp, ActiveTab } from '../types';
+import React, { useState, useEffect } from 'react';
+import { Vehicle, Ramp, ActiveTab, SlaSettings } from '../types';
 import { getStatusBadgeClass } from '../utils/helpers';
 import { getVehicleStageTimes } from '../utils/slaHelpers';
 import { Clock, FileCheck, Truck, Warehouse as WarehouseIcon, List, Eye, Flame, AlertTriangle } from 'lucide-react';
@@ -8,6 +8,7 @@ interface DashboardViewProps {
   vehicles: Vehicle[];
   ramps: Ramp[];
   pendingExpectedCount: number;
+  slaSettings?: SlaSettings;
   onNavigateTab: (tab: ActiveTab) => void;
   getRampName: (id: number | null | undefined) => string;
   onOpenDetailModal?: (v: Vehicle) => void;
@@ -17,15 +18,25 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   vehicles,
   ramps,
   pendingExpectedCount,
+  slaSettings,
   onNavigateTab,
   getRampName,
   onOpenDetailModal
 }) => {
+  const [now, setNow] = useState<number>(() => Date.now());
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 15000);
+    return () => clearInterval(timer);
+  }, []);
+
   const bekleyenCount = vehicles.filter((v) => v.durum === 'BEKLEMEDE').length;
   const evrakHazirCount = vehicles.filter((v) => v.durum === 'EVRAK HAZIR').length;
   const rampadaCount = vehicles.filter((v) => v.durum === 'RAMPADA').length;
   const doluRampaCount = ramps.filter((r) => r.durum === 'Dolu').length;
-  const overdueVehicles = vehicles.filter((v) => v.durum === 'RAMPADA' && getVehicleStageTimes(v).isOverdue);
+  const overdueVehicles = vehicles.filter(
+    (v) => v.durum === 'RAMPADA' && getVehicleStageTimes(v, now, slaSettings).isOverdue
+  );
 
   const recentVehicles = [...vehicles]
     .sort((a, b) => {

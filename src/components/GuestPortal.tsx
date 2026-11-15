@@ -20,17 +20,21 @@ export const GuestPortal: React.FC<GuestPortalProps> = ({
   const [query, setQuery] = useState({ dorsePlaka: '', cekiciPlaka: '', konteynirNo: '' });
   const [searchResult, setSearchResult] = useState<Vehicle | null>(null);
   const [attempted, setAttempted] = useState(false);
+  const [validationError, setValidationError] = useState('');
 
   const handleSearch = () => {
-    setAttempted(true);
     const dorse = query.dorsePlaka.trim().toLowerCase().replace(/\s+/g, '');
     const cekici = query.cekiciPlaka.trim().toLowerCase().replace(/\s+/g, '');
     const kont = query.konteynirNo.trim().toLowerCase().replace(/\s+/g, '');
 
     if (!dorse && !cekici && !kont) {
-      alert('Lütfen sorgulama yapmak için en az bir alan doldurunuz.');
+      setValidationError('Lütfen sorgulama yapmak için en az bir plaka veya konteynır alanı doldurunuz.');
+      setAttempted(false);
       return;
     }
+
+    setValidationError('');
+    setAttempted(true);
 
     const found = vehicles.find((v) => {
       const vDorse = (v.dorsePlaka || '').toLowerCase().replace(/\s+/g, '');
@@ -84,7 +88,10 @@ export const GuestPortal: React.FC<GuestPortalProps> = ({
               <input
                 type="text"
                 value={query.dorsePlaka}
-                onChange={(e) => setQuery({ ...query, dorsePlaka: e.target.value })}
+                onChange={(e) => {
+                  setQuery({ ...query, dorsePlaka: e.target.value });
+                  if (validationError) setValidationError('');
+                }}
                 placeholder="Örn: 34 TR 123"
                 className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-blue-500 uppercase"
               />
@@ -94,7 +101,10 @@ export const GuestPortal: React.FC<GuestPortalProps> = ({
               <input
                 type="text"
                 value={query.cekiciPlaka}
-                onChange={(e) => setQuery({ ...query, cekiciPlaka: e.target.value })}
+                onChange={(e) => {
+                  setQuery({ ...query, cekiciPlaka: e.target.value });
+                  if (validationError) setValidationError('');
+                }}
                 placeholder="Örn: 34 ABC 123"
                 className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-blue-500 uppercase"
               />
@@ -104,12 +114,22 @@ export const GuestPortal: React.FC<GuestPortalProps> = ({
               <input
                 type="text"
                 value={query.konteynirNo}
-                onChange={(e) => setQuery({ ...query, konteynirNo: e.target.value })}
+                onChange={(e) => {
+                  setQuery({ ...query, konteynirNo: e.target.value });
+                  if (validationError) setValidationError('');
+                }}
                 placeholder="Örn: MSCU1234567"
                 className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-blue-500 uppercase"
               />
             </div>
           </div>
+
+          {validationError && (
+            <div className="p-2.5 bg-amber-500/15 border border-amber-500/40 text-amber-200 rounded-xl text-xs font-semibold flex items-center gap-2">
+              <ShieldAlert className="w-4 h-4 text-amber-400 shrink-0" />
+              <span>{validationError}</span>
+            </div>
+          )}
 
           <button
             onClick={handleSearch}

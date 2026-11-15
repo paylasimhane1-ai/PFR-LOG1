@@ -151,7 +151,7 @@ export const CustomerManagementModal: React.FC<CustomerManagementModalProps> = (
         </div>
 
         {/* Search & Actions Bar */}
-        <div className="p-3.5 bg-slate-50 border-b border-slate-200 flex flex-col sm:flex-row gap-2.5 items-stretch sm:items-center justify-between shrink-0">
+        <div className="p-3.5 bg-slate-50 dark:bg-slate-800/70 border-b border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row gap-2.5 items-stretch sm:items-center justify-between shrink-0">
           <div className="relative flex-1">
             <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
             <input
@@ -159,12 +159,12 @@ export const CustomerManagementModal: React.FC<CustomerManagementModalProps> = (
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Firma Adı, VKN veya Yetkili Ara (içerir mantığı)..."
-              className="w-full pl-9 pr-8 py-2 text-xs md:text-sm bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
+              className="w-full pl-9 pr-8 py-2 text-xs md:text-sm bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 placeholder-slate-400 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
             />
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery('')}
-                className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 cursor-pointer"
+                className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
@@ -177,14 +177,14 @@ export const CustomerManagementModal: React.FC<CustomerManagementModalProps> = (
                 type="button"
                 onClick={onResetCustomers}
                 title="Tüm demo/örnek kayıtları Firestore ve sistemden tamamen temizle"
-                className="px-2.5 sm:px-3 py-2 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shrink-0 active:scale-98"
+                className="px-2.5 sm:px-3 py-2 bg-red-50 hover:bg-red-100 dark:bg-red-950/40 dark:hover:bg-red-900/50 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shrink-0 active:scale-98"
               >
-                <Trash2 className="w-3.5 h-3.5 text-red-600" />
+                <Trash2 className="w-3.5 h-3.5 text-red-600 dark:text-red-400" />
                 <span className="hidden sm:inline">Örnekleri Sıfırla</span>
                 <span className="sm:hidden">Sıfırla</span>
               </button>
             )}
-            <span className="text-xs font-bold text-slate-500 bg-white border border-slate-200 px-2.5 py-1.5 rounded-xl shrink-0">
+            <span className="text-xs font-bold text-slate-500 dark:text-slate-300 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-2.5 py-1.5 rounded-xl shrink-0">
               {filteredCustomers.length} Firma
             </span>
             <button
@@ -200,16 +200,16 @@ export const CustomerManagementModal: React.FC<CustomerManagementModalProps> = (
         {showAddForm && (
           <form
             onSubmit={handleSaveNew}
-            className="p-4 bg-blue-50/60 border-b border-blue-200/70 space-y-3 shrink-0 animate-in fade-in duration-150"
+            className="p-4 bg-blue-50/60 dark:bg-blue-950/30 border-b border-blue-200/70 dark:border-blue-800/70 space-y-3 shrink-0 animate-in fade-in duration-150"
           >
             <div className="flex items-center justify-between">
-              <h3 className="text-xs font-bold text-blue-900 flex items-center gap-1.5">
-                <Plus className="w-4 h-4 text-blue-600" /> Yeni Müşteri / Firma Tanımla
+              <h3 className="text-xs font-bold text-blue-900 dark:text-blue-200 flex items-center gap-1.5">
+                <Plus className="w-4 h-4 text-blue-600 dark:text-blue-400" /> Yeni Müşteri / Firma Tanımla
               </h3>
               <button
                 type="button"
                 onClick={() => setShowAddForm(false)}
-                className="text-xs text-slate-500 hover:text-slate-800"
+                className="text-xs text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 cursor-pointer"
               >
                 Vazgeç
               </button>
@@ -217,7 +217,7 @@ export const CustomerManagementModal: React.FC<CustomerManagementModalProps> = (
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
               <div>
-                <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
                   Firma Adı <span className="text-red-500">*</span>
                 </label>
                 <input
@@ -226,13 +226,13 @@ export const CustomerManagementModal: React.FC<CustomerManagementModalProps> = (
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="Örn: ABC Lojistik San. Tic. Ltd. Şti."
-                  className="w-full text-xs p-2 bg-white border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full text-xs p-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-100 rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
                   autoFocus
                 />
               </div>
 
               <div>
-                <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
                   Vergi No / VKN (İsteğe Bağlı)
                 </label>
                 <input
@@ -240,12 +240,12 @@ export const CustomerManagementModal: React.FC<CustomerManagementModalProps> = (
                   value={vergiNo}
                   onChange={(e) => setVergiNo(e.target.value)}
                   placeholder="Örn: 1234567890"
-                  className="w-full text-xs p-2 bg-white border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full text-xs p-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-100 rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
 
               <div>
-                <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
                   Yetkili Kişi (İsteğe Bağlı)
                 </label>
                 <input
@@ -253,12 +253,12 @@ export const CustomerManagementModal: React.FC<CustomerManagementModalProps> = (
                   value={yetkili}
                   onChange={(e) => setYetkili(e.target.value)}
                   placeholder="Örn: Ahmet Bey"
-                  className="w-full text-xs p-2 bg-white border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full text-xs p-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-100 rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
 
               <div>
-                <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
                   İletişim Telefonu (İsteğe Bağlı)
                 </label>
                 <input
@@ -266,7 +266,7 @@ export const CustomerManagementModal: React.FC<CustomerManagementModalProps> = (
                   value={telefon}
                   onChange={(e) => setTelefon(e.target.value)}
                   placeholder="Örn: 0212 555 10 20"
-                  className="w-full text-xs p-2 bg-white border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full text-xs p-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-100 rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
             </div>
@@ -275,7 +275,7 @@ export const CustomerManagementModal: React.FC<CustomerManagementModalProps> = (
               <button
                 type="button"
                 onClick={() => setShowAddForm(false)}
-                className="px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-200 rounded-lg font-medium cursor-pointer"
+                className="px-3 py-1.5 text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg font-medium cursor-pointer"
               >
                 İptal
               </button>
@@ -293,16 +293,16 @@ export const CustomerManagementModal: React.FC<CustomerManagementModalProps> = (
         {editingCustomer && (
           <form
             onSubmit={handleSaveEdit}
-            className="p-4 bg-amber-50/70 border-b border-amber-200 space-y-3 shrink-0 animate-in fade-in duration-150"
+            className="p-4 bg-amber-50/70 dark:bg-amber-950/30 border-b border-amber-200 dark:border-amber-800/70 space-y-3 shrink-0 animate-in fade-in duration-150"
           >
             <div className="flex items-center justify-between">
-              <h3 className="text-xs font-bold text-amber-900 flex items-center gap-1.5">
-                <Edit2 className="w-4 h-4 text-amber-600" /> Firmayı Düzenle: {editingCustomer.name}
+              <h3 className="text-xs font-bold text-amber-900 dark:text-amber-200 flex items-center gap-1.5">
+                <Edit2 className="w-4 h-4 text-amber-600 dark:text-amber-400" /> Firmayı Düzenle: {editingCustomer.name}
               </h3>
               <button
                 type="button"
                 onClick={() => setEditingCustomer(null)}
-                className="text-xs text-slate-500 hover:text-slate-800"
+                className="text-xs text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 cursor-pointer"
               >
                 Kapat
               </button>
@@ -310,7 +310,7 @@ export const CustomerManagementModal: React.FC<CustomerManagementModalProps> = (
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
               <div>
-                <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
                   Firma Adı <span className="text-red-500">*</span>
                 </label>
                 <input
@@ -318,43 +318,43 @@ export const CustomerManagementModal: React.FC<CustomerManagementModalProps> = (
                   required
                   value={editName}
                   onChange={(e) => setEditName(e.target.value)}
-                  className="w-full text-xs p-2 bg-white border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-amber-500"
+                  className="w-full text-xs p-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-100 rounded-lg outline-none focus:ring-2 focus:ring-amber-500"
                 />
               </div>
 
               <div>
-                <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
                   Vergi No / VKN
                 </label>
                 <input
                   type="text"
                   value={editVergiNo}
                   onChange={(e) => setEditVergiNo(e.target.value)}
-                  className="w-full text-xs p-2 bg-white border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-amber-500"
+                  className="w-full text-xs p-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-100 rounded-lg outline-none focus:ring-2 focus:ring-amber-500"
                 />
               </div>
 
               <div>
-                <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
                   Yetkili Kişi
                 </label>
                 <input
                   type="text"
                   value={editYetkili}
                   onChange={(e) => setEditYetkili(e.target.value)}
-                  className="w-full text-xs p-2 bg-white border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-amber-500"
+                  className="w-full text-xs p-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-100 rounded-lg outline-none focus:ring-2 focus:ring-amber-500"
                 />
               </div>
 
               <div>
-                <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
                   İletişim Telefonu
                 </label>
                 <input
                   type="text"
                   value={editTelefon}
                   onChange={(e) => setEditTelefon(e.target.value)}
-                  className="w-full text-xs p-2 bg-white border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-amber-500"
+                  className="w-full text-xs p-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-100 rounded-lg outline-none focus:ring-2 focus:ring-amber-500"
                 />
               </div>
             </div>
@@ -363,7 +363,7 @@ export const CustomerManagementModal: React.FC<CustomerManagementModalProps> = (
               <button
                 type="button"
                 onClick={() => setEditingCustomer(null)}
-                className="px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-200 rounded-lg font-medium cursor-pointer"
+                className="px-3 py-1.5 text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg font-medium cursor-pointer"
               >
                 Vazgeç
               </button>
@@ -380,12 +380,12 @@ export const CustomerManagementModal: React.FC<CustomerManagementModalProps> = (
         {/* Customer List */}
         <div className="flex-1 overflow-y-auto p-4 custom-scroll space-y-2">
           {customers.length === 0 ? (
-            <div className="p-4 sm:p-5 bg-blue-50/50 rounded-2xl border border-blue-200 space-y-4">
-              <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 flex items-start gap-2.5">
-                <Check className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+            <div className="p-4 sm:p-5 bg-blue-50/50 dark:bg-blue-950/20 rounded-2xl border border-blue-200 dark:border-blue-800/70 space-y-4">
+              <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-xl p-3 flex items-start gap-2.5">
+                <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
                 <div>
-                  <h4 className="font-bold text-emerald-900 text-xs">Sıfırdan Firma Girişi</h4>
-                  <p className="text-[11px] text-emerald-800 mt-0.5">
+                  <h4 className="font-bold text-emerald-900 dark:text-emerald-200 text-xs">Sıfırdan Firma Girişi</h4>
+                  <p className="text-[11px] text-emerald-800 dark:text-emerald-300 mt-0.5">
                     Örnek demo firmalar temizlendi. Sisteme ilk firmanızı aşağıdaki formu doldurarak hemen ekleyebilirsiniz.
                   </p>
                 </div>
@@ -394,7 +394,7 @@ export const CustomerManagementModal: React.FC<CustomerManagementModalProps> = (
               <form onSubmit={handleSaveNew} className="space-y-3">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                    <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
                       Firma Adı <span className="text-red-500">*</span>
                     </label>
                     <input
@@ -403,13 +403,13 @@ export const CustomerManagementModal: React.FC<CustomerManagementModalProps> = (
                       value={name}
                       onChange={(e) => setName(e.target.value)}
                       placeholder="Örn: ABC Lojistik San. Tic. Ltd. Şti."
-                      className="w-full text-xs p-2.5 bg-white border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 font-medium"
+                      className="w-full text-xs p-2.5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 font-medium"
                       autoFocus
                     />
                   </div>
 
                   <div>
-                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                    <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
                       Vergi No / VKN (İsteğe Bağlı)
                     </label>
                     <input
@@ -417,12 +417,12 @@ export const CustomerManagementModal: React.FC<CustomerManagementModalProps> = (
                       value={vergiNo}
                       onChange={(e) => setVergiNo(e.target.value)}
                       placeholder="Örn: 1234567890"
-                      className="w-full text-xs p-2.5 bg-white border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+                      className="w-full text-xs p-2.5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 font-mono"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                    <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
                       Yetkili Kişi (İsteğe Bağlı)
                     </label>
                     <input
@@ -430,12 +430,12 @@ export const CustomerManagementModal: React.FC<CustomerManagementModalProps> = (
                       value={yetkili}
                       onChange={(e) => setYetkili(e.target.value)}
                       placeholder="Örn: Ahmet Bey"
-                      className="w-full text-xs p-2.5 bg-white border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full text-xs p-2.5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                    <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
                       İletişim Telefonu (İsteğe Bağlı)
                     </label>
                     <input
@@ -443,7 +443,7 @@ export const CustomerManagementModal: React.FC<CustomerManagementModalProps> = (
                       value={telefon}
                       onChange={(e) => setTelefon(e.target.value)}
                       placeholder="Örn: 0212 555 10 20"
-                      className="w-full text-xs p-2.5 bg-white border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full text-xs p-2.5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
                 </div>
@@ -460,9 +460,9 @@ export const CustomerManagementModal: React.FC<CustomerManagementModalProps> = (
               </form>
             </div>
           ) : filteredCustomers.length === 0 ? (
-            <div className="p-8 text-center bg-slate-50 border border-dashed border-slate-200 rounded-xl">
-              <Building className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-              <p className="text-xs text-slate-500 font-medium">
+            <div className="p-8 text-center bg-slate-50 dark:bg-slate-800/50 border border-dashed border-slate-200 dark:border-slate-700 rounded-xl">
+              <Building className="w-8 h-8 text-slate-300 dark:text-slate-600 mx-auto mb-2" />
+              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
                 {searchQuery ? `"${searchQuery}" ile eşleşen firma bulunamadı.` : 'Henüz kayıtlı firma yok.'}
               </p>
               {searchQuery && (
@@ -480,19 +480,19 @@ export const CustomerManagementModal: React.FC<CustomerManagementModalProps> = (
               {filteredCustomers.map((cust) => (
                 <div
                   key={cust.id}
-                  className="p-3 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between gap-3 transition shadow-2xs"
+                  className="p-3 bg-white dark:bg-slate-800/70 hover:bg-slate-50 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl flex items-center justify-between gap-3 transition shadow-2xs"
                 >
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <Building className="w-4 h-4 text-blue-600 shrink-0" />
-                      <h4 className="text-xs sm:text-sm font-bold text-slate-900 truncate">
+                      <Building className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
+                      <h4 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-100 truncate">
                         {cust.name}
                       </h4>
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-[11px] text-slate-500">
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-[11px] text-slate-500 dark:text-slate-400">
                       {cust.vergiNo && (
-                        <span className="font-mono bg-slate-100 px-1.5 py-0.2 rounded text-[10px] text-slate-600">
+                        <span className="font-mono bg-slate-100 dark:bg-slate-900 px-1.5 py-0.2 rounded text-[10px] text-slate-600 dark:text-slate-300">
                           VKN: {cust.vergiNo}
                         </span>
                       )}
@@ -512,14 +512,14 @@ export const CustomerManagementModal: React.FC<CustomerManagementModalProps> = (
                   <div className="flex items-center gap-1 shrink-0">
                     <button
                       onClick={() => handleStartEdit(cust)}
-                      className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition cursor-pointer"
+                      className="p-1.5 text-slate-400 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/40 rounded-lg transition cursor-pointer"
                       title="Düzenle"
                     >
                       <Edit2 className="w-3.5 h-3.5" />
                     </button>
                     <button
                       onClick={() => onDeleteCustomer(cust.id, cust.name)}
-                      className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition cursor-pointer"
+                      className="p-1.5 text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 rounded-lg transition cursor-pointer"
                       title="Sil"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
@@ -532,11 +532,11 @@ export const CustomerManagementModal: React.FC<CustomerManagementModalProps> = (
         </div>
 
         {/* Footer */}
-        <div className="p-3.5 bg-slate-50 border-t border-slate-200 flex justify-between items-center text-xs text-slate-500 shrink-0">
-          <span>Toplam <b>{customers.length}</b> kayıtlı firma bulunmaktadır.</span>
+        <div className="p-3.5 bg-slate-50 dark:bg-slate-800/70 border-t border-slate-200 dark:border-slate-800 flex justify-between items-center text-xs text-slate-500 dark:text-slate-400 shrink-0">
+          <span>Toplam <b className="text-slate-800 dark:text-slate-200">{customers.length}</b> kayıtlı firma bulunmaktadır.</span>
           <button
             onClick={onClose}
-            className="px-4 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold cursor-pointer transition shadow-xs"
+            className="px-4 py-1.5 bg-slate-900 dark:bg-slate-700 hover:bg-slate-800 dark:hover:bg-slate-600 text-white rounded-xl font-bold cursor-pointer transition shadow-xs"
           >
             Kapat
           </button>

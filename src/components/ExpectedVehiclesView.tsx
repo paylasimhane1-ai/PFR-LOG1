@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import * as XLSX from 'xlsx';
 import { ExpectedVehicle, User } from '../types';
 import { cleanPhone, cleanPhoneForWa, formatExpectedDate, downloadExpectedTemplateCsv } from '../utils/helpers';
+import { hasPermission } from '../utils/permissions';
 import {
   Clock,
   Filter,
@@ -24,6 +25,7 @@ interface ExpectedVehiclesViewProps {
   selectedDepoId: number;
   currentUser: User | null;
   getWarehouseNameById: (id: number) => string;
+  onNotify?: (msg: string, type?: 'success' | 'info' | 'warning') => void;
   onOpenAddModal: () => void;
   onOpenEditModal?: (exp: ExpectedVehicle) => void;
   onProcessArrival: (exp: ExpectedVehicle) => void;
@@ -37,6 +39,7 @@ export const ExpectedVehiclesView: React.FC<ExpectedVehiclesViewProps> = ({
   selectedDepoId,
   currentUser,
   getWarehouseNameById,
+  onNotify,
   onOpenAddModal,
   onOpenEditModal,
   onProcessArrival,
@@ -47,6 +50,8 @@ export const ExpectedVehiclesView: React.FC<ExpectedVehiclesViewProps> = ({
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
+
+  const canManageExpected = currentUser?.role === 'admin' || hasPermission(currentUser, 'canManageExpected');
 
   let filtered = expectedVehicles;
   if (selectedDepoId !== 0) {
@@ -97,12 +102,21 @@ export const ExpectedVehiclesView: React.FC<ExpectedVehiclesViewProps> = ({
   };
 
   const handleDeleteSelected = () => {
+    if (!canManageExpected) {
+      onNotify?.('Beklenen araç kayıtlarını silme yetkiniz bulunmamaktadır.', 'warning');
+      return;
+    }
     if (!selectedIds.length) return;
     onDeleteBatch(selectedIds);
     setSelectedIds([]);
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!canManageExpected) {
+      onNotify?.('Beklenen araç yükleme yetkiniz bulunmamaktadır.', 'warning');
+      e.target.value = '';
+      return;
+    }
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -116,7 +130,7 @@ export const ExpectedVehiclesView: React.FC<ExpectedVehiclesViewProps> = ({
         const data = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: '' });
 
         if (!data || !data.length) {
-          alert('Excel dosyasında veri bulunamadı.');
+          onNotify?.('Excel dosyasında veri bulunamadı.', 'warning');
           return;
         }
 
@@ -168,11 +182,11 @@ export const ExpectedVehiclesView: React.FC<ExpectedVehiclesViewProps> = ({
         if (newItems.length > 0) {
           onImportExcelSuccess(newItems);
         } else {
-          alert('Excel sütun başlıkları eşleşmedi veya geçerli kayıt bulunamadı.');
+          onNotify?.('Excel sütun başlıkları eşleşmedi veya geçerli kayıt bulunamadı.', 'warning');
         }
       } catch (err) {
         console.error('Excel parse error:', err);
-        alert('Excel dosyası okunurken bir hata oluştu. Lütfen dosya formatını kontrol ediniz.');
+        onNotify?.('Excel dosyası okunurken bir hata oluştu. Lütfen dosya formatını kontrol ediniz.', 'warning');
       }
     };
     reader.readAsBinaryString(file);
@@ -224,7 +238,7 @@ export const ExpectedVehiclesView: React.FC<ExpectedVehiclesViewProps> = ({
 
           {/* Eylem Butonları */}
           <div className="flex flex-wrap items-center gap-2">
-            {selectedIds.length > 0 && (
+            {canManageExpected && selectedIds.length > 0 && (
               <button
                 onClick={handleDeleteSelected}
                 className="px-3 py-2 bg-red-600 hover:bg-red-700 text-white font-extrabold text-xs rounded-xl shadow transition flex items-center gap-1.5 cursor-pointer active:scale-95"
@@ -240,17 +254,19 @@ export const ExpectedVehiclesView: React.FC<ExpectedVehiclesViewProps> = ({
               <Download className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" /> Şablon
             </button>
 
-            <label className="hidden sm:inline-flex px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow cursor-pointer transition items-center gap-1.5 active:scale-95">
-              <FileSpreadsheet className="w-3.5 h-3.5" /> Excel Yükle
-              <input
-                type="file"
-                accept=".xlsx, .xls, .csv"
-                onChange={handleFileUpload}
-                className="hidden"
-              />
-            </label>
+            {canManageExpected && (
+              <label className="hidden sm:inline-flex px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow cursor-pointer transition items-center gap-1.5 active:scale-95">
+                <FileSpreadsheet className="w-3.5 h-3.5" /> Excel Yükle
+                <input
+                  type="file"
+                  accept=".xlsx, .xls, .csv"
+                  onChange={handleFileUpload}
+                  className="hidden"
+                />
+              </label>
+            )}
 
-            {currentUser?.role !== 'guest' && (
+            {canManageExpected && (
               <button
                 onClick={onOpenAddModal}
                 className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-slate-900 font-black text-xs md:text-sm rounded-xl transition flex items-center justify-center gap-1.5 shadow cursor-pointer active:scale-95"
@@ -411,19 +427,25 @@ export const ExpectedVehiclesView: React.FC<ExpectedVehiclesViewProps> = ({
             {/* Güvenlik Aksiyon Butonu: Sahaya Al & Düzenle & Sil */}
             <div className="pt-1 border-t border-slate-100 dark:border-slate-800 flex items-center gap-1">
               {exp.durum === 'BEKLENİYOR' ? (
-                <button
-                  onClick={() => onProcessArrival(exp)}
-                  className="flex-1 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-[10px] flex items-center justify-center gap-1 shadow-2xs transition active:scale-98 cursor-pointer"
-                >
-                  <LogIn className="w-3 h-3" /> Sahaya Al / Giriş Yap
-                </button>
+                canManageExpected ? (
+                  <button
+                    onClick={() => onProcessArrival(exp)}
+                    className="flex-1 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-[10px] flex items-center justify-center gap-1 shadow-2xs transition active:scale-98 cursor-pointer"
+                  >
+                    <LogIn className="w-3 h-3" /> Sahaya Al / Giriş Yap
+                  </button>
+                ) : (
+                  <div className="flex-1 py-1 text-center text-[10px] font-medium text-slate-400 dark:text-slate-500 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-700">
+                    Salt Okunur
+                  </div>
+                )
               ) : (
                 <div className="flex-1 py-1 text-center text-[10px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 rounded-lg border border-emerald-200 dark:border-emerald-800">
                   ✓ Sahaya Kabul Edildi
                 </div>
               )}
 
-              {currentUser?.role !== 'guest' && onOpenEditModal && (
+              {canManageExpected && onOpenEditModal && (
                 <button
                   onClick={() => onOpenEditModal(exp)}
                   className="p-1.5 bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/40 dark:hover:bg-blue-900/50 text-blue-600 dark:text-blue-300 rounded-lg transition active:scale-95 cursor-pointer border border-blue-200 dark:border-blue-800 shrink-0"
@@ -433,7 +455,7 @@ export const ExpectedVehiclesView: React.FC<ExpectedVehiclesViewProps> = ({
                 </button>
               )}
 
-              {currentUser?.role !== 'guest' && (
+              {canManageExpected && (
                 <button
                   onClick={() => onDeleteSingle(exp)}
                   className="p-1.5 bg-red-50 hover:bg-red-100 dark:bg-red-950/40 dark:hover:bg-red-900/50 text-red-600 dark:text-red-300 rounded-lg transition active:scale-95 cursor-pointer border border-red-200 dark:border-red-800 shrink-0"
@@ -447,7 +469,7 @@ export const ExpectedVehiclesView: React.FC<ExpectedVehiclesViewProps> = ({
         ))}
 
         {sortedList.length === 0 && (
-          <div className="p-8 text-center bg-white rounded-2xl border border-slate-200 text-slate-400 space-y-2">
+          <div className="p-8 text-center bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 text-slate-400 space-y-2">
             <Clock className="w-8 h-8 mx-auto opacity-30 text-amber-500" />
             <p className="text-xs font-semibold">Aradığınız kriterlere uygun beklenen araç kaydı bulunmamaktadır.</p>
           </div>
@@ -571,19 +593,23 @@ export const ExpectedVehiclesView: React.FC<ExpectedVehiclesViewProps> = ({
 
                   <td className="p-3 text-center">
                     {exp.durum === 'BEKLENİYOR' ? (
-                      <button
-                        onClick={() => onProcessArrival(exp)}
-                        className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-[11px] rounded-xl shadow transition flex items-center gap-1.5 mx-auto cursor-pointer"
-                      >
-                        <LogIn className="w-3.5 h-3.5" /> Sahaya Al / Giriş Yap
-                      </button>
+                      canManageExpected ? (
+                        <button
+                          onClick={() => onProcessArrival(exp)}
+                          className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-[11px] rounded-xl shadow transition flex items-center gap-1.5 mx-auto cursor-pointer"
+                        >
+                          <LogIn className="w-3.5 h-3.5" /> Sahaya Al / Giriş Yap
+                        </button>
+                      ) : (
+                        <span className="text-slate-400 dark:text-slate-500 text-[10px] italic">Yetki Gerekir</span>
+                      )
                     ) : (
                       <span className="text-slate-400 dark:text-slate-500 text-[10px] italic">Sahaya Kabul Edildi</span>
                     )}
                   </td>
 
                   <td className="p-3 text-center">
-                    {currentUser?.role !== 'guest' && onOpenEditModal ? (
+                    {canManageExpected && onOpenEditModal ? (
                       <button
                         onClick={() => onOpenEditModal(exp)}
                         className="p-1.5 bg-blue-100 hover:bg-blue-200 dark:bg-blue-950/40 dark:hover:bg-blue-900/50 text-blue-700 dark:text-blue-300 rounded-lg text-xs font-bold transition cursor-pointer"
@@ -592,18 +618,22 @@ export const ExpectedVehiclesView: React.FC<ExpectedVehiclesViewProps> = ({
                         <Edit3 className="w-3.5 h-3.5" />
                       </button>
                     ) : (
-                      <span className="text-slate-300">-</span>
+                      <span className="text-slate-300 dark:text-slate-600">-</span>
                     )}
                   </td>
 
                   <td className="p-3 text-center">
-                    <button
-                      onClick={() => onDeleteSingle(exp)}
-                      className="p-1.5 bg-red-100 hover:bg-red-200 dark:bg-red-950/40 dark:hover:bg-red-900/50 text-red-700 dark:text-red-300 rounded-lg text-xs font-bold transition cursor-pointer"
-                      title="Sil"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+                    {canManageExpected ? (
+                      <button
+                        onClick={() => onDeleteSingle(exp)}
+                        className="p-1.5 bg-red-100 hover:bg-red-200 dark:bg-red-950/40 dark:hover:bg-red-900/50 text-red-700 dark:text-red-300 rounded-lg text-xs font-bold transition cursor-pointer"
+                        title="Sil"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    ) : (
+                      <span className="text-slate-300 dark:text-slate-600">-</span>
+                    )}
                   </td>
                 </tr>
               ))}

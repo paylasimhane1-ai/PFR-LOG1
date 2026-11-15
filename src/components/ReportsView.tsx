@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
-import { Vehicle, User } from '../types';
-import { getDurationText, getStatusBadgeClass, getDepoKayitTarihi, getRampaGirisTarihi, getRampaCikisTarihi } from '../utils/helpers';
+import { SlaSettings, Vehicle, User } from '../types';
+import { getDurationText, getStatusBadgeClass, getDepoKayitTarihi, getEvrakKayitTarihi, getRampaGirisTarihi, getRampaCikisTarihi, parseTurkishDateTime } from '../utils/helpers';
 import { hasPermission } from '../utils/permissions';
 import {
   FileSpreadsheet,
@@ -40,6 +40,7 @@ import {
 interface ReportsViewProps {
   vehicles: Vehicle[];
   currentUser?: User | null;
+  slaSettings?: SlaSettings;
   getRampName: (id: number | null | undefined) => string;
   onExportCsv: (filteredVehicles: Vehicle[]) => void;
   onOpenDetailModal: (v: Vehicle) => void;
@@ -143,6 +144,7 @@ const getVehicleDateStr = (v: Vehicle, type: 'giris' | 'cikis' = 'giris'): strin
 export const ReportsView: React.FC<ReportsViewProps> = ({
   vehicles,
   currentUser,
+  slaSettings,
   getRampName,
   onExportCsv,
   onOpenDetailModal,
@@ -298,16 +300,22 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
   const rampMetrics = useMemo(() => {
     let totalRampDurationMs = 0;
     let rampOperatedCount = 0;
+    const nowTs = Date.now();
 
     filtered.forEach((v) => {
-      const rampStart = v.rampayaGirisTimestamp || v.rampadaTimestamp;
+      const rampStart = v.rampadaTimestamp || parseTurkishDateTime(v.rampayaGirisTarihi);
       if (rampStart) {
-        const rampEnd = v.durum === 'ÇIKIŞ YAPTI' ? (v.cikisTimestamp || Date.now()) : Date.now();
+        const rampEnd =
+          v.rampadanCikisTimestamp ||
+          parseTurkishDateTime(v.rampadanCikisTarihi) ||
+          (v.durum === 'ÇIKIŞ YAPTI'
+            ? v.cikisTimestamp || parseTurkishDateTime(v.cikisTarihi) || nowTs
+            : nowTs);
         const duration = Math.max(0, rampEnd - rampStart);
         totalRampDurationMs += duration;
         rampOperatedCount++;
       } else if (v.durum === 'RAMPADA') {
-        const duration = Math.max(0, Date.now() - (v.girisTimestamp || Date.now()));
+        const duration = Math.max(0, nowTs - (v.girisTimestamp || nowTs));
         totalRampDurationMs += duration;
         rampOperatedCount++;
       }
@@ -316,14 +324,17 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
     const totalMinutes = Math.round(totalRampDurationMs / 60000);
     const avgMinutes = rampOperatedCount > 0 ? Math.round(totalMinutes / rampOperatedCount) : null;
 
-    // Rampa Verimliliği Skoru (%): Zamanında ve düzenli işlem oranı (ortalama 120 dk altı tam puan)
+    // Rampa Verimliliği Skoru (%): Yapılandırılmış SLA ortalamasına göre hesaplanır
+    const baseTarget = slaSettings
+      ? Math.round((slaSettings.bosaltmaMinutes + slaSettings.yuklemeMinutes + slaSettings.tahliyeMinutes) / 3)
+      : 70;
     let efficiencyScore = 92;
     if (avgMinutes !== null) {
-      if (avgMinutes <= 60) efficiencyScore = 98;
-      else if (avgMinutes <= 90) efficiencyScore = 94;
-      else if (avgMinutes <= 120) efficiencyScore = 88;
-      else if (avgMinutes <= 180) efficiencyScore = 78;
-      else efficiencyScore = 65;
+      if (avgMinutes <= baseTarget) efficiencyScore = 98;
+      else if (avgMinutes <= baseTarget * 1.25) efficiencyScore = 92;
+      else if (avgMinutes <= baseTarget * 1.6) efficiencyScore = 85;
+      else if (avgMinutes <= baseTarget * 2.2) efficiencyScore = 76;
+      else efficiencyScore = 64;
     }
 
     return {
@@ -332,7 +343,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
       rampOperatedCount,
       efficiencyScore
     };
-  }, [filtered]);
+  }, [filtered, slaSettings]);
 
   const formatMinutesToHours = (minutes: number | null) => {
     if (minutes === null || minutes === 0) return '0 dk';
@@ -436,6 +447,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
   };
 
   const canUndoExit = currentUser?.role === 'admin' || hasPermission(currentUser, 'canAuthorizeExit');
+  const canExportReports = currentUser?.role === 'admin' || hasPermission(currentUser, 'canExportReports');
 
   const periodLabel = datePreset === 'today'
     ? 'Bugün'
@@ -493,20 +505,22 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
               </button>
             </div>
 
-            <div className="flex items-center gap-2 w-full sm:w-auto">
-              <button
-                onClick={() => onExportCsv(sortedReports)}
-                className="flex-1 sm:flex-none px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl transition flex items-center justify-center gap-1.5 shadow-md shadow-emerald-600/20 cursor-pointer"
-              >
-                <FileSpreadsheet className="w-4 h-4" /> Excel (.CSV)
-              </button>
-              <button
-                onClick={handlePrint}
-                className="flex-1 sm:flex-none px-3.5 py-1.5 bg-slate-800 hover:bg-slate-900 dark:bg-slate-700 dark:hover:bg-slate-600 text-white text-xs font-semibold rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer"
-              >
-                <Printer className="w-4 h-4" /> Yazdır / PDF
-              </button>
-            </div>
+            {canExportReports && (
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <button
+                  onClick={() => onExportCsv(sortedReports)}
+                  className="flex-1 sm:flex-none px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl transition flex items-center justify-center gap-1.5 shadow-md shadow-emerald-600/20 cursor-pointer"
+                >
+                  <FileSpreadsheet className="w-4 h-4" /> Excel (.CSV)
+                </button>
+                <button
+                  onClick={handlePrint}
+                  className="flex-1 sm:flex-none px-3.5 py-1.5 bg-slate-800 hover:bg-slate-900 dark:bg-slate-700 dark:hover:bg-slate-600 text-white text-xs font-semibold rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <Printer className="w-4 h-4" /> Yazdır / PDF
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
@@ -872,8 +886,16 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
 
                   <div className={`grid grid-cols-2 gap-2 text-[11px] pt-1 border-t ${isExited ? 'border-slate-800' : 'border-slate-100 dark:border-slate-800'}`}>
                     <div>
-                      <span className={`block text-[9px] ${isExited ? 'text-slate-300' : 'text-slate-500 dark:text-slate-400'}`}>Giriş:</span>
+                      <span className={`block text-[9px] ${isExited ? 'text-slate-300' : 'text-slate-500 dark:text-slate-400'}`}>Depo Kayıt:</span>
                       <span className={`font-mono font-semibold ${isExited ? 'text-emerald-400' : 'text-emerald-600 dark:text-emerald-400'}`}>{getDepoKayitTarihi(v)}</span>
+                    </div>
+                    <div>
+                      <span className={`block text-[9px] ${isExited ? 'text-slate-300' : 'text-slate-500 dark:text-slate-400'}`}>Evrak Kayıt:</span>
+                      <span className={`font-mono font-semibold ${isExited ? 'text-blue-300' : 'text-blue-600 dark:text-blue-400'}`}>{getEvrakKayitTarihi(v)}</span>
+                    </div>
+                    <div>
+                      <span className={`block text-[9px] ${isExited ? 'text-slate-300' : 'text-slate-500 dark:text-slate-400'}`}>Rampa Giriş:</span>
+                      <span className={`font-mono font-semibold ${isExited ? 'text-purple-300' : 'text-purple-600 dark:text-purple-400'}`}>{getRampaGirisTarihi(v)}</span>
                     </div>
                     <div>
                       <span className={`block text-[9px] ${isExited ? 'text-slate-300' : 'text-slate-500 dark:text-slate-400'}`}>Çıkış / Süre:</span>
@@ -918,6 +940,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                   <th className="p-3">İşlem / Depo</th>
                   <th className="p-3">Rampa</th>
                   <th className="p-3">Kayıt / Giriş</th>
+                  <th className="p-3">Evrak Kayıt</th>
                   <th className="p-3">Rampaya Giriş</th>
                   <th className="p-3">Çıkış Tarihi</th>
                   <th className="p-3">Toplam Süre</th>
@@ -949,16 +972,19 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                       <td className="p-3 font-semibold text-purple-700 dark:text-purple-300">
                         {getRampName(v.rampaId)}
                       </td>
-                      <td className="p-3 font-mono text-[11px] text-emerald-700 dark:text-emerald-400">
+                      <td className="p-3 font-mono tabular-nums text-[11px] text-emerald-700 dark:text-emerald-400">
                         {getDepoKayitTarihi(v)}
                       </td>
-                      <td className="p-3 font-mono text-[11px] text-purple-700 dark:text-purple-300">
+                      <td className="p-3 font-mono tabular-nums text-[11px] text-blue-700 dark:text-blue-300">
+                        {getEvrakKayitTarihi(v)}
+                      </td>
+                      <td className="p-3 font-mono tabular-nums text-[11px] text-purple-700 dark:text-purple-300">
                         {getRampaGirisTarihi(v)}
                       </td>
-                      <td className="p-3 font-mono text-[11px] text-slate-600 dark:text-slate-400">
+                      <td className="p-3 font-mono tabular-nums text-[11px] text-slate-600 dark:text-slate-400">
                         {getRampaCikisTarihi(v)}
                       </td>
-                      <td className="p-3 font-mono font-bold text-slate-700 dark:text-slate-200">
+                      <td className="p-3 font-mono tabular-nums font-bold text-slate-700 dark:text-slate-200">
                         {getDurationText(v)}
                       </td>
                       <td className="p-3">

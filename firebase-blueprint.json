@@ -7,24 +7,37 @@
       "properties": {
         "id": { "type": "number" },
         "depoId": { "type": "number" },
-        "cekiciPlaka": { "type": "string" },
-        "dorsePlaka": { "type": "string" },
-        "soforAd": { "type": "string" },
-        "soforTel": { "type": "string" },
-        "soforTc": { "type": "string" },
-        "musteri": { "type": "string" },
-        "islemTipi": { "type": "string" },
-        "durum": { "type": "string" },
-        "girisTarihi": { "type": "string" },
-        "girisTimestamp": { "type": "number" },
+        "cekiciPlaka": { "type": "string", "maxLength": 40 },
+        "dorsePlaka": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "konteynirNo": { "type": "string", "maxLength": 60 },
+        "soforAd": { "type": "string", "maxLength": 120 },
+        "soforTel": { "type": "string", "maxLength": 40 },
+        "soforTc": { "type": "string", "maxLength": 20 },
+        "nakliyeFirmasi": { "type": "string", "maxLength": 150 },
+        "musteri": { "type": "string", "maxLength": 200 },
+        "depoTuru": { "type": "string", "enum": ["Antrepo", "Serbest Depo"] },
+        "islemTuru": { "type": "string", "enum": ["Boşaltma", "Yükleme", "Tahliye"] },
+        "aciklama": { "type": "string", "maxLength": 2000 },
+        "fotograflar": { "type": "array", "description": "Up to 5 compressed image data URLs" },
+        "isAcik": { "type": "boolean" },
+        "durum": { "type": "string", "enum": ["BEKLEMEDE", "EVRAK HAZIR", "RAMPADA", "ÇIKIŞ YAPTI"] },
         "rampaId": { "type": "number" },
-        "cagrildigiRampaId": { "type": "number" },
         "isRampayaCagrildi": { "type": "boolean" },
-        "isAcil": { "type": "boolean" },
-        "cikisTarihi": { "type": "string" },
-        "cikisTimestamp": { "type": "number" }
+        "cagrildigiRampaId": { "type": "number" },
+        "girisTarihi": { "type": "string", "maxLength": 60 },
+        "girisTarihiIso": { "type": "string", "maxLength": 30 },
+        "girisTimestamp": { "type": "number" },
+        "evrakHazirTimestamp": { "type": "number" },
+        "evrakKayitTarihi": { "type": "string", "maxLength": 60 },
+        "rampadaTimestamp": { "type": "number" },
+        "rampayaGirisTarihi": { "type": "string", "maxLength": 60 },
+        "rampadanCikisTarihi": { "type": "string", "maxLength": 60 },
+        "rampadanCikisTimestamp": { "type": "number" },
+        "cikisTarihi": { "type": "string", "maxLength": 60 },
+        "cikisTimestamp": { "type": "number" },
+        "guvenlikNotlari": { "type": "array", "description": "Security feedback notes list" }
       },
-      "required": ["id", "depoId", "dorsePlaka", "musteri", "islemTipi", "durum", "girisTarihi"]
+      "required": ["id", "depoId", "dorsePlaka", "islemTuru", "durum", "isAcik", "girisTarihi", "girisTarihiIso", "girisTimestamp"]
     },
     "Ramp": {
       "title": "Ramp",
@@ -33,8 +46,10 @@
       "properties": {
         "id": { "type": "number" },
         "depoId": { "type": "number" },
-        "ad": { "type": "string" },
-        "durum": { "type": "string" }
+        "ad": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "durum": { "type": "string", "enum": ["Boş", "Dolu", "Arızalı", "Bakımda"] },
+        "arizaNotu": { "type": "string", "maxLength": 300 },
+        "bakimBaslangic": { "type": "string", "maxLength": 60 }
       },
       "required": ["id", "depoId", "ad", "durum"]
     },
@@ -45,12 +60,21 @@
       "properties": {
         "id": { "type": "number" },
         "depoId": { "type": "number" },
-        "musteri": { "type": "string" },
-        "islemTipi": { "type": "string" },
-        "beklenenTarih": { "type": "string" },
-        "durum": { "type": "string" }
+        "cekiciPlaka": { "type": "string", "maxLength": 40 },
+        "dorsePlaka": { "type": "string", "maxLength": 40 },
+        "konteynirNo": { "type": "string", "maxLength": 60 },
+        "soforAd": { "type": "string", "maxLength": 120 },
+        "soforTel": { "type": "string", "maxLength": 40 },
+        "soforTc": { "type": "string", "maxLength": 20 },
+        "aciklama": { "type": "string", "maxLength": 2000 },
+        "musteri": { "type": "string", "maxLength": 200 },
+        "depoTuru": { "type": "string", "maxLength": 40 },
+        "islemTuru": { "type": "string", "maxLength": 40 },
+        "beklenenTarih": { "type": "string", "maxLength": 60 },
+        "durum": { "type": "string", "enum": ["BEKLENİYOR", "GİRİŞ YAPILDI"] },
+        "kabulTarihi": { "type": "string", "maxLength": 60 }
       },
-      "required": ["id", "depoId", "musteri", "islemTipi", "durum"]
+      "required": ["id", "depoId", "durum"]
     },
     "AppNotification": {
       "title": "AppNotification",
@@ -58,41 +82,102 @@
       "type": "object",
       "properties": {
         "id": { "type": "number" },
-        "plaka": { "type": "string" },
-        "text": { "type": "string" },
-        "time": { "type": "string" },
-        "status": { "type": "string" }
+        "depoId": { "type": "number" },
+        "type": { "type": "string", "maxLength": 60 },
+        "vehicleId": { "type": "number" },
+        "plaka": { "type": "string", "maxLength": 40 },
+        "musteri": { "type": "string", "maxLength": 200 },
+        "soforAd": { "type": "string", "maxLength": 120 },
+        "soforTel": { "type": "string", "maxLength": 40 },
+        "rampId": { "type": "number" },
+        "rampName": { "type": "string", "maxLength": 80 },
+        "text": { "type": "string", "minLength": 1, "maxLength": 1000 },
+        "time": { "type": "string", "minLength": 1, "maxLength": 30 },
+        "status": { "type": "string", "enum": ["BEKLİYOR", "İŞLEM YAPILDI", "ONAYLANDI", "İPTAL", "OKUNDU"] },
+        "securityNote": { "type": "string", "maxLength": 1000 },
+        "readBy": { "type": "array", "description": "Usernames who read this notification" }
       },
       "required": ["id", "text", "time", "status"]
     },
     "ChatMessage": {
       "title": "ChatMessage",
-      "description": "Internal instant message between warehouse team members",
+      "description": "Internal instant message between warehouse team members across channels and DMs",
       "type": "object",
       "properties": {
-        "id": { "type": "string" },
-        "sender": { "type": "string" },
-        "role": { "type": "string" },
-        "text": { "type": "string" },
-        "timestamp": { "type": "number" }
+        "id": { "type": "number" },
+        "sender": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "role": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "text": { "type": "string", "maxLength": 2000 },
+        "time": { "type": "string", "minLength": 1, "maxLength": 30 },
+        "channelId": { "type": "string", "maxLength": 200 },
+        "recipient": { "type": "string", "maxLength": 120 },
+        "replyTo": { "type": "object" },
+        "mentions": { "type": "array" },
+        "readBy": { "type": "array" },
+        "timestamp": { "type": "number" },
+        "isEdited": { "type": "boolean" },
+        "editedAt": { "type": "string", "maxLength": 30 },
+        "imageUrl": { "type": "string", "maxLength": 600000 },
+        "entityCard": { "type": "object" },
+        "reactions": { "type": "object" },
+        "isPinned": { "type": "boolean" },
+        "pinnedBy": { "type": "string", "maxLength": 120 }
       },
-      "required": ["id", "sender", "text", "timestamp"]
+      "required": ["id", "sender", "role", "text", "time"]
+    },
+    "ChatPresence": {
+      "title": "ChatPresence",
+      "description": "Live user online presence and active channel typing indicator",
+      "type": "object",
+      "properties": {
+        "username": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "role": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "depoId": { "type": "number" },
+        "lastActiveAt": { "type": "number" },
+        "typingInChannel": { "type": "string", "maxLength": 200 },
+        "typingAt": { "type": "number" }
+      },
+      "required": ["username", "role", "lastActiveAt"]
     },
     "Customer": {
       "title": "Customer",
       "description": "Registered customer or contractor company details",
       "type": "object",
       "properties": {
-        "id": { "type": "string" },
-        "name": { "type": "string" },
-        "vergiNo": { "type": "string" },
-        "yetkili": { "type": "string" },
-        "telefon": { "type": "string" },
-        "adres": { "type": "string" },
-        "notlar": { "type": "string" },
-        "olusturmaTarihi": { "type": "string" }
+        "id": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "vergiNo": { "type": "string", "maxLength": 30 },
+        "yetkili": { "type": "string", "maxLength": 120 },
+        "telefon": { "type": "string", "maxLength": 40 },
+        "adres": { "type": "string", "maxLength": 400 },
+        "notlar": { "type": "string", "maxLength": 1000 },
+        "olusturmaTarihi": { "type": "string", "maxLength": 60 }
       },
       "required": ["id", "name"]
+    },
+    "User": {
+      "title": "User",
+      "description": "Application user account with role and granular permissions",
+      "type": "object",
+      "properties": {
+        "username": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "password": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "role": { "type": "string", "enum": ["admin", "personel", "security", "guest"] },
+        "depoId": { "type": "number" },
+        "permissions": { "type": "object" }
+      },
+      "required": ["username", "password", "role", "depoId"]
+    },
+    "Warehouse": {
+      "title": "Warehouse",
+      "description": "Warehouse facility definition and active status",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "ad": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "aktif": { "type": "boolean" }
+      },
+      "required": ["id", "ad"]
     },
     "WhatsAppSettings": {
       "title": "WhatsAppSettings",
@@ -100,18 +185,31 @@
       "type": "object",
       "properties": {
         "enabled": { "type": "boolean" },
-        "provider": { "type": "string" },
+        "provider": { "type": "string", "enum": ["webhook", "greenapi", "ultramsg", "twilio", "sharelink"] },
         "autoShareOnVehicleAdd": { "type": "boolean" },
         "autoShareOnRampAssign": { "type": "boolean" },
         "autoShareOnRampCall": { "type": "boolean" },
-        "groupName": { "type": "string" },
-        "groupPhoneOrId": { "type": "string" },
-        "webhookUrl": { "type": "string" },
-        "apiKey": { "type": "string" },
-        "instanceId": { "type": "string" },
-        "twilioAccountSid": { "type": "string" },
-        "twilioAuthToken": { "type": "string" },
-        "twilioFromNumber": { "type": "string" }
+        "groupName": { "type": "string", "maxLength": 120 },
+        "groupPhoneOrId": { "type": "string", "maxLength": 120 },
+        "webhookUrl": { "type": "string", "maxLength": 500 },
+        "apiKey": { "type": "string", "maxLength": 300 },
+        "instanceId": { "type": "string", "maxLength": 120 },
+        "twilioAccountSid": { "type": "string", "maxLength": 120 },
+        "twilioAuthToken": { "type": "string", "maxLength": 200 },
+        "twilioFromNumber": { "type": "string", "maxLength": 60 },
+        "alwaysShowPromptModal": { "type": "boolean" },
+        "customTemplate": { "type": "string", "maxLength": 1500 }
+      }
+    },
+    "SlaSettings": {
+      "title": "SlaSettings",
+      "description": "Configurable SLA target durations and warning thresholds per process type",
+      "type": "object",
+      "properties": {
+        "bosaltmaMinutes": { "type": "number" },
+        "yuklemeMinutes": { "type": "number" },
+        "tahliyeMinutes": { "type": "number" },
+        "warningThresholdPercent": { "type": "number" }
       }
     }
   },
@@ -136,13 +234,29 @@
       "schema": { "$ref": "#/entities/ChatMessage" },
       "description": "Live warehouse team field chat messages"
     },
+    "/chatPresence/{presenceId}": {
+      "schema": { "$ref": "#/entities/ChatPresence" },
+      "description": "Live chat user online status and typing presence"
+    },
     "/customers/{customerId}": {
       "schema": { "$ref": "#/entities/Customer" },
       "description": "Registered customer and contractor companies"
     },
-    "/settings/{settingId}": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "Application user accounts and permissions"
+    },
+    "/warehouses/{warehouseId}": {
+      "schema": { "$ref": "#/entities/Warehouse" },
+      "description": "Warehouse facilities and active visibility state"
+    },
+    "/settings/whatsapp": {
       "schema": { "$ref": "#/entities/WhatsAppSettings" },
-      "description": "Application shared configuration settings"
+      "description": "Shared WhatsApp integration configuration"
+    },
+    "/settings/sla": {
+      "schema": { "$ref": "#/entities/SlaSettings" },
+      "description": "Shared SLA target duration settings"
     }
   }
 }

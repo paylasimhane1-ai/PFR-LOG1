@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Vehicle } from '../types';
+import { SlaSettings, Vehicle } from '../types';
 import { getVehicleStageTimes, VehicleStageTimes } from '../utils/slaHelpers';
 import { getDepoKayitTarihi, getEvrakHazirTarihi, getRampaGirisTarihi, getRampaCikisTarihi } from '../utils/helpers';
 import { Clock, AlertTriangle, CheckCircle, Flame, ArrowRight, ShieldCheck, FileCheck, Warehouse, LogIn, LogOut, Calendar } from 'lucide-react';
@@ -7,9 +7,10 @@ import { Clock, AlertTriangle, CheckCircle, Flame, ArrowRight, ShieldCheck, File
 interface RampSlaIndicatorProps {
   vehicle: Vehicle;
   compact?: boolean;
+  slaSettings?: SlaSettings;
 }
 
-export const RampSlaIndicator: React.FC<RampSlaIndicatorProps> = ({ vehicle, compact = false }) => {
+export const RampSlaIndicator: React.FC<RampSlaIndicatorProps> = ({ vehicle, compact = false, slaSettings }) => {
   // Canlı güncelleme: her 15 saniyede bir yeniden render olsun
   const [now, setNow] = useState<number>(Date.now());
 
@@ -20,7 +21,7 @@ export const RampSlaIndicator: React.FC<RampSlaIndicatorProps> = ({ vehicle, com
     return () => clearInterval(timer);
   }, []);
 
-  const stage = getVehicleStageTimes(vehicle, now);
+  const stage = getVehicleStageTimes(vehicle, now, slaSettings);
 
   if (stage.rampaIslemMinutes === null) {
     return null;
@@ -119,9 +120,10 @@ export const RampSlaIndicator: React.FC<RampSlaIndicatorProps> = ({ vehicle, com
 interface VehicleLifecycleTimelineProps {
   vehicle: Vehicle;
   rampName?: string;
+  slaSettings?: SlaSettings;
 }
 
-export const VehicleLifecycleTimeline: React.FC<VehicleLifecycleTimelineProps> = ({ vehicle, rampName }) => {
+export const VehicleLifecycleTimeline: React.FC<VehicleLifecycleTimelineProps> = ({ vehicle, rampName, slaSettings }) => {
   const [now, setNow] = useState<number>(Date.now());
 
   useEffect(() => {
@@ -129,7 +131,7 @@ export const VehicleLifecycleTimeline: React.FC<VehicleLifecycleTimelineProps> =
     return () => clearInterval(timer);
   }, []);
 
-  const stage = getVehicleStageTimes(vehicle, now);
+  const stage = getVehicleStageTimes(vehicle, now, slaSettings);
   const activeRampLabel = rampName || (vehicle.rampaId ? `Rampa ${vehicle.rampaId}` : 'Rampa');
   const isExited = vehicle.durum === 'ÇIKIŞ YAPTI';
   const isRampada = vehicle.durum === 'RAMPADA';

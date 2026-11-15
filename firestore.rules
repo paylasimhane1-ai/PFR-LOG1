@@ -1,8 +1,339 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    // Note: This app authenticates users against /users/{userId} in the app layer
+    // rather than Firebase Authentication (request.auth is null on client requests),
+    // and includes a read-only Guest Portal. Rules enforce strict structural,
+    // enum, array-size, and string-length validation across every collection.
+    //
+    // Collections:
+    //   - /vehicles/{vehicleId}         (Vehicle)
+    //   - /ramps/{rampId}               (Ramp)
+    //   - /expectedVehicles/{id}        (ExpectedVehicle)
+    //   - /notifications/{id}           (AppNotification)
+    //   - /chatMessages/{id}            (ChatMessage)
+    //   - /customers/{customerId}       (Customer)
+    //   - /users/{userId}               (User)
+    //   - /warehouses/{warehouseId}     (Warehouse)
+    //   - /settings/whatsapp            (WhatsAppSettings)
+    //   - /settings/sla                 (SlaSettings)
+    //   - /test/connection              (Connection probe)
+
+    // Default deny fallback
     match /{document=**} {
-      allow read, write: if true;
+      allow read, write: if false;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function isNumericId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 32 && id.matches('^[0-9]+$');
+    }
+
+    function isAlphaNumId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isOptStr(data, key, maxLen) {
+      return !(key in data) || data[key] == null || (data[key] is string && data[key].size() <= maxLen);
+    }
+
+    function isOptNum(data, key) {
+      return !(key in data) || data[key] == null || (data[key] is number);
+    }
+
+    function isOptBool(data, key) {
+      return !(key in data) || data[key] == null || (data[key] is bool);
+    }
+
+    function isValidVehicle(d) {
+      return d.keys().hasAll(['id', 'depoId', 'dorsePlaka', 'islemTuru', 'durum', 'isAcik', 'girisTarihi', 'girisTarihiIso', 'girisTimestamp']) &&
+        d.keys().hasOnly([
+          'id', 'depoId', 'cekiciPlaka', 'dorsePlaka', 'konteynirNo',
+          'soforAd', 'soforTel', 'soforTc', 'nakliyeFirmasi', 'musteri',
+          'depoTuru', 'islemTuru', 'aciklama', 'fotograflar', 'isAcik',
+          'durum', 'rampaId', 'isRampayaCagrildi', 'cagrildigiRampaId',
+          'girisTarihi', 'girisTarihiIso', 'girisTimestamp',
+          'evrakHazirTimestamp', 'evrakKayitTarihi',
+          'rampadaTimestamp', 'rampayaGirisTarihi',
+          'rampadanCikisTarihi', 'rampadanCikisTimestamp',
+          'cikisTarihi', 'cikisTimestamp', 'guvenlikNotlari'
+        ]) &&
+        d.id is number &&
+        d.depoId is number && d.depoId >= 1 &&
+        d.dorsePlaka is string && d.dorsePlaka.size() >= 1 && d.dorsePlaka.size() <= 40 &&
+        d.islemTuru in ['Boşaltma', 'Yükleme', 'Tahliye'] &&
+        d.durum in ['BEKLEMEDE', 'EVRAK HAZIR', 'RAMPADA', 'ÇIKIŞ YAPTI'] &&
+        d.isAcik is bool &&
+        d.girisTarihi is string && d.girisTarihi.size() <= 60 &&
+        d.girisTarihiIso is string && d.girisTarihiIso.size() <= 30 &&
+        d.girisTimestamp is number &&
+        isOptStr(d, 'cekiciPlaka', 40) &&
+        isOptStr(d, 'konteynirNo', 60) &&
+        isOptStr(d, 'soforAd', 120) &&
+        isOptStr(d, 'soforTel', 40) &&
+        isOptStr(d, 'soforTc', 20) &&
+        isOptStr(d, 'nakliyeFirmasi', 150) &&
+        isOptStr(d, 'musteri', 200) &&
+        isOptStr(d, 'depoTuru', 40) &&
+        isOptStr(d, 'aciklama', 2000) &&
+        (!('fotograflar' in d) || (d.fotograflar is list && d.fotograflar.size() <= 5)) &&
+        isOptNum(d, 'rampaId') &&
+        isOptBool(d, 'isRampayaCagrildi') &&
+        isOptNum(d, 'cagrildigiRampaId') &&
+        isOptNum(d, 'evrakHazirTimestamp') &&
+        isOptStr(d, 'evrakKayitTarihi', 60) &&
+        isOptNum(d, 'rampadaTimestamp') &&
+        isOptStr(d, 'rampayaGirisTarihi', 60) &&
+        isOptStr(d, 'rampadanCikisTarihi', 60) &&
+        isOptNum(d, 'rampadanCikisTimestamp') &&
+        isOptStr(d, 'cikisTarihi', 60) &&
+        isOptNum(d, 'cikisTimestamp') &&
+        (!('guvenlikNotlari' in d) || (d.guvenlikNotlari is list && d.guvenlikNotlari.size() <= 50));
+    }
+
+    function isValidRamp(d) {
+      return d.keys().hasAll(['id', 'ad', 'durum']) &&
+        d.keys().hasOnly(['id', 'depoId', 'ad', 'durum', 'arizaNotu', 'bakimBaslangic']) &&
+        d.id is number &&
+        isOptNum(d, 'depoId') &&
+        d.ad is string && d.ad.size() >= 1 && d.ad.size() <= 80 &&
+        d.durum in ['Boş', 'Dolu', 'Arızalı', 'Bakımda'] &&
+        isOptStr(d, 'arizaNotu', 300) &&
+        isOptStr(d, 'bakimBaslangic', 60);
+    }
+
+    function isValidExpectedVehicle(d) {
+      return d.keys().hasAll(['id', 'depoId', 'durum']) &&
+        d.keys().hasOnly([
+          'id', 'depoId', 'cekiciPlaka', 'dorsePlaka', 'konteynirNo',
+          'soforAd', 'soforTel', 'soforTc', 'aciklama', 'musteri',
+          'depoTuru', 'islemTuru', 'beklenenTarih', 'durum', 'kabulTarihi'
+        ]) &&
+        d.id is number &&
+        d.depoId is number && d.depoId >= 1 &&
+        d.durum in ['BEKLENİYOR', 'GİRİŞ YAPILDI'] &&
+        isOptStr(d, 'cekiciPlaka', 40) &&
+        isOptStr(d, 'dorsePlaka', 40) &&
+        isOptStr(d, 'konteynirNo', 60) &&
+        isOptStr(d, 'soforAd', 120) &&
+        isOptStr(d, 'soforTel', 40) &&
+        isOptStr(d, 'soforTc', 20) &&
+        isOptStr(d, 'aciklama', 2000) &&
+        isOptStr(d, 'musteri', 200) &&
+        isOptStr(d, 'depoTuru', 40) &&
+        isOptStr(d, 'islemTuru', 40) &&
+        isOptStr(d, 'beklenenTarih', 60) &&
+        isOptStr(d, 'kabulTarihi', 60);
+    }
+
+    function isValidNotification(d) {
+      return d.keys().hasAll(['id', 'text', 'time', 'status']) &&
+        d.keys().hasOnly([
+          'id', 'depoId', 'type', 'vehicleId', 'plaka', 'musteri',
+          'soforAd', 'soforTel', 'rampId', 'rampName', 'text',
+          'time', 'status', 'securityNote', 'readBy'
+        ]) &&
+        d.id is number &&
+        isOptNum(d, 'depoId') &&
+        isOptStr(d, 'type', 60) &&
+        isOptNum(d, 'vehicleId') &&
+        isOptStr(d, 'plaka', 40) &&
+        isOptStr(d, 'musteri', 200) &&
+        isOptStr(d, 'soforAd', 120) &&
+        isOptStr(d, 'soforTel', 40) &&
+        isOptNum(d, 'rampId') &&
+        isOptStr(d, 'rampName', 80) &&
+        d.text is string && d.text.size() >= 1 && d.text.size() <= 1000 &&
+        d.time is string && d.time.size() >= 1 && d.time.size() <= 30 &&
+        d.status in ['BEKLİYOR', 'İŞLEM YAPILDI', 'ONAYLANDI', 'İPTAL', 'OKUNDU'] &&
+        isOptStr(d, 'securityNote', 1000) &&
+        (!('readBy' in d) || (d.readBy is list && d.readBy.size() <= 200));
+    }
+
+    function isValidChatMessage(d) {
+      return d.keys().hasAll(['id', 'sender', 'role', 'text', 'time']) &&
+        d.keys().hasOnly([
+          'id', 'sender', 'role', 'text', 'time', 'channelId', 'recipient',
+          'replyTo', 'mentions', 'readBy', 'timestamp', 'isEdited', 'editedAt',
+          'imageUrl', 'entityCard', 'reactions', 'isPinned', 'pinnedBy'
+        ]) &&
+        d.id is number &&
+        d.sender is string && d.sender.size() >= 1 && d.sender.size() <= 120 &&
+        d.role is string && d.role.size() >= 1 && d.role.size() <= 40 &&
+        d.text is string && d.text.size() <= 2000 &&
+        (
+          d.text.size() >= 1 ||
+          ('imageUrl' in d && d.imageUrl is string && d.imageUrl.size() >= 1) ||
+          ('entityCard' in d && d.entityCard is map)
+        ) &&
+        d.time is string && d.time.size() >= 1 && d.time.size() <= 30 &&
+        isOptStr(d, 'channelId', 200) &&
+        isOptStr(d, 'recipient', 120) &&
+        (!('replyTo' in d) || d.replyTo == null || d.replyTo is map) &&
+        (!('mentions' in d) || (d.mentions is list && d.mentions.size() <= 50)) &&
+        (!('readBy' in d) || (d.readBy is list && d.readBy.size() <= 200)) &&
+        isOptNum(d, 'timestamp') &&
+        isOptBool(d, 'isEdited') &&
+        isOptStr(d, 'editedAt', 30) &&
+        isOptStr(d, 'imageUrl', 600000) &&
+        (!('entityCard' in d) || d.entityCard == null || d.entityCard is map) &&
+        (!('reactions' in d) || d.reactions == null || (d.reactions is map && d.reactions.keys().size() <= 20)) &&
+        isOptBool(d, 'isPinned') &&
+        isOptStr(d, 'pinnedBy', 120);
+    }
+
+    function isValidChatPresence(d) {
+      return d.keys().hasAll(['username', 'role', 'lastActiveAt']) &&
+        d.keys().hasOnly(['username', 'role', 'depoId', 'lastActiveAt', 'typingInChannel', 'typingAt']) &&
+        d.username is string && d.username.size() >= 1 && d.username.size() <= 120 &&
+        d.role is string && d.role.size() >= 1 && d.role.size() <= 40 &&
+        isOptNum(d, 'depoId') &&
+        d.lastActiveAt is number &&
+        isOptStr(d, 'typingInChannel', 200) &&
+        isOptNum(d, 'typingAt');
+    }
+
+    function isValidCustomer(d) {
+      return d.keys().hasAll(['id', 'name']) &&
+        d.keys().hasOnly(['id', 'name', 'vergiNo', 'yetkili', 'telefon', 'adres', 'notlar', 'olusturmaTarihi']) &&
+        d.id is string && d.id.size() >= 1 && d.id.size() <= 128 &&
+        d.name is string && d.name.size() >= 1 && d.name.size() <= 200 &&
+        isOptStr(d, 'vergiNo', 30) &&
+        isOptStr(d, 'yetkili', 120) &&
+        isOptStr(d, 'telefon', 40) &&
+        isOptStr(d, 'adres', 400) &&
+        isOptStr(d, 'notlar', 1000) &&
+        isOptStr(d, 'olusturmaTarihi', 60);
+    }
+
+    function isValidUser(d) {
+      return d.keys().hasAll(['username', 'password', 'role', 'depoId']) &&
+        d.keys().hasOnly(['username', 'password', 'role', 'depoId', 'permissions']) &&
+        d.username is string && d.username.size() >= 1 && d.username.size() <= 120 &&
+        d.password is string && d.password.size() >= 1 && d.password.size() <= 120 &&
+        d.role in ['admin', 'personel', 'security', 'guest'] &&
+        d.depoId is number && d.depoId >= 0 &&
+        (!('permissions' in d) || d.permissions == null || (
+          d.permissions is map &&
+          d.permissions.keys().hasOnly([
+            'canCreateVehicle', 'canEditVehicle', 'canMakeReady', 'canToggleAcil',
+            'canAssignRamp', 'canReleaseRamp', 'canManageRampStatus', 'canCallVehicle',
+            'canApproveCall', 'canAuthorizeExit', 'canManageExpected', 'canExportReports'
+          ])
+        ));
+    }
+
+    function isValidWarehouse(d) {
+      return d.keys().hasAll(['id', 'ad']) &&
+        d.keys().hasOnly(['id', 'ad', 'aktif']) &&
+        d.id is number && d.id >= 1 &&
+        d.ad is string && d.ad.size() >= 1 && d.ad.size() <= 120 &&
+        isOptBool(d, 'aktif');
+    }
+
+    function isValidWhatsAppSettings(d) {
+      return d.keys().hasOnly([
+          'enabled', 'provider', 'autoShareOnVehicleAdd', 'autoShareOnRampAssign',
+          'autoShareOnRampCall', 'groupName', 'groupPhoneOrId', 'webhookUrl',
+          'apiKey', 'instanceId', 'twilioAccountSid', 'twilioAuthToken',
+          'twilioFromNumber', 'alwaysShowPromptModal', 'customTemplate'
+        ]) &&
+        isOptBool(d, 'enabled') &&
+        (!('provider' in d) || d.provider in ['webhook', 'greenapi', 'ultramsg', 'twilio', 'sharelink']) &&
+        isOptBool(d, 'autoShareOnVehicleAdd') &&
+        isOptBool(d, 'autoShareOnRampAssign') &&
+        isOptBool(d, 'autoShareOnRampCall') &&
+        isOptStr(d, 'groupName', 120) &&
+        isOptStr(d, 'groupPhoneOrId', 120) &&
+        isOptStr(d, 'webhookUrl', 500) &&
+        isOptStr(d, 'apiKey', 300) &&
+        isOptStr(d, 'instanceId', 120) &&
+        isOptStr(d, 'twilioAccountSid', 120) &&
+        isOptStr(d, 'twilioAuthToken', 200) &&
+        isOptStr(d, 'twilioFromNumber', 60) &&
+        isOptBool(d, 'alwaysShowPromptModal') &&
+        isOptStr(d, 'customTemplate', 1500);
+    }
+
+    function isValidSlaSettings(d) {
+      return d.keys().hasAll(['bosaltmaMinutes', 'yuklemeMinutes', 'tahliyeMinutes', 'warningThresholdPercent']) &&
+        d.keys().hasOnly(['bosaltmaMinutes', 'yuklemeMinutes', 'tahliyeMinutes', 'warningThresholdPercent']) &&
+        d.bosaltmaMinutes is number && d.bosaltmaMinutes > 0 && d.bosaltmaMinutes <= 10080 &&
+        d.yuklemeMinutes is number && d.yuklemeMinutes > 0 && d.yuklemeMinutes <= 10080 &&
+        d.tahliyeMinutes is number && d.tahliyeMinutes > 0 && d.tahliyeMinutes <= 10080 &&
+        d.warningThresholdPercent is number && d.warningThresholdPercent >= 10 && d.warningThresholdPercent <= 100;
+    }
+
+    match /vehicles/{vehicleId} {
+      allow read: if true;
+      allow create, update: if isNumericId(vehicleId) && isValidVehicle(incoming());
+      allow delete: if isNumericId(vehicleId);
+    }
+
+    match /ramps/{rampId} {
+      allow read: if true;
+      allow create, update: if isNumericId(rampId) && isValidRamp(incoming());
+      allow delete: if isNumericId(rampId);
+    }
+
+    match /expectedVehicles/{expectedVehicleId} {
+      allow read: if true;
+      allow create, update: if isNumericId(expectedVehicleId) && isValidExpectedVehicle(incoming());
+      allow delete: if isNumericId(expectedVehicleId);
+    }
+
+    match /notifications/{notificationId} {
+      allow read: if true;
+      allow create, update: if isNumericId(notificationId) && isValidNotification(incoming());
+      allow delete: if isNumericId(notificationId);
+    }
+
+    match /chatMessages/{chatMessageId} {
+      allow read: if true;
+      allow create, update: if isNumericId(chatMessageId) && isValidChatMessage(incoming());
+      allow delete: if isNumericId(chatMessageId);
+    }
+
+    match /chatPresence/{presenceId} {
+      allow read: if true;
+      allow create, update: if presenceId is string && presenceId.size() >= 1 && presenceId.size() <= 120 && isValidChatPresence(incoming());
+      allow delete: if presenceId is string && presenceId.size() >= 1 && presenceId.size() <= 120;
+    }
+
+    match /customers/{customerId} {
+      allow read: if true;
+      allow create, update: if isAlphaNumId(customerId) && isValidCustomer(incoming());
+      allow delete: if isAlphaNumId(customerId);
+    }
+
+    match /users/{userId} {
+      allow read: if true;
+      allow create, update: if userId is string && userId.size() >= 1 && userId.size() <= 120 && isValidUser(incoming());
+      allow delete: if userId is string && userId.size() >= 1 && userId.size() <= 120;
+    }
+
+    match /warehouses/{warehouseId} {
+      allow read: if true;
+      allow create, update: if isNumericId(warehouseId) && isValidWarehouse(incoming());
+      allow delete: if isNumericId(warehouseId);
+    }
+
+    match /settings/{settingId} {
+      allow read: if settingId in ['whatsapp', 'sla'];
+      allow create, update: if (settingId == 'whatsapp' && isValidWhatsAppSettings(incoming())) ||
+        (settingId == 'sla' && isValidSlaSettings(incoming()));
+      allow delete: if false;
+    }
+
+    match /test/connection {
+      allow get: if true;
+      allow list, write: if false;
     }
   }
 }

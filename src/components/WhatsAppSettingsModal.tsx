@@ -48,9 +48,6 @@ export const WhatsAppSettingsModal: React.FC<WhatsAppSettingsModalProps> = ({
     try {
       const res = await sendTestWhatsAppMessage(config, customTestText);
       setTestResult(res);
-      if (res.urlFallback && config.provider === 'sharelink') {
-        window.open(res.urlFallback, '_blank');
-      }
     } catch (err: any) {
       setTestResult({
         success: false,
@@ -91,14 +88,14 @@ export const WhatsAppSettingsModal: React.FC<WhatsAppSettingsModalProps> = ({
         </div>
 
         {/* Tab Selector */}
-        <div className="flex border-b border-slate-200 bg-slate-50 px-4 text-xs shrink-0">
+        <div className="flex border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 px-4 text-xs shrink-0">
           <button
             type="button"
             onClick={() => setActiveTab('settings')}
             className={`py-2.5 px-4 font-bold border-b-2 transition flex items-center gap-1.5 cursor-pointer ${
               activeTab === 'settings'
-                ? 'border-emerald-600 text-emerald-700 bg-white'
-                : 'border-transparent text-slate-600 hover:text-slate-900'
+                ? 'border-emerald-600 text-emerald-700 dark:text-emerald-400 bg-white dark:bg-slate-900'
+                : 'border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
             }`}
           >
             <MessageSquare className="w-3.5 h-3.5" />
@@ -109,8 +106,8 @@ export const WhatsAppSettingsModal: React.FC<WhatsAppSettingsModalProps> = ({
             onClick={() => setActiveTab('guide')}
             className={`py-2.5 px-4 font-bold border-b-2 transition flex items-center gap-1.5 cursor-pointer ${
               activeTab === 'guide'
-                ? 'border-emerald-600 text-emerald-700 bg-white'
-                : 'border-transparent text-slate-600 hover:text-slate-900'
+                ? 'border-emerald-600 text-emerald-700 dark:text-emerald-400 bg-white dark:bg-slate-900'
+                : 'border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
             }`}
           >
             <BookOpen className="w-3.5 h-3.5" />
@@ -120,30 +117,30 @@ export const WhatsAppSettingsModal: React.FC<WhatsAppSettingsModalProps> = ({
 
         {activeTab === 'guide' ? (
           /* Entegrasyon Rehberi İçeriği */
-          <div className="p-5 overflow-y-auto space-y-4 text-xs custom-scroll flex-1 text-slate-700">
-            <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-xl text-emerald-900 space-y-2">
-              <h4 className="font-bold text-sm flex items-center gap-1.5 text-emerald-800">
-                <Smartphone className="w-4 h-4 text-emerald-700" />
+          <div className="p-5 overflow-y-auto space-y-4 text-xs custom-scroll flex-1 text-slate-700 dark:text-slate-300">
+            <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 p-4 rounded-xl text-emerald-900 dark:text-emerald-100 space-y-2">
+              <h4 className="font-bold text-sm flex items-center gap-1.5 text-emerald-800 dark:text-emerald-300">
+                <Smartphone className="w-4 h-4 text-emerald-700 dark:text-emerald-400" />
                 WhatsApp Grubu Nasıl Entegre Edilir?
               </h4>
-              <p className="text-xs leading-relaxed text-emerald-800/90">
+              <p className="text-xs leading-relaxed text-emerald-800/90 dark:text-emerald-200/90">
                 Operasyon ekibinizin veya güvenlik/saha amirlerinizin bulunduğu WhatsApp grubuna bildirim göndermenin <strong>2 farklı yöntemi</strong> vardır:
               </p>
             </div>
 
             {/* Yöntem 1: Sıfır Kurulum, 1 Tıkla Paylaşım */}
-            <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-2.5 shadow-xs">
+            <div className="bg-white dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-xl p-4 space-y-2.5 shadow-xs">
               <div className="flex items-center justify-between">
-                <span className="font-black text-slate-900 text-xs flex items-center gap-1.5">
-                  <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-[11px]">1</span>
+                <span className="font-black text-slate-900 dark:text-slate-100 text-xs flex items-center gap-1.5">
+                  <span className="w-5 h-5 rounded-full bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 flex items-center justify-center font-bold text-[11px]">1</span>
                   Yöntem A: Hızlı 1-Tık Paylaşım (Sıfır Kurulum & Ücretsiz)
                 </span>
-                <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full">En Pratik</span>
+                <span className="bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300 text-[10px] font-bold px-2 py-0.5 rounded-full">En Pratik</span>
               </div>
-              <p className="text-slate-600 leading-relaxed">
+              <p className="text-slate-600 dark:text-slate-300 leading-relaxed">
                 Herhangi bir API veya teknik ayar yapmadan kullanabilirsiniz. Araç eklendiğinde veya rampa atandığında ekranda doğrudan <strong>"WhatsApp'ta Paylaş"</strong> butonu çıkar.
               </p>
-              <ol className="list-decimal list-inside space-y-1.5 text-slate-600 pl-1">
+              <ol className="list-decimal list-inside space-y-1.5 text-slate-600 dark:text-slate-300 pl-1">
                 <li>Yukarıdaki sağlayıcıyı <strong>"Manuel / Hızlı WhatsApp Web Paylaşım Linki"</strong> olarak bırakın.</li>
                 <li>Yeni araç eklendiğinde veya rampaya araç yönlendirildiğinde ekranda çıkan <strong>"WhatsApp'ta Paylaş"</strong> butonuna dokunun.</li>
                 <li>WhatsApp otomatik açılır; listeden <strong>Operasyon WhatsApp Grubunuzu</strong> seçip Gönder tuşuna basın. Müşteri, işlem türü, plaka ve fotoğraflar anında gruba gider!</li>
@@ -151,38 +148,38 @@ export const WhatsAppSettingsModal: React.FC<WhatsAppSettingsModalProps> = ({
             </div>
 
             {/* Yöntem 2: Arka Planda Tam Otomatik Gönderim (Green API / WhatsApp Business) */}
-            <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-2.5 shadow-xs">
+            <div className="bg-white dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-xl p-4 space-y-2.5 shadow-xs">
               <div className="flex items-center justify-between">
-                <span className="font-black text-slate-900 text-xs flex items-center gap-1.5">
-                  <span className="w-5 h-5 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-[11px]">2</span>
+                <span className="font-black text-slate-900 dark:text-slate-100 text-xs flex items-center gap-1.5">
+                  <span className="w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300 flex items-center justify-center font-bold text-[11px]">2</span>
                   Yöntem B: Arka Planda Tam Otomatik Bot Gönderimi (Green API)
                 </span>
-                <span className="bg-blue-100 text-blue-800 text-[10px] font-bold px-2 py-0.5 rounded-full">Tam Otomatik</span>
+                <span className="bg-blue-100 dark:bg-blue-900/60 text-blue-800 dark:text-blue-300 text-[10px] font-bold px-2 py-0.5 rounded-full">Tam Otomatik</span>
               </div>
-              <p className="text-slate-600 leading-relaxed">
+              <p className="text-slate-600 dark:text-slate-300 leading-relaxed">
                 Kullanıcı hiçbir şeye basmadan, araç kaydedildiği saniyede arka planda operasyon grubuna mesaj gönderilmesini sağlar.
               </p>
-              <div className="space-y-2 bg-slate-50 p-3 rounded-lg border border-slate-200 text-slate-700">
-                <div className="font-semibold text-slate-800">Adım Adım Kurulum:</div>
+              <div className="space-y-2 bg-slate-50 dark:bg-slate-900/70 p-3 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300">
+                <div className="font-semibold text-slate-800 dark:text-slate-100">Adım Adım Kurulum:</div>
                 <div className="space-y-1.5">
                   <div className="flex items-start gap-2">
-                    <span className="font-bold text-emerald-600 shrink-0">1.</span>
+                    <span className="font-bold text-emerald-600 dark:text-emerald-400 shrink-0">1.</span>
                     <span><strong>green-api.com</strong> sitesine gidin ve ücretsiz bir hesap oluşturun.</span>
                   </div>
                   <div className="flex items-start gap-2">
-                    <span className="font-bold text-emerald-600 shrink-0">2.</span>
+                    <span className="font-bold text-emerald-600 dark:text-emerald-400 shrink-0">2.</span>
                     <span>Green API panelinde çıkan <strong>QR Kodu</strong>, şirket/operasyon WhatsApp veya WhatsApp Business telefonunuzla taratın (tıpkı WhatsApp Web'e bağlanır gibi).</span>
                   </div>
                   <div className="flex items-start gap-2">
-                    <span className="font-bold text-emerald-600 shrink-0">3.</span>
+                    <span className="font-bold text-emerald-600 dark:text-emerald-400 shrink-0">3.</span>
                     <span>Panelden <strong>idInstance</strong> ve <strong>apiTokenInstance</strong> anahtarlarını kopyalayın.</span>
                   </div>
                   <div className="flex items-start gap-2">
-                    <span className="font-bold text-emerald-600 shrink-0">4.</span>
-                    <span>Hedef WhatsApp grubunun ID'sini alın (Örn: <code>120363023456789012@g.us</code>). Bu ID'yi Green API panelindeki 'Chats' bölümünden görebilirsiniz.</span>
+                    <span className="font-bold text-emerald-600 dark:text-emerald-400 shrink-0">4.</span>
+                    <span>Hedef WhatsApp grubunun ID'sini alın (Örn: <code className="px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-800">120363023456789012@g.us</code>). Bu ID'yi Green API panelindeki 'Chats' bölümünden görebilirsiniz.</span>
                   </div>
                   <div className="flex items-start gap-2">
-                    <span className="font-bold text-emerald-600 shrink-0">5.</span>
+                    <span className="font-bold text-emerald-600 dark:text-emerald-400 shrink-0">5.</span>
                     <span>Bu bilgileri sistemimizdeki ayarlar sekmesinde ilgili kutulara yapıştırıp <strong>"Ayarları Kaydet"</strong>e basın.</span>
                   </div>
                 </div>
@@ -190,12 +187,12 @@ export const WhatsAppSettingsModal: React.FC<WhatsAppSettingsModalProps> = ({
             </div>
 
             {/* Yöntem 3: Webhook (Zapier, Make, n8n) */}
-            <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-2 shadow-xs">
-              <span className="font-black text-slate-900 text-xs flex items-center gap-1.5">
-                <span className="w-5 h-5 rounded-full bg-purple-100 text-purple-700 flex items-center justify-center font-bold text-[11px]">3</span>
+            <div className="bg-white dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-xl p-4 space-y-2 shadow-xs">
+              <span className="font-black text-slate-900 dark:text-slate-100 text-xs flex items-center gap-1.5">
+                <span className="w-5 h-5 rounded-full bg-purple-100 dark:bg-purple-900/60 text-purple-700 dark:text-purple-300 flex items-center justify-center font-bold text-[11px]">3</span>
                 Yöntem C: Webhook (Make.com / Zapier / n8n)
               </span>
-              <p className="text-slate-600 leading-relaxed">
+              <p className="text-slate-600 dark:text-slate-300 leading-relaxed">
                 Kurumsal WhatsApp Cloud API hesabınız varsa; Make.com veya Zapier üzerinde bir <strong>Webhook URL</strong> oluşturup buraya yapıştırabilirsiniz. Sistem her araç kabulünde JSON formatında plaka, müşteri, işlem ve fotoğraf verilerini bu adrese iletir.
               </p>
             </div>
@@ -215,10 +212,10 @@ export const WhatsAppSettingsModal: React.FC<WhatsAppSettingsModalProps> = ({
           /* Normal Ayarlar Formu */
           <form onSubmit={handleSave} className="p-5 overflow-y-auto space-y-4 text-xs custom-scroll flex-1">
             {/* Ana Etkinleştirme Anahtarı */}
-            <div className="bg-emerald-50/70 border border-emerald-200 p-4 rounded-xl flex items-center justify-between">
+            <div className="bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 p-4 rounded-xl flex items-center justify-between">
               <div className="space-y-0.5">
-                <span className="font-bold text-slate-800 text-sm block">WhatsApp Otomatik Bildirimi</span>
-                <p className="text-slate-500 text-[11px]">
+                <span className="font-bold text-slate-800 dark:text-slate-100 text-sm block">WhatsApp Otomatik Bildirimi</span>
+                <p className="text-slate-500 dark:text-slate-400 text-[11px]">
                   Etkinleştirildiğinde, seçilen operasyon olaylarında mesajlar otomatik olarak WhatsApp grubuna aktarılır.
                 </p>
               </div>
@@ -229,18 +226,18 @@ export const WhatsAppSettingsModal: React.FC<WhatsAppSettingsModalProps> = ({
                   onChange={(e) => setConfig({ ...config, enabled: e.target.checked })}
                   className="sr-only peer"
                 />
-                <div className="w-11 h-6 bg-slate-200 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+                <div className="w-11 h-6 bg-slate-200 dark:bg-slate-700 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
               </label>
             </div>
 
             {/* Otomatik Tetikleyiciler */}
-            <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
-              <h4 className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
-                <ShieldCheck className="w-4 h-4 text-emerald-600" />
+            <div className="bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl p-4 space-y-3">
+              <h4 className="font-bold text-slate-800 dark:text-slate-100 text-xs flex items-center gap-1.5">
+                <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
                 Otomatik Bildirim Tetikleyicileri
               </h4>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                <label className="flex items-center gap-2.5 p-2.5 rounded-lg border border-slate-200 hover:bg-slate-50 cursor-pointer">
+                <label className="flex items-center gap-2.5 p-2.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={config.autoShareOnVehicleAdd}
@@ -248,12 +245,12 @@ export const WhatsAppSettingsModal: React.FC<WhatsAppSettingsModalProps> = ({
                     className="rounded text-emerald-600 focus:ring-emerald-500 w-4 h-4"
                   />
                   <div>
-                    <span className="font-bold text-slate-800 block text-xs">Yeni Araç Girişinde</span>
-                    <span className="text-[10px] text-slate-500">Müşteri, işlem türü, araç plakası ve fotoğraflar</span>
+                    <span className="font-bold text-slate-800 dark:text-slate-100 block text-xs">Yeni Araç Girişinde</span>
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400">Müşteri, işlem türü, araç plakası ve fotoğraflar</span>
                   </div>
                 </label>
 
-                <label className="flex items-center gap-2.5 p-2.5 rounded-lg border border-slate-200 hover:bg-slate-50 cursor-pointer">
+                <label className="flex items-center gap-2.5 p-2.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={config.autoShareOnRampAssign}
@@ -261,12 +258,12 @@ export const WhatsAppSettingsModal: React.FC<WhatsAppSettingsModalProps> = ({
                     className="rounded text-emerald-600 focus:ring-emerald-500 w-4 h-4"
                   />
                   <div>
-                    <span className="font-bold text-slate-800 block text-xs">Rampa Yönlendirmesinde</span>
-                    <span className="text-[10px] text-slate-500">"Şu araç rampaya yönlendirildi" mesajı</span>
+                    <span className="font-bold text-slate-800 dark:text-slate-100 block text-xs">Rampa Yönlendirmesinde</span>
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400">"Şu araç rampaya yönlendirildi" mesajı</span>
                   </div>
                 </label>
 
-                <label className="flex items-center gap-2.5 p-2.5 rounded-lg border border-emerald-200 bg-emerald-50/40 hover:bg-emerald-50 cursor-pointer sm:col-span-2">
+                <label className="flex items-center gap-2.5 p-2.5 rounded-lg border border-emerald-200 dark:border-emerald-800 bg-emerald-50/40 dark:bg-emerald-950/30 hover:bg-emerald-50 dark:hover:bg-emerald-950/50 cursor-pointer sm:col-span-2">
                   <input
                     type="checkbox"
                     checked={config.alwaysShowPromptModal ?? true}
@@ -274,21 +271,21 @@ export const WhatsAppSettingsModal: React.FC<WhatsAppSettingsModalProps> = ({
                     className="rounded text-emerald-600 focus:ring-emerald-500 w-4 h-4"
                   />
                   <div>
-                    <span className="font-bold text-emerald-950 block text-xs">Göndermeden Önce Düzeltme & Önizleme Penceresini Aç</span>
-                    <span className="text-[10px] text-emerald-700">Mesajı göndermeden önce ekranda gösterip metni dilediğiniz gibi düzeltmenize imkan tanır.</span>
+                    <span className="font-bold text-emerald-950 dark:text-emerald-200 block text-xs">Göndermeden Önce Düzeltme & Önizleme Penceresini Aç</span>
+                    <span className="text-[10px] text-emerald-700 dark:text-emerald-300">Mesajı göndermeden önce ekranda gösterip metni dilediğiniz gibi düzeltmenize imkan tanır.</span>
                   </div>
                 </label>
               </div>
             </div>
 
             {/* Entegrasyon Sağlayıcısı Seçimi */}
-            <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
+            <div className="bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl p-4 space-y-3">
               <label className="block">
-                <span className="font-bold text-slate-700 block mb-1">WhatsApp API / Entegrasyon Yöntemi</span>
+                <span className="font-bold text-slate-700 dark:text-slate-200 block mb-1">WhatsApp API / Entegrasyon Yöntemi</span>
                 <select
                   value={config.provider}
                   onChange={(e) => setConfig({ ...config, provider: e.target.value as WhatsAppProvider })}
-                  className="w-full border border-slate-300 rounded-lg p-2.5 text-xs bg-slate-50 focus:bg-white focus:ring-2 focus:ring-emerald-500 outline-none font-medium"
+                  className="w-full border border-slate-300 dark:border-slate-700 rounded-lg p-2.5 text-xs bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-100 focus:bg-white dark:focus:bg-slate-800 focus:ring-2 focus:ring-emerald-500 outline-none font-medium"
                 >
                   <option value="sharelink">Manuel / Hızlı 1-Tık Paylaşım Linki (Sıfır Kurulum - Ücretsiz)</option>
                   <option value="greenapi">Green API (WhatsApp Business Gateway - Arka Planda Otomatik)</option>
@@ -301,7 +298,7 @@ export const WhatsAppSettingsModal: React.FC<WhatsAppSettingsModalProps> = ({
               {/* Grup Adı ve Alıcı ID */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-slate-600 font-semibold mb-1 text-[11px]">
+                  <label className="block text-slate-600 dark:text-slate-300 font-semibold mb-1 text-[11px]">
                     Grup veya Kanal Adı (Görüntüleme için)
                   </label>
                   <input
@@ -309,12 +306,12 @@ export const WhatsAppSettingsModal: React.FC<WhatsAppSettingsModalProps> = ({
                     value={config.groupName || ''}
                     onChange={(e) => setConfig({ ...config, groupName: e.target.value })}
                     placeholder="Örn: Saha & Rampa Operasyon Grubu"
-                    className="w-full border border-slate-300 rounded-lg p-2 text-xs focus:ring-2 focus:ring-emerald-500 outline-none"
+                    className="w-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 rounded-lg p-2 text-xs focus:ring-2 focus:ring-emerald-500 outline-none"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-slate-600 font-semibold mb-1 text-[11px]">
+                  <label className="block text-slate-600 dark:text-slate-300 font-semibold mb-1 text-[11px]">
                     WhatsApp Grup ID veya Telefon Numarası
                   </label>
                   <input
@@ -322,7 +319,7 @@ export const WhatsAppSettingsModal: React.FC<WhatsAppSettingsModalProps> = ({
                     value={config.groupPhoneOrId || ''}
                     onChange={(e) => setConfig({ ...config, groupPhoneOrId: e.target.value })}
                     placeholder="Örn: 120363023456789012@g.us veya 905551234567"
-                    className="w-full border border-slate-300 rounded-lg p-2 text-xs focus:ring-2 focus:ring-emerald-500 outline-none font-mono"
+                    className="w-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 rounded-lg p-2 text-xs focus:ring-2 focus:ring-emerald-500 outline-none font-mono"
                   />
                   <span className="text-[10px] text-slate-400 mt-0.5 block">
                     WhatsApp grupları genelde <code>...g.us</code> ile biter.
@@ -332,9 +329,9 @@ export const WhatsAppSettingsModal: React.FC<WhatsAppSettingsModalProps> = ({
 
               {/* Sağlayıcıya Özel Alanlar */}
               {config.provider === 'webhook' && (
-                <div className="space-y-2 pt-2 border-t border-slate-100">
+                <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-700">
                   <label className="block">
-                    <span className="font-semibold text-slate-700 block mb-1 text-[11px]">
+                    <span className="font-semibold text-slate-700 dark:text-slate-300 block mb-1 text-[11px]">
                       Webhook / Bot URL Endpoint'i *
                     </span>
                     <input
@@ -342,11 +339,11 @@ export const WhatsAppSettingsModal: React.FC<WhatsAppSettingsModalProps> = ({
                       value={config.webhookUrl || ''}
                       onChange={(e) => setConfig({ ...config, webhookUrl: e.target.value })}
                       placeholder="https://hooks.zapier.com/... veya https://hook.eu1.make.com/..."
-                      className="w-full border border-slate-300 rounded-lg p-2 text-xs focus:ring-2 focus:ring-emerald-500 outline-none font-mono"
+                      className="w-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 rounded-lg p-2 text-xs focus:ring-2 focus:ring-emerald-500 outline-none font-mono"
                     />
                   </label>
                   <label className="block">
-                    <span className="font-semibold text-slate-700 block mb-1 text-[11px]">
+                    <span className="font-semibold text-slate-700 dark:text-slate-300 block mb-1 text-[11px]">
                       Bearer Token / Güvenlik Anahtarı (İsteğe Bağlı)
                     </span>
                     <input
@@ -354,16 +351,16 @@ export const WhatsAppSettingsModal: React.FC<WhatsAppSettingsModalProps> = ({
                       value={config.apiKey || ''}
                       onChange={(e) => setConfig({ ...config, apiKey: e.target.value })}
                       placeholder="Gizli webhook token'ı"
-                      className="w-full border border-slate-300 rounded-lg p-2 text-xs focus:ring-2 focus:ring-emerald-500 outline-none font-mono"
+                      className="w-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 rounded-lg p-2 text-xs focus:ring-2 focus:ring-emerald-500 outline-none font-mono"
                     />
                   </label>
                 </div>
               )}
 
               {(config.provider === 'greenapi' || config.provider === 'ultramsg') && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-100">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-100 dark:border-slate-700">
                   <div>
-                    <label className="block font-semibold text-slate-700 mb-1 text-[11px]">
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1 text-[11px]">
                       Instance ID *
                     </label>
                     <input
@@ -371,11 +368,11 @@ export const WhatsAppSettingsModal: React.FC<WhatsAppSettingsModalProps> = ({
                       value={config.instanceId || ''}
                       onChange={(e) => setConfig({ ...config, instanceId: e.target.value })}
                       placeholder="Örn: 1101823456"
-                      className="w-full border border-slate-300 rounded-lg p-2 text-xs focus:ring-2 focus:ring-emerald-500 outline-none font-mono"
+                      className="w-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 rounded-lg p-2 text-xs focus:ring-2 focus:ring-emerald-500 outline-none font-mono"
                     />
                   </div>
                   <div>
-                    <label className="block font-semibold text-slate-700 mb-1 text-[11px]">
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1 text-[11px]">
                       API Token / Key *
                     </label>
                     <input
@@ -383,17 +380,17 @@ export const WhatsAppSettingsModal: React.FC<WhatsAppSettingsModalProps> = ({
                       value={config.apiKey || ''}
                       onChange={(e) => setConfig({ ...config, apiKey: e.target.value })}
                       placeholder="Gizli API Token"
-                      className="w-full border border-slate-300 rounded-lg p-2 text-xs focus:ring-2 focus:ring-emerald-500 outline-none font-mono"
+                      className="w-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 rounded-lg p-2 text-xs focus:ring-2 focus:ring-emerald-500 outline-none font-mono"
                     />
                   </div>
                 </div>
               )}
 
               {config.provider === 'twilio' && (
-                <div className="space-y-2 pt-2 border-t border-slate-100">
+                <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-700">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
-                      <label className="block font-semibold text-slate-700 mb-1 text-[11px]">
+                      <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1 text-[11px]">
                         Twilio Account SID *
                       </label>
                       <input
@@ -401,11 +398,11 @@ export const WhatsAppSettingsModal: React.FC<WhatsAppSettingsModalProps> = ({
                         value={config.twilioAccountSid || ''}
                         onChange={(e) => setConfig({ ...config, twilioAccountSid: e.target.value })}
                         placeholder="ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-                        className="w-full border border-slate-300 rounded-lg p-2 text-xs focus:ring-2 focus:ring-emerald-500 outline-none font-mono"
+                        className="w-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 rounded-lg p-2 text-xs focus:ring-2 focus:ring-emerald-500 outline-none font-mono"
                       />
                     </div>
                     <div>
-                      <label className="block font-semibold text-slate-700 mb-1 text-[11px]">
+                      <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1 text-[11px]">
                         Twilio Auth Token *
                       </label>
                       <input
@@ -413,12 +410,12 @@ export const WhatsAppSettingsModal: React.FC<WhatsAppSettingsModalProps> = ({
                         value={config.twilioAuthToken || ''}
                         onChange={(e) => setConfig({ ...config, twilioAuthToken: e.target.value })}
                         placeholder="Auth Token"
-                        className="w-full border border-slate-300 rounded-lg p-2 text-xs focus:ring-2 focus:ring-emerald-500 outline-none font-mono"
+                        className="w-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 rounded-lg p-2 text-xs focus:ring-2 focus:ring-emerald-500 outline-none font-mono"
                       />
                     </div>
                   </div>
                   <div>
-                    <label className="block font-semibold text-slate-700 mb-1 text-[11px]">
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1 text-[11px]">
                       Twilio WhatsApp From Numarası
                     </label>
                     <input
@@ -426,7 +423,7 @@ export const WhatsAppSettingsModal: React.FC<WhatsAppSettingsModalProps> = ({
                       value={config.twilioFromNumber || 'whatsapp:+14155238886'}
                       onChange={(e) => setConfig({ ...config, twilioFromNumber: e.target.value })}
                       placeholder="whatsapp:+14155238886"
-                      className="w-full border border-slate-300 rounded-lg p-2 text-xs focus:ring-2 focus:ring-emerald-500 outline-none font-mono"
+                      className="w-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 rounded-lg p-2 text-xs focus:ring-2 focus:ring-emerald-500 outline-none font-mono"
                     />
                   </div>
                 </div>
@@ -438,14 +435,14 @@ export const WhatsAppSettingsModal: React.FC<WhatsAppSettingsModalProps> = ({
               <div
                 className={`p-3 rounded-xl border flex items-start gap-2.5 text-xs ${
                   testResult.success
-                    ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
-                    : 'bg-red-50 border-red-200 text-red-800'
+                    ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200'
+                    : 'bg-red-50 dark:bg-red-950/40 border-red-200 dark:border-red-800 text-red-800 dark:text-red-200'
                 }`}
               >
                 {testResult.success ? (
-                  <Check className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                  <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
                 ) : (
-                  <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                  <AlertCircle className="w-4 h-4 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
                 )}
                 <div className="flex-1">
                   <span className="font-bold block">
@@ -456,8 +453,8 @@ export const WhatsAppSettingsModal: React.FC<WhatsAppSettingsModalProps> = ({
                     <a
                       href={testResult.urlFallback}
                       target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center gap-1 text-[11px] text-blue-600 hover:underline mt-1 font-semibold"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-[11px] text-blue-600 dark:text-blue-400 hover:underline mt-1 font-semibold"
                     >
                       <span>Doğrudan WhatsApp'ta Açarak Gör</span>
                       <ExternalLink className="w-3 h-3" />
@@ -468,32 +465,32 @@ export const WhatsAppSettingsModal: React.FC<WhatsAppSettingsModalProps> = ({
             )}
 
             {/* Gruba İletilen Standart Mesaj Formatı (Başlıklar kaldırılmış temiz format) */}
-            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-slate-600 text-[11px] space-y-1.5">
+            <div className="bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-slate-600 dark:text-slate-300 text-[11px] space-y-1.5">
               <div className="flex items-center justify-between">
-                <span className="font-bold text-slate-800 block">Gruba İletilen Standart Mesaj Formatı:</span>
-                <span className="text-[10px] text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded font-semibold">Başlıksız Sade Değerler</span>
+                <span className="font-bold text-slate-800 dark:text-slate-100 block">Gruba İletilen Standart Mesaj Formatı:</span>
+                <span className="text-[10px] text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/50 px-2 py-0.5 rounded font-semibold">Başlıksız Sade Değerler</span>
               </div>
-              <pre className="bg-white p-2.5 rounded-lg border border-slate-200 text-[11px] font-mono overflow-x-auto text-slate-800 leading-relaxed font-semibold">
+              <pre className="bg-white dark:bg-slate-900 p-2.5 rounded-lg border border-slate-200 dark:border-slate-700 text-[11px] font-mono overflow-x-auto text-slate-800 dark:text-slate-100 leading-relaxed font-semibold">
 {`ABC Lojistik A.Ş.
 Boşaltma
 34 YMS 999 / 34 TEST 01`}
               </pre>
-              <p className="text-[10px] text-slate-500">
+              <p className="text-[10px] text-slate-500 dark:text-slate-400">
                 Mesajlar başlık olmadan doğrudan <strong>Firma</strong>, <strong>İşlem Türü</strong> ve <strong>Araç Plakası</strong> satırlarıyla iletilir. Fotoğraflar ise doğrudan dosya/medya eki olarak WhatsApp'a eklenir.
               </p>
             </div>
 
             {/* Canlı Mesaj Düzenleme & Test Alanı */}
-            <div className="bg-emerald-50/50 border border-emerald-200 rounded-xl p-3.5 space-y-2">
+            <div className="bg-emerald-50/50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-xl p-3.5 space-y-2">
               <div className="flex items-center justify-between">
-                <span className="font-bold text-emerald-950 text-xs flex items-center gap-1.5">
-                  <Edit3 className="w-3.5 h-3.5 text-emerald-700" />
+                <span className="font-bold text-emerald-950 dark:text-emerald-200 text-xs flex items-center gap-1.5">
+                  <Edit3 className="w-3.5 h-3.5 text-emerald-700 dark:text-emerald-400" />
                   Örnek Mesajı Düzelt ve Test Et
                 </span>
                 <button
                   type="button"
                   onClick={() => setCustomTestText("ABC Lojistik A.Ş.\nBoşaltma\n34 YMS 999 / 34 TEST 01")}
-                  className="text-[10px] text-emerald-700 hover:text-emerald-900 flex items-center gap-1 cursor-pointer font-medium"
+                  className="text-[10px] text-emerald-700 dark:text-emerald-400 hover:text-emerald-900 dark:hover:text-emerald-200 flex items-center gap-1 cursor-pointer font-medium"
                 >
                   <RotateCcw className="w-3 h-3" />
                   <span>Varsayılana Dön</span>
@@ -503,21 +500,21 @@ Boşaltma
                 value={customTestText}
                 onChange={(e) => setCustomTestText(e.target.value)}
                 rows={3}
-                className="w-full bg-white border border-emerald-300 rounded-lg p-2.5 text-xs font-mono focus:ring-2 focus:ring-emerald-500 outline-none text-slate-800"
+                className="w-full bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-700 rounded-lg p-2.5 text-xs font-mono focus:ring-2 focus:ring-emerald-500 outline-none text-slate-800 dark:text-slate-100"
                 placeholder="Örnek mesaj metnini burada düzenleyebilirsiniz..."
               />
-              <p className="text-[10px] text-emerald-800">
+              <p className="text-[10px] text-emerald-800 dark:text-emerald-300">
                 Aşağıdaki "Bağlantıyı Test Et" butonuna bastığınızda bu kutucuktaki güncel metin gönderilecektir.
               </p>
             </div>
 
             {/* Alt Butonlar */}
-            <div className="pt-2 border-t border-slate-200 flex flex-wrap items-center justify-between gap-2.5">
+            <div className="pt-2 border-t border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2.5">
               <button
                 type="button"
                 onClick={handleTest}
                 disabled={isTesting}
-                className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-xs flex items-center gap-1.5 transition cursor-pointer disabled:opacity-50"
+                className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold rounded-xl text-xs flex items-center gap-1.5 transition cursor-pointer disabled:opacity-50"
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${isTesting ? 'animate-spin' : ''}`} />
                 <span>{isTesting ? 'Test Ediliyor...' : 'Bağlantıyı Test Et'}</span>
@@ -527,7 +524,7 @@ Boşaltma
                 <button
                   type="button"
                   onClick={onClose}
-                  className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-xl text-xs font-semibold transition cursor-pointer"
+                  className="px-4 py-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl text-xs font-semibold transition cursor-pointer"
                 >
                   Vazgeç
                 </button>
