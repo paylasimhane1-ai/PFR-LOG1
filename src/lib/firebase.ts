@@ -16,7 +16,7 @@ import {
   where,
   type DocumentReference
 } from 'firebase/firestore';
-import type { Vehicle, Ramp, ExpectedVehicle, AppNotification, ChatMessage, ChatPresence, Warehouse, User, Customer, WhatsAppConfig, SlaSettings } from '../types';
+import type { Vehicle, Ramp, ExpectedVehicle, AppNotification, ChatMessage, ChatPresence, ChatGroup, Warehouse, User, Customer, WhatsAppConfig, SlaSettings } from '../types';
 import firebaseConfigData from '../../firebase-applet-config.json';
 
 /**
@@ -579,7 +579,8 @@ export async function markChatMessageAsReadInFirestore(id: number, username: str
       if (snap.exists()) {
         const data = snap.data();
         const currentReadBy = Array.isArray(data.readBy) ? data.readBy : [];
-        if (!currentReadBy.includes(username)) {
+        const targetLower = username.trim().toLowerCase();
+        if (!currentReadBy.some((u: unknown) => typeof u === 'string' && u.trim().toLowerCase() === targetLower)) {
           await setDoc(doc(db, 'chatMessages', String(id)), {
             ...data,
             readBy: [...currentReadBy, username]
@@ -611,7 +612,7 @@ export async function clearChatMessagesFromFirestore(channelId?: string): Promis
       return;
     }
     const targetRefs = snapshot.docs
-      .filter((d) => ((d.data() as ChatMessage).channelId || 'genel') === channelId)
+      .filter((d) => ((d.data() as ChatMessage).channelId || '') === channelId)
       .map((d) => d.ref);
     if (targetRefs.length > 0) {
       await commitDeleteDocsInChunks(targetRefs);
@@ -652,6 +653,46 @@ export async function upsertChatPresenceInFirestore(presence: ChatPresence): Pro
     await setDoc(doc(db, 'chatPresence', docId), cleaned);
   } catch (err) {
     handleFirestoreError(err, FirestoreOperationType.WRITE, path, 'Kullanıcı çevrimiçi durumu güncellenemedi');
+  }
+}
+
+export function subscribeToChatGroups(
+  onData: (groups: ChatGroup[]) => void
+): () => void {
+  const colRef = collection(db, 'chatGroups');
+  const unsubscribe = onSnapshot(
+    colRef,
+    (snapshot) => {
+      const list: ChatGroup[] = [];
+      snapshot.forEach((d) => {
+        list.push(d.data() as ChatGroup);
+      });
+      list.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+      onData(list);
+    },
+    (err) => {
+      handleFirestoreError(err, FirestoreOperationType.LIST, 'chatGroups', 'Sohbet grupları senkronizasyonu');
+    }
+  );
+  return unsubscribe;
+}
+
+export async function saveChatGroupToFirestore(group: ChatGroup): Promise<void> {
+  const path = `chatGroups/${group.id}`;
+  try {
+    const cleaned = removeUndefinedFields(group);
+    await setDoc(doc(db, 'chatGroups', group.id), cleaned);
+  } catch (err) {
+    handleFirestoreError(err, FirestoreOperationType.WRITE, path, `${group.name || 'Grup'} kaydedilemedi`);
+  }
+}
+
+export async function deleteChatGroupFromFirestore(groupId: string): Promise<void> {
+  const path = `chatGroups/${groupId}`;
+  try {
+    await deleteDoc(doc(db, 'chatGroups', groupId));
+  } catch (err) {
+    handleFirestoreError(err, FirestoreOperationType.DELETE, path, 'Sohbet grubu silinemedi');
   }
 }
 

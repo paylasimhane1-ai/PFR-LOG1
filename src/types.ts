@@ -181,8 +181,18 @@ export interface ChatPresence {
   role: string;
   depoId?: number;
   lastActiveAt: number;
+  isOnline?: boolean;
   typingInChannel?: string | null;
   typingAt?: number | null;
+}
+
+export interface ChatGroup {
+  id: string;
+  name: string;
+  description?: string;
+  members: string[];
+  createdBy: string;
+  createdAt: number;
 }
 
 export type WhatsAppProvider = 'webhook' | 'greenapi' | 'ultramsg' | 'twilio' | 'sharelink';

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { SlaSettings, Vehicle } from '../types';
 import { getVehicleStageTimes, VehicleStageTimes } from '../utils/slaHelpers';
 import { getDepoKayitTarihi, getEvrakHazirTarihi, getRampaGirisTarihi, getRampaCikisTarihi } from '../utils/helpers';
-import { Clock, AlertTriangle, CheckCircle, Flame, ArrowRight, ShieldCheck, FileCheck, Warehouse, LogIn, LogOut, Calendar } from 'lucide-react';
+import { Clock, AlertTriangle, CheckCircle, Flame, ArrowRight, ShieldCheck, FileCheck, Warehouse, LogIn, LogOut, Calendar, ChevronDown, ChevronUp } from 'lucide-react';
 
 interface RampSlaIndicatorProps {
   vehicle: Vehicle;
@@ -125,6 +125,9 @@ interface VehicleLifecycleTimelineProps {
 
 export const VehicleLifecycleTimeline: React.FC<VehicleLifecycleTimelineProps> = ({ vehicle, rampName, slaSettings }) => {
   const [now, setNow] = useState<number>(Date.now());
+  const [isExpandedMobile, setIsExpandedMobile] = useState<boolean>(() =>
+    typeof window !== 'undefined' ? window.innerWidth >= 640 : true
+  );
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 15000);
@@ -139,31 +142,47 @@ export const VehicleLifecycleTimeline: React.FC<VehicleLifecycleTimelineProps> =
 
   return (
     <div className="bg-slate-900 text-white p-3.5 sm:p-4 rounded-2xl border border-slate-800 shadow-xl space-y-3">
-      {/* Başlık ve Toplam Süre */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 border-b border-slate-800">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-xl bg-blue-600/20 text-blue-400 border border-blue-500/30 flex items-center justify-center shrink-0">
-            <Clock className="w-4 h-4" />
+      {/* Başlık ve Toplam Süre (Telefonda Açılır/Kapatılır) */}
+      <button
+        type="button"
+        onClick={() => setIsExpandedMobile((prev) => !prev)}
+        aria-expanded={isExpandedMobile}
+        className={`w-full text-left flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:cursor-default cursor-pointer ${
+          isExpandedMobile ? 'pb-2.5 border-b border-slate-800' : 'sm:pb-2.5 sm:border-b sm:border-slate-800'
+        }`}
+      >
+        <div className="flex items-center justify-between gap-2 w-full sm:w-auto">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="w-8 h-8 rounded-xl bg-blue-600/20 text-blue-400 border border-blue-500/30 flex items-center justify-center shrink-0">
+              <Clock className="w-4 h-4" />
+            </div>
+            <div className="min-w-0">
+              <h4 className="font-bold text-xs sm:text-sm text-white flex items-center gap-2 truncate">
+                <span className="truncate">Süreç ve Yaşam Döngüsü Zaman Çizelgesi</span>
+              </h4>
+              <p className="text-[10px] text-slate-400 truncate">
+                {isExpandedMobile
+                  ? 'Kayıttan çıkışa kadar tüm kritik aşamaların kesin tarih ve süre analizi'
+                  : 'Detaylı aşama ve süre analizini görmek için dokunun'}
+              </p>
+            </div>
           </div>
-          <div>
-            <h4 className="font-bold text-xs sm:text-sm text-white flex items-center gap-2">
-              <span>Süreç ve Yaşam Döngüsü Zaman Çizelgesi</span>
-            </h4>
-            <p className="text-[10px] text-slate-400">
-              Kayıttan çıkışa kadar tüm kritik aşamaların kesin tarih ve süre analizi
-            </p>
-          </div>
+
+          <span className="sm:hidden inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-800 border border-slate-700 text-[10px] font-bold text-blue-300 shrink-0">
+            <span>{isExpandedMobile ? 'Gizle' : 'Aç'}</span>
+            {isExpandedMobile ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+          </span>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center justify-between sm:justify-end gap-2">
           <span className="text-[10px] font-mono px-2.5 py-1 bg-slate-800 border border-slate-700 text-slate-200 rounded-xl font-bold flex items-center gap-1 shadow-2xs">
             <Calendar className="w-3 h-3 text-blue-400" /> Toplam Süre: <strong className="text-blue-300">{stage.toplamTesisText}</strong>
           </span>
         </div>
-      </div>
+      </button>
 
       {/* 4 Aşamalı Tam Zaman & Süreç Kartları */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 text-xs">
+      <div className={`${isExpandedMobile ? 'grid' : 'hidden sm:grid'} grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 text-xs`}>
         {/* 1. Aşama: Depo Giriş / Kayıt */}
         <div className="bg-slate-800/90 rounded-xl p-3 border border-emerald-500/40 flex flex-col justify-between space-y-2">
           <div>

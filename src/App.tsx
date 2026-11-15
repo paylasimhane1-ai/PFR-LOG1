@@ -8,6 +8,7 @@ import {
   AppNotification,
   ChatMessage,
   ChatPresence,
+  ChatGroup,
   ActiveTab,
   Customer,
   WhatsAppConfig,
@@ -147,6 +148,9 @@ import {
   markChatMessageAsReadInFirestore,
   subscribeToChatPresence,
   upsertChatPresenceInFirestore,
+  subscribeToChatGroups,
+  saveChatGroupToFirestore,
+  deleteChatGroupFromFirestore,
   saveWarehouseToFirestore,
   subscribeToWhatsAppSettings,
   clearAllCustomersFromFirestore,
@@ -245,6 +249,7 @@ export default function App() {
     }
   });
   const [chatPresences, setChatPresences] = useState<ChatPresence[]>([]);
+  const [chatGroups, setChatGroups] = useState<ChatGroup[]>([]);
 
   // Modal Visibility States
   const [showAddExpectedModal, setShowAddExpectedModal] = useState(false);
@@ -497,22 +502,98 @@ export default function App() {
     }
   }, [warehouses]);
 
-  // Canlı Sohbet Çevrimiçi Durumu (Presence Heartbeat)
+  const typingStateRef = useRef<{ channel: string | null; at: number }>({ channel: null, at: 0 });
+  const lastChatMessageIdRef = useRef<number>(0);
+
+  // Canlı Sohbet Çevrimiçi / Çevrimdışı Durumu (Sistemde Aktiflik, Sekme & Çıkış Takibi)
   useEffect(() => {
     if (!currentUser || currentUser.role === 'guest') return;
-    const sendHeartbeat = () => {
+
+    const IDLE_TIMEOUT_MS = 3 * 60 * 1000; // 3 dakika hareketsizlikte çevrimdışı
+    const HEARTBEAT_MS = 25_000;
+    let lastInteractionAt = Date.now();
+    let isCurrentlyOnline = typeof document !== 'undefined' ? document.visibilityState !== 'hidden' : true;
+    let lastSentAt = 0;
+
+    const pushPresence = (online: boolean, force = false) => {
+      const nowTs = Date.now();
+      if (!force && online && nowTs - lastSentAt < 10_000) return;
+      lastSentAt = nowTs;
+      const isActivelyTyping =
+        online &&
+        typingStateRef.current.channel !== null &&
+        nowTs - typingStateRef.current.at <= 5_000;
       upsertChatPresenceInFirestore({
         username: currentUser.username,
         role: currentUser.role,
         depoId: currentUser.depoId,
-        lastActiveAt: Date.now(),
-        typingInChannel: null,
-        typingAt: null
+        lastActiveAt: nowTs,
+        isOnline: online,
+        typingInChannel: isActivelyTyping ? typingStateRef.current.channel : null,
+        typingAt: isActivelyTyping ? typingStateRef.current.at : null
       });
     };
-    sendHeartbeat();
-    const hbInterval = setInterval(sendHeartbeat, 35000);
-    return () => clearInterval(hbInterval);
+
+    pushPresence(isCurrentlyOnline, true);
+
+    const handleActivity = () => {
+      lastInteractionAt = Date.now();
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      if (!isCurrentlyOnline) {
+        isCurrentlyOnline = true;
+        pushPresence(true, true);
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        if (isCurrentlyOnline) {
+          isCurrentlyOnline = false;
+          pushPresence(false, true);
+        }
+      } else {
+        lastInteractionAt = Date.now();
+        isCurrentlyOnline = true;
+        pushPresence(true, true);
+      }
+    };
+
+    const handlePageExit = () => {
+      if (isCurrentlyOnline) {
+        isCurrentlyOnline = false;
+        pushPresence(false, true);
+      }
+    };
+
+    const hbInterval = setInterval(() => {
+      const nowTs = Date.now();
+      const isHidden = typeof document !== 'undefined' && document.visibilityState === 'hidden';
+      const isIdle = nowTs - lastInteractionAt >= IDLE_TIMEOUT_MS;
+
+      if (isHidden || isIdle) {
+        if (isCurrentlyOnline) {
+          isCurrentlyOnline = false;
+          pushPresence(false, true);
+        }
+      } else {
+        isCurrentlyOnline = true;
+        pushPresence(true, true);
+      }
+    }, HEARTBEAT_MS);
+
+    const activityEvents = ['mousedown', 'keydown', 'touchstart', 'scroll', 'pointerdown'] as const;
+    activityEvents.forEach((ev) => window.addEventListener(ev, handleActivity, { passive: true }));
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('pagehide', handlePageExit);
+    window.addEventListener('beforeunload', handlePageExit);
+
+    return () => {
+      clearInterval(hbInterval);
+      activityEvents.forEach((ev) => window.removeEventListener(ev, handleActivity));
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('pagehide', handlePageExit);
+      window.removeEventListener('beforeunload', handlePageExit);
+    };
   }, [currentUser?.username, currentUser?.role, currentUser?.depoId]);
 
   // Firebase Firestore Canlı Eşzamanlama (Real-time Subscriptions)
@@ -632,6 +713,10 @@ export default function App() {
       setChatPresences(remotePresences || []);
     });
 
+    const unsubChatGroups = subscribeToChatGroups((remoteGroups) => {
+      setChatGroups(remoteGroups || []);
+    });
+
     const unsubCustomers = subscribeToCustomers((remoteCustomers) => {
       if (remoteCustomers) {
         setCustomers(remoteCustomers);
@@ -668,6 +753,7 @@ export default function App() {
       unsubNotifs();
       unsubChat();
       unsubPresence();
+      unsubChatGroups();
       unsubCustomers();
       unsubWhatsApp();
       unsubSla();
@@ -840,24 +926,34 @@ export default function App() {
     }).length;
   }, [scopedNotifications, currentUser]);
 
-  // Kullanıcı bazlı okunmamış sohbet mesajı sayısı (özel DM gizlilik filtresi dahil)
+  // Kullanıcı bazlı okunmamış sohbet mesajı sayısı (yalnızca özel DM ve üye olunan özel gruplar; misafir hariç)
   const unreadChatCount = useMemo(() => {
-    if (!currentUser) return 0;
+    if (!currentUser || currentUser.role === 'guest') return 0;
     const myLower = currentUser.username.trim().toLowerCase();
     return chatMessages.filter((m) => {
       if (m.sender.trim().toLowerCase() === myLower) return false;
-      const ch = m.channelId || 'genel';
+      const ch = m.channelId || '';
       if (ch.startsWith('dm__')) {
         const parts = ch.split('__').slice(1);
         const isParticipant =
           (m.recipient && m.recipient.trim().toLowerCase() === myLower) ||
           parts.includes(myLower);
         if (!isParticipant) return false;
+      } else if (ch.startsWith('grp_')) {
+        const grp = chatGroups.find((g) => g.id === ch);
+        if (!grp) return false;
+        const isMember =
+          grp.createdBy.trim().toLowerCase() === myLower ||
+          grp.members.some((u) => u.trim().toLowerCase() === myLower);
+        if (!isMember) return false;
+      } else {
+        // Departman kanalları kaldırıldığı için eski genel kanal mesajları gizlenir
+        return false;
       }
       const readBy = Array.isArray(m.readBy) ? m.readBy : [];
       return !readBy.some((u) => u.trim().toLowerCase() === myLower);
     }).length;
-  }, [chatMessages, currentUser]);
+  }, [chatMessages, chatGroups, currentUser]);
 
   const handleMarkNotificationsAsReadForMe = useCallback(() => {
     if (!currentUser) return;
@@ -1032,6 +1128,17 @@ export default function App() {
   };
 
   const handleLogout = () => {
+    if (currentUser && currentUser.role !== 'guest') {
+      upsertChatPresenceInFirestore({
+        username: currentUser.username,
+        role: currentUser.role,
+        depoId: currentUser.depoId,
+        lastActiveAt: Date.now(),
+        isOnline: false,
+        typingInChannel: null,
+        typingAt: null
+      });
+    }
     setCurrentUser(null);
     try {
       localStorage.removeItem('yms_current_user');
@@ -3300,30 +3407,36 @@ export default function App() {
 
   const handleUpdateChatPresence = useCallback((typingInChannel: string | null) => {
     if (!currentUser || currentUser.role === 'guest') return;
+    const nowTs = Date.now();
+    typingStateRef.current = {
+      channel: typingInChannel,
+      at: typingInChannel ? nowTs : 0
+    };
     upsertChatPresenceInFirestore({
       username: currentUser.username,
       role: currentUser.role,
       depoId: currentUser.depoId,
-      lastActiveAt: Date.now(),
+      lastActiveAt: nowTs,
+      isOnline: true,
       typingInChannel,
-      typingAt: typingInChannel ? Date.now() : null
+      typingAt: typingInChannel ? nowTs : null
     });
   }, [currentUser]);
 
   const handleClearChatMessages = (channelId?: string) => {
     const isChannelClear = Boolean(channelId);
     askConfirm(
-      isChannelClear ? 'Kanal Geçmişini Temizle' : 'Sohbet Geçmişini Temizle',
+      isChannelClear ? 'Sohbet Geçmişini Temizle' : 'Tüm Sohbet Geçmişini Temizle',
       isChannelClear
-        ? 'Bu kanaldaki tüm mesajlaşma geçmişini kalıcı olarak silmek istediğinizden emin misiniz? Bu işlem tüm cihazlarda geçerli olacaktır.'
-        : 'Tüm kanallardaki mesajlaşma geçmişini kalıcı olarak silmek istediğinizden emin misiniz? Bu işlem tüm cihazlarda geçerli olacaktır.',
+        ? 'Bu sohbetteki tüm mesajlaşma geçmişini kalıcı olarak silmek istediğinizden emin misiniz? Bu işlem tüm cihazlarda geçerli olacaktır.'
+        : 'Tüm sohbet geçmişini kalıcı olarak silmek istediğinizden emin misiniz? Bu işlem tüm cihazlarda geçerli olacaktır.',
       () => {
-        setChatMessages((prev) => (channelId ? prev.filter((m) => (m.channelId || 'genel') !== channelId) : []));
+        setChatMessages((prev) => (channelId ? prev.filter((m) => (m.channelId || '') !== channelId) : []));
         clearChatMessagesFromFirestore(channelId);
-        showToast(isChannelClear ? 'Kanal geçmişi temizlendi.' : 'Tüm sohbet geçmişi temizlendi.', 'info');
+        showToast(isChannelClear ? 'Sohbet geçmişi temizlendi.' : 'Tüm sohbet geçmişi temizlendi.', 'info');
       },
       'danger',
-      isChannelClear ? 'Evet, Kanalı Temizle' : 'Evet, Tümünü Sil'
+      isChannelClear ? 'Evet, Temizle' : 'Evet, Tümünü Sil'
     );
   };
 
@@ -3353,15 +3466,21 @@ export default function App() {
   };
 
   const handleSendChatMessage = (payload: ChatSendPayload) => {
-    if (!currentUser) return;
+    if (!currentUser || currentUser.role === 'guest') return;
+    if (!payload.channelId || (!payload.channelId.startsWith('dm__') && !payload.channelId.startsWith('grp_'))) {
+      return;
+    }
     const nowTs = Date.now();
+    const candidateId = nowTs * 100 + Math.floor(Math.random() * 100);
+    const uniqueId = Math.max(candidateId, lastChatMessageIdRef.current + 1);
+    lastChatMessageIdRef.current = uniqueId;
     const newMsg: ChatMessage = {
-      id: nowTs,
+      id: uniqueId,
       sender: currentUser.username,
       role: currentUser.role,
       text: payload.text || '',
       time: new Date(nowTs).toLocaleTimeString('tr-TR').slice(0, 5),
-      channelId: payload.channelId || 'genel',
+      channelId: payload.channelId,
       recipient: payload.recipient || null,
       imageUrl: payload.imageUrl || null,
       entityCard: payload.entityCard || null,
@@ -3377,16 +3496,119 @@ export default function App() {
     saveChatMessageToFirestore(newMsg);
   };
 
+  const handleCreateChatGroup = (payload: { name: string; description?: string; members: string[] }): ChatGroup | undefined => {
+    if (!currentUser || currentUser.role === 'guest') return undefined;
+    const cleanName = payload.name.trim();
+    if (!cleanName) return undefined;
+    const uniqueMembers = Array.from(
+      new Set([currentUser.username, ...payload.members].map((m) => m.trim()).filter(Boolean))
+    );
+    const nowTs = Date.now();
+    const newGroup: ChatGroup = {
+      id: `grp_${nowTs}`,
+      name: cleanName,
+      description: payload.description?.trim() || undefined,
+      members: uniqueMembers,
+      createdBy: currentUser.username,
+      createdAt: nowTs
+    };
+    setChatGroups((prev) => [...prev, newGroup]);
+    saveChatGroupToFirestore(newGroup);
+    showToast(`"${cleanName}" grubu oluşturuldu (${uniqueMembers.length} üye).`, 'success');
+    return newGroup;
+  };
+
+  const handleUpdateChatGroupMembers = (groupId: string, members: string[]) => {
+    if (!currentUser) return;
+    const target = chatGroups.find((g) => g.id === groupId);
+    if (!target) return;
+    const uniqueMembers = Array.from(
+      new Set([target.createdBy, ...members].map((m) => m.trim()).filter(Boolean))
+    );
+    const updated: ChatGroup = { ...target, members: uniqueMembers };
+    setChatGroups((prev) => prev.map((g) => (g.id === groupId ? updated : g)));
+    saveChatGroupToFirestore(updated);
+    showToast(`"${target.name}" grup üyeleri güncellendi (${uniqueMembers.length} kişi).`, 'success');
+  };
+
+  const handleUpdateChatGroup = (
+    groupId: string,
+    updates: { name: string; description?: string; members: string[] }
+  ) => {
+    if (!currentUser) return;
+    const target = chatGroups.find((g) => g.id === groupId);
+    if (!target) return;
+    const cleanName = updates.name.trim() || target.name;
+    const uniqueMembers = Array.from(
+      new Set([target.createdBy, ...updates.members].map((m) => m.trim()).filter(Boolean))
+    );
+    const updated: ChatGroup = {
+      ...target,
+      name: cleanName,
+      description: updates.description?.trim() || undefined,
+      members: uniqueMembers
+    };
+    setChatGroups((prev) => prev.map((g) => (g.id === groupId ? updated : g)));
+    saveChatGroupToFirestore(updated);
+    showToast(`"${cleanName}" grubu güncellendi.`, 'success');
+  };
+
+  const handleLeaveChatGroup = (groupId: string) => {
+    if (!currentUser) return;
+    const target = chatGroups.find((g) => g.id === groupId);
+    if (!target) return;
+    const myLower = currentUser.username.trim().toLowerCase();
+    if (target.createdBy.trim().toLowerCase() === myLower) {
+      showToast('Grup kurucusu gruptan ayrılamaz; bunun yerine grubu silebilirsiniz.', 'warning');
+      return;
+    }
+    askConfirm(
+      'Gruptan Ayrıl',
+      `"${target.name}" grubundan ayrılmak istediğinizden emin misiniz?`,
+      () => {
+        const nextMembers = target.members.filter((m) => m.trim().toLowerCase() !== myLower);
+        const updated: ChatGroup = {
+          ...target,
+          members: nextMembers.length > 0 ? nextMembers : [target.createdBy]
+        };
+        setChatGroups((prev) => prev.map((g) => (g.id === groupId ? updated : g)));
+        saveChatGroupToFirestore(updated);
+        showToast(`"${target.name}" grubundan ayrıldınız.`, 'info');
+      },
+      'warning',
+      'Evet, Ayrıl'
+    );
+  };
+
+  const handleDeleteChatGroup = (groupId: string) => {
+    const target = chatGroups.find((g) => g.id === groupId);
+    if (!target) return;
+    askConfirm(
+      'Sohbet Grubunu Sil',
+      `"${target.name}" grubunu ve bu gruptaki mesajları silmek istediğinizden emin misiniz?`,
+      () => {
+        setChatGroups((prev) => prev.filter((g) => g.id !== groupId));
+        setChatMessages((prev) => prev.filter((m) => m.channelId !== groupId));
+        deleteChatGroupFromFirestore(groupId);
+        clearChatMessagesFromFirestore(groupId);
+        showToast(`"${target.name}" grubu silindi.`, 'info');
+      },
+      'danger',
+      'Evet, Grubu Sil'
+    );
+  };
+
   const handleMarkChatMessagesAsRead = useCallback((messageIds: number[]) => {
-    if (!currentUser || messageIds.length === 0) return;
+    if (!currentUser || currentUser.role === 'guest' || messageIds.length === 0) return;
     const currentUsername = currentUser.username;
+    const currentLower = currentUsername.trim().toLowerCase();
 
     setChatMessages((prev) => {
       let changed = false;
       const next = prev.map((msg) => {
         if (messageIds.includes(msg.id)) {
           const currentReadBy = Array.isArray(msg.readBy) ? msg.readBy : [];
-          if (!currentReadBy.includes(currentUsername)) {
+          if (!currentReadBy.some((u) => u.trim().toLowerCase() === currentLower)) {
             changed = true;
             return { ...msg, readBy: [...currentReadBy, currentUsername] };
           }
@@ -4213,29 +4435,37 @@ export default function App() {
         </div>
       </main>
 
-      {/* Canlı Saha Sohbeti Widget'ı */}
-      <ChatWidget
-        chatMessages={chatMessages}
-        chatPresences={chatPresences}
-        currentUser={currentUser}
-        users={users}
-        vehicles={vehicles}
-        ramps={ramps}
-        warehouses={warehouses}
-        onSendMessage={handleSendChatMessage}
-        onEditMessage={handleEditChatMessage}
-        onDeleteMessage={handleDeleteChatMessage}
-        onToggleReaction={handleToggleChatReaction}
-        onTogglePinMessage={handleTogglePinChatMessage}
-        onClearMessages={handleClearChatMessages}
-        onMarkMessagesAsRead={handleMarkChatMessagesAsRead}
-        onUpdatePresence={handleUpdateChatPresence}
-        onNavigateToVehicle={(v) => {
-          setSelectedDetailVehicle(v);
-          setShowDetailViewModal(true);
-        }}
-        onNavigateToRamp={() => setActiveTab('rampalar')}
-      />
+      {/* Canlı Saha Sohbeti Widget'ı (Misafir hesaplara kapalı) */}
+      {currentUser && currentUser.role !== 'guest' && (
+        <ChatWidget
+          chatMessages={chatMessages}
+          chatPresences={chatPresences}
+          chatGroups={chatGroups}
+          currentUser={currentUser}
+          users={users}
+          vehicles={vehicles}
+          ramps={ramps}
+          warehouses={warehouses}
+          onSendMessage={handleSendChatMessage}
+          onEditMessage={handleEditChatMessage}
+          onDeleteMessage={handleDeleteChatMessage}
+          onToggleReaction={handleToggleChatReaction}
+          onTogglePinMessage={handleTogglePinChatMessage}
+          onClearMessages={handleClearChatMessages}
+          onMarkMessagesAsRead={handleMarkChatMessagesAsRead}
+          onUpdatePresence={handleUpdateChatPresence}
+          onCreateGroup={handleCreateChatGroup}
+          onUpdateGroupMembers={handleUpdateChatGroupMembers}
+          onUpdateGroup={handleUpdateChatGroup}
+          onLeaveGroup={handleLeaveChatGroup}
+          onDeleteGroup={handleDeleteChatGroup}
+          onNavigateToVehicle={(v) => {
+            setSelectedDetailVehicle(v);
+            setShowDetailViewModal(true);
+          }}
+          onNavigateToRamp={() => setActiveTab('rampalar')}
+        />
+      )}
 
       {/* ================= MODALLAR ================= */}
       {/* 1. Beklenen Araç Ekleme Modalı */}

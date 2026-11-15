@@ -190,13 +190,25 @@ service cloud.firestore {
 
     function isValidChatPresence(d) {
       return d.keys().hasAll(['username', 'role', 'lastActiveAt']) &&
-        d.keys().hasOnly(['username', 'role', 'depoId', 'lastActiveAt', 'typingInChannel', 'typingAt']) &&
+        d.keys().hasOnly(['username', 'role', 'depoId', 'lastActiveAt', 'isOnline', 'typingInChannel', 'typingAt']) &&
         d.username is string && d.username.size() >= 1 && d.username.size() <= 120 &&
         d.role is string && d.role.size() >= 1 && d.role.size() <= 40 &&
         isOptNum(d, 'depoId') &&
         d.lastActiveAt is number &&
+        isOptBool(d, 'isOnline') &&
         isOptStr(d, 'typingInChannel', 200) &&
         isOptNum(d, 'typingAt');
+    }
+
+    function isValidChatGroup(d) {
+      return d.keys().hasAll(['id', 'name', 'members', 'createdBy', 'createdAt']) &&
+        d.keys().hasOnly(['id', 'name', 'description', 'members', 'createdBy', 'createdAt']) &&
+        d.id is string && d.id.size() >= 1 && d.id.size() <= 128 &&
+        d.name is string && d.name.size() >= 1 && d.name.size() <= 80 &&
+        isOptStr(d, 'description', 200) &&
+        d.members is list && d.members.size() >= 1 && d.members.size() <= 200 && d.members[0] is string &&
+        d.createdBy is string && d.createdBy.size() >= 1 && d.createdBy.size() <= 120 &&
+        d.createdAt is number;
     }
 
     function isValidCustomer(d) {
@@ -304,6 +316,12 @@ service cloud.firestore {
       allow read: if true;
       allow create, update: if presenceId is string && presenceId.size() >= 1 && presenceId.size() <= 120 && isValidChatPresence(incoming());
       allow delete: if presenceId is string && presenceId.size() >= 1 && presenceId.size() <= 120;
+    }
+
+    match /chatGroups/{groupId} {
+      allow read: if true;
+      allow create, update: if isAlphaNumId(groupId) && isValidChatGroup(incoming());
+      allow delete: if isAlphaNumId(groupId);
     }
 
     match /customers/{customerId} {

@@ -19,6 +19,8 @@ export const LogiPortalIcon: React.FC<LogiPortalIconProps> = ({
     <img
       src="/logiportal.png"
       alt={alt}
+      width={typeof size === 'number' ? size : 40}
+      height={typeof size === 'number' ? size : 40}
       className={`object-contain rounded-xl select-none ${className}`}
       style={size ? { width: size, height: size } : undefined}
       loading="eager"
@@ -50,6 +52,8 @@ export const LogiPortalLogo: React.FC<LogiPortalLogoProps> = ({
       <img
         src="/logiportal.png"
         alt="LogiPortal"
+        width={40}
+        height={40}
         className={`object-contain rounded-2xl select-none ${className}`}
       />
     );
@@ -60,6 +64,8 @@ export const LogiPortalLogo: React.FC<LogiPortalLogoProps> = ({
       <img
         src="/logiportal.png"
         alt="LogiPortal"
+        width={36}
+        height={36}
         className={`${iconClassName} shrink-0 object-contain rounded-xl select-none`}
       />
       <div className="flex flex-col justify-center min-w-0">

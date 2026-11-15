@@ -4,6 +4,7 @@ import {
   ChatReply,
   ChatEntityCard,
   ChatPresence,
+  ChatGroup,
   User,
   Vehicle,
   Ramp,
@@ -24,7 +25,6 @@ import {
   ArrowDown,
   Edit2,
   Check,
-  Hash,
   Search,
   Pin,
   PinOff,
@@ -37,8 +37,16 @@ import {
   Volume2,
   VolumeX,
   Users as UsersIcon,
-  Menu,
-  ChevronRight
+  ChevronRight,
+  ChevronUp,
+  ChevronDown,
+  MoreHorizontal,
+  SquarePen,
+  UserPlus,
+  ArrowLeft,
+  SlidersHorizontal,
+  LogOut,
+  AlertCircle
 } from 'lucide-react';
 import { playChime } from '../utils/audio';
 import { sendNativeNotification, loadPushSettings } from '../utils/notifications';
@@ -56,6 +64,7 @@ export interface ChatSendPayload {
 interface ChatWidgetProps {
   chatMessages: ChatMessage[];
   chatPresences?: ChatPresence[];
+  chatGroups?: ChatGroup[];
   currentUser: User | null;
   users?: User[];
   vehicles?: Vehicle[];
@@ -69,18 +78,17 @@ interface ChatWidgetProps {
   onClearMessages?: (channelId?: string) => void;
   onMarkMessagesAsRead?: (messageIds: number[]) => void;
   onUpdatePresence?: (typingInChannel: string | null) => void;
+  onCreateGroup?: (payload: { name: string; description?: string; members: string[] }) => ChatGroup | undefined | void;
+  onUpdateGroupMembers?: (groupId: string, members: string[]) => void;
+  onUpdateGroup?: (groupId: string, updates: { name: string; description?: string; members: string[] }) => void;
+  onLeaveGroup?: (groupId: string) => void;
+  onDeleteGroup?: (groupId: string) => void;
   onNavigateToVehicle?: (vehicle: Vehicle) => void;
   onNavigateToRamp?: (ramp: Ramp) => void;
 }
 
-const PUBLIC_CHANNELS = [
-  { id: 'genel', name: 'Genel Saha', desc: 'Tüm depo, güvenlik ve operasyon ekibi' },
-  { id: 'guvenlik', name: 'Güvenlik & Kapı', desc: 'Kapı kabul, belge ve çıkış koordinasyonu' },
-  { id: 'operasyon', name: 'Operasyon & Rampa', desc: 'Rampa yönlendirme, yükleme & boşaltma' }
-];
-
-const QUICK_REACTIONS = ['👍', '✅', '🚨', '👀', '🔥'];
-const EMOJI_PALETTE = ['👍', '✅', '🚨', '⚠️', '🚛', '📦', '🏭', '⏱️', '📞', '🙏', '👌', '🔥', '👏', '👀', '📌', '💬'];
+const QUICK_REACTIONS = ['👏', '👍', '✅', '🚨', '👀'];
+const EMOJI_PALETTE = ['👏', '👍', '✅', '🚨', '⚠️', '🚛', '📦', '🏭', '⏱️', '📞', '🙏', '👌', '🔥', '👀', '📌', '💬'];
 const QUICK_TEMPLATES = [
   'Araç rampaya yanaştı, işlem başlıyor.',
   'Evraklar kontrol edildi ve onaylandı.',
@@ -109,7 +117,7 @@ function getDateLabel(ts?: number): string {
 
   if (sameDay(msgDate, today)) return 'Bugün';
   if (sameDay(msgDate, yesterday)) return 'Dün';
-  return msgDate.toLocaleDateString('tr-TR', { day: '2-digit', month: 'long', year: 'numeric' });
+  return msgDate.toLocaleDateString('tr-TR', { day: '2-digit', month: 'short' });
 }
 
 function getRoleLabel(role?: string): string {
@@ -119,14 +127,115 @@ function getRoleLabel(role?: string): string {
   return 'Personel';
 }
 
-export const ChatWidget: React.FC<ChatWidgetProps> = ({
-  chatMessages,
-  chatPresences = [],
+function getAvatarTone(role?: string): string {
+  if (role === 'admin') return 'bg-indigo-600 text-white';
+  if (role === 'security') return 'bg-amber-600 text-white';
+  return 'bg-blue-600 text-white';
+}
+
+function getInitials(name?: string): string {
+  const clean = (name || 'U').trim();
+  const parts = clean.split(/\s+/);
+  if (parts.length >= 2) {
+    return `${parts[0][0] || ''}${parts[1][0] || ''}`.toUpperCase();
+  }
+  return clean.slice(0, 2).toUpperCase();
+}
+
+const PRESENCE_ONLINE_TTL_MS = 75_000;
+
+function isPresenceOnline(presence: ChatPresence | undefined, now: number): boolean {
+  if (!presence) return false;
+  if (presence.isOnline === false) return false;
+  return now - presence.lastActiveAt <= PRESENCE_ONLINE_TTL_MS;
+}
+
+function formatLastSeen(lastActiveAt: number | undefined, now: number): string {
+  if (!lastActiveAt) return 'Hiç giriş yapmadı';
+  const diffMs = Math.max(0, now - lastActiveAt);
+  const diffMin = Math.floor(diffMs / 60_000);
+  if (diffMin < 1) return 'Son görülme az önce';
+  if (diffMin < 60) return `Son görülme ${diffMin} dk önce`;
+
+  const d = new Date(lastActiveAt);
+  const today = new Date(now);
+  const yesterday = new Date(now);
+  yesterday.setDate(today.getDate() - 1);
+  const timeStr = d.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+
+  const sameDay = (a: Date, b: Date) =>
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate();
+
+  if (sameDay(d, today)) return `Son görülme bugün ${timeStr}`;
+  if (sameDay(d, yesterday)) return `Son görülme dün ${timeStr}`;
+  return `Son görülme ${d.toLocaleDateString('tr-TR', { day: '2-digit', month: 'short' })} ${timeStr}`;
+}
+
+interface ConversationWindowProps {
+  channelId: string;
+  isMinimized: boolean;
+  isMaximized: boolean;
+  isMobileView?: boolean;
+  currentUser: User;
+  users: User[];
+  vehicles: Vehicle[];
+  ramps: Ramp[];
+  warehouses: Warehouse[];
+  chatGroups: ChatGroup[];
+  chatPresences: ChatPresence[];
+  visibleMessages: ChatMessage[];
+  onlineUsernamesSet: Set<string>;
+  isMuted: boolean;
+  now: number;
+  onToggleMute: () => void;
+  onToggleMinimize: () => void;
+  onToggleMaximize: () => void;
+  onClose: () => void;
+  onBackMobile?: () => void;
+  onOpenManageGroup: (group: ChatGroup) => void;
+  onOpenCreateGroup: (preselectedMembers?: string[]) => void;
+  onLeaveGroup?: (groupId: string) => void;
+  onDeleteGroup?: (groupId: string) => void;
+  onSendMessage: (payload: ChatSendPayload) => void;
+  onEditMessage?: (id: number, newText: string) => void;
+  onDeleteMessage?: (id: number) => void;
+  onToggleReaction?: (id: number, emoji: string) => void;
+  onTogglePinMessage?: (id: number) => void;
+  onClearMessages?: (channelId?: string) => void;
+  onMarkMessagesAsRead?: (messageIds: number[]) => void;
+  onUpdatePresence?: (typingInChannel: string | null) => void;
+  onNavigateToVehicle?: (vehicle: Vehicle) => void;
+  onNavigateToRamp?: (ramp: Ramp) => void;
+  onOpenLightbox: (url: string) => void;
+}
+
+const ChatConversationWindow: React.FC<ConversationWindowProps> = ({
+  channelId,
+  isMinimized,
+  isMaximized,
+  isMobileView = false,
   currentUser,
-  users = [],
-  vehicles = [],
-  ramps = [],
-  warehouses = [],
+  users,
+  vehicles,
+  ramps,
+  warehouses,
+  chatGroups,
+  chatPresences,
+  visibleMessages,
+  onlineUsernamesSet,
+  isMuted,
+  now,
+  onToggleMute,
+  onToggleMinimize,
+  onToggleMaximize,
+  onClose,
+  onBackMobile,
+  onOpenManageGroup,
+  onOpenCreateGroup,
+  onLeaveGroup,
+  onDeleteGroup,
   onSendMessage,
   onEditMessage,
   onDeleteMessage,
@@ -136,12 +245,11 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
   onMarkMessagesAsRead,
   onUpdatePresence,
   onNavigateToVehicle,
-  onNavigateToRamp
+  onNavigateToRamp,
+  onOpenLightbox
 }) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const [isMaximized, setIsMaximized] = useState(false);
-  const [showMobileSidebar, setShowMobileSidebar] = useState(false);
-  const [activeChannelId, setActiveChannelId] = useState<string>('genel');
+  const myUsername = currentUser.username;
+  const myUsernameLower = myUsername.trim().toLowerCase();
 
   // Composer State
   const [text, setText] = useState('');
@@ -150,9 +258,11 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
   const [pendingImageUrl, setPendingImageUrl] = useState<string | null>(null);
   const [pendingEntityCard, setPendingEntityCard] = useState<ChatEntityCard | null>(null);
   const [isCompressingImage, setIsCompressingImage] = useState(false);
+  const [imageError, setImageError] = useState<string | null>(null);
 
   // Popovers & Filters
   const [activePopover, setActivePopover] = useState<'none' | 'emoji' | 'templates' | 'entity'>('none');
+  const [showHeaderMenu, setShowHeaderMenu] = useState(false);
   const [entityTab, setEntityTab] = useState<'vehicle' | 'ramp'>('vehicle');
   const [entitySearch, setEntitySearch] = useState('');
   const [showSearchBar, setShowSearchBar] = useState(false);
@@ -160,20 +270,16 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
   const [onlyMentionsFilter, setOnlyMentionsFilter] = useState(false);
   const [activeReactionPickerId, setActiveReactionPickerId] = useState<number | null>(null);
   const [activeReadById, setActiveReadById] = useState<number | null>(null);
-  const [lightboxImageUrl, setLightboxImageUrl] = useState<string | null>(null);
-
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
+  const [mobileActionMsgId, setMobileActionMsgId] = useState<number | null>(null);
   const [highlightedMessageId, setHighlightedMessageId] = useState<number | null>(null);
-  const [isMuted, setIsMuted] = useState<boolean>(() => {
-    try {
-      return localStorage.getItem('yms_chat_muted') === '1';
-    } catch {
-      return false;
-    }
-  });
-  const [now, setNow] = useState<number>(() => Date.now());
 
-  // Unread divider state per opened channel
+  // Mention State
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
+  const [mentionStartIndex, setMentionStartIndex] = useState<number>(-1);
+  const [selectedMentionIdx, setSelectedMentionIdx] = useState<number>(0);
+
+  // Unread divider state
   const [initialUnreadId, setInitialUnreadId] = useState<number | null>(null);
   const [initialUnreadCount, setInitialUnreadCount] = useState<number>(0);
   const [initialUnreadTime, setInitialUnreadTime] = useState<string>('');
@@ -181,93 +287,33 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
   const typingClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastTypingSentRef = useRef<number>(0);
 
-  // Mention State
-  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
-  const [mentionStartIndex, setMentionStartIndex] = useState<number>(-1);
-  const [selectedMentionIdx, setSelectedMentionIdx] = useState<number>(0);
-
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const prevVisibleCountRef = useRef(0);
-  const isInitialLoadRef = useRef(true);
 
-  useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 10000);
-    return () => clearInterval(timer);
-  }, []);
+  const channelMessages = useMemo(
+    () => visibleMessages.filter((m) => (m.channelId || '') === channelId),
+    [visibleMessages, channelId]
+  );
 
-  useEffect(() => {
-    const handleOpenChat = () => {
-      setIsOpen(true);
-    };
-    window.addEventListener('open-chat-widget', handleOpenChat);
-    return () => window.removeEventListener('open-chat-widget', handleOpenChat);
-  }, []);
-
-  const myUsername = currentUser?.username || '';
-  const myUsernameLower = myUsername.trim().toLowerCase();
-
-  const toggleMute = () => {
-    setIsMuted((prev) => {
-      const next = !prev;
-      try {
-        localStorage.setItem('yms_chat_muted', next ? '1' : '0');
-      } catch {
-        // ignore storage errors
-      }
-      return next;
-    });
-  };
-
-  // Visibility filter: public channels + DMs involving current user
-  const visibleMessages = useMemo(() => {
-    if (!currentUser) return [];
-    return chatMessages.filter((m) => {
-      const ch = m.channelId || 'genel';
-      if (!ch.startsWith('dm__')) return true;
-      const participants = ch.split('__').slice(1);
-      return (
-        m.sender.trim().toLowerCase() === myUsernameLower ||
-        (m.recipient && m.recipient.trim().toLowerCase() === myUsernameLower) ||
-        participants.includes(myUsernameLower)
-      );
-    });
-  }, [chatMessages, currentUser, myUsernameLower]);
-
-  // Global unread count across all visible channels & DMs
-  const totalUnreadCount = useMemo(() => {
-    if (!currentUser) return 0;
-    return visibleMessages.filter((m) => {
+  const unreadMessages = useMemo(() => {
+    return channelMessages.filter((m) => {
       if (m.sender.trim().toLowerCase() === myUsernameLower) return false;
       const readBy = Array.isArray(m.readBy) ? m.readBy : [];
       return !readBy.some((u) => u.trim().toLowerCase() === myUsernameLower);
-    }).length;
-  }, [visibleMessages, currentUser, myUsernameLower]);
+    });
+  }, [channelMessages, myUsernameLower]);
 
-  const getUnreadForChannel = (chId: string) => {
-    if (!currentUser) return 0;
-    return visibleMessages.filter((m) => {
-      const msgCh = m.channelId || 'genel';
-      if (msgCh !== chId) return false;
-      if (m.sender.trim().toLowerCase() === myUsernameLower) return false;
-      const readBy = Array.isArray(m.readBy) ? m.readBy : [];
-      return !readBy.some((u) => u.trim().toLowerCase() === myUsernameLower);
-    }).length;
-  };
+  const unreadMessagesKey = useMemo(
+    () => unreadMessages.map((m) => m.id).join(','),
+    [unreadMessages]
+  );
 
-  // Channel messages
-  const channelMessages = useMemo(() => {
-    return visibleMessages.filter((m) => (m.channelId || 'genel') === activeChannelId);
-  }, [visibleMessages, activeChannelId]);
-
-  // Apply search / @mentions filter inside active channel
   const displayedMessages = useMemo(() => {
     const q = chatSearchQuery.trim().toLowerCase();
     return channelMessages.filter((m) => {
       if (onlyMentionsFilter) {
-        const lowerText = m.text.toLowerCase();
+        const lowerText = (m.text || '').toLowerCase();
         const mentioned =
           (myUsernameLower && lowerText.includes(`@${myUsernameLower}`)) ||
           lowerText.includes('@herkes') ||
@@ -276,7 +322,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
       }
       if (!q) return true;
       return (
-        m.text.toLowerCase().includes(q) ||
+        (m.text || '').toLowerCase().includes(q) ||
         m.sender.toLowerCase().includes(q) ||
         (m.entityCard?.title && m.entityCard.title.toLowerCase().includes(q)) ||
         (m.entityCard?.subtitle && m.entityCard.subtitle.toLowerCase().includes(q))
@@ -284,210 +330,122 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
     });
   }, [channelMessages, chatSearchQuery, onlyMentionsFilter, myUsernameLower]);
 
-  const pinnedMessages = useMemo(
-    () => channelMessages.filter((m) => m.isPinned),
-    [channelMessages]
-  );
+  const pinnedMessages = useMemo(() => channelMessages.filter((m) => m.isPinned), [channelMessages]);
 
-  // Presence helpers (online within 90s, typing within 6s)
-  const onlineUsernamesSet = useMemo(() => {
-    const set = new Set<string>();
-    chatPresences.forEach((p) => {
-      if (now - p.lastActiveAt <= 90_000) {
-        set.add(p.username.trim().toLowerCase());
-      }
-    });
-    if (myUsernameLower) set.add(myUsernameLower);
-    return set;
-  }, [chatPresences, now, myUsernameLower]);
-
-  const typingUsersInActiveChannel = useMemo(() => {
+  const typingUsers = useMemo(() => {
     return chatPresences
-      .filter(
-        (p) =>
-          p.username.trim().toLowerCase() !== myUsernameLower &&
-          p.typingInChannel === activeChannelId &&
-          p.typingAt &&
-          now - p.typingAt <= 6_000
-      )
+      .filter((p) => {
+        const key = p.username.trim().toLowerCase();
+        return (
+          key !== myUsernameLower &&
+          onlineUsernamesSet.has(key) &&
+          p.typingInChannel === channelId &&
+          Boolean(p.typingAt && now - p.typingAt <= 6_000)
+        );
+      })
       .map((p) => p.username);
-  }, [chatPresences, activeChannelId, now, myUsernameLower]);
+  }, [chatPresences, channelId, now, myUsernameLower, onlineUsernamesSet]);
 
-  // DM User directory (other users, online sorted first)
-  const dmUsers = useMemo(() => {
-    const list = users.filter((u) => u.username.trim().toLowerCase() !== myUsernameLower);
-    return [...list].sort((a, b) => {
-      const aOnline = onlineUsernamesSet.has(a.username.trim().toLowerCase());
-      const bOnline = onlineUsernamesSet.has(b.username.trim().toLowerCase());
-      if (aOnline !== bOnline) return aOnline ? -1 : 1;
-      return a.username.localeCompare(b.username, 'tr');
-    });
-  }, [users, myUsernameLower, onlineUsernamesSet]);
-
-  const activeChannelMeta = useMemo(() => {
-    const pub = PUBLIC_CHANNELS.find((c) => c.id === activeChannelId);
-    if (pub) {
+  const meta = useMemo(() => {
+    if (channelId.startsWith('grp_')) {
+      const grp = chatGroups.find((g) => g.id === channelId);
       return {
-        isDm: false,
-        title: `#${pub.name}`,
-        subtitle: pub.desc,
+        kind: 'group' as const,
+        title: grp?.name || 'Özel Grup',
+        subtitle: grp ? `${grp.members.length} Üye${grp.description ? ` • ${grp.description}` : ''}` : 'Özel Ekip Grubu',
         recipient: null as string | null,
-        isOnline: false
+        role: undefined as string | undefined,
+        isOnline: true,
+        group: grp
       };
     }
-    if (activeChannelId.startsWith('dm__')) {
-      const targetUser = dmUsers.find((u) => getDmChannelId(myUsername, u.username) === activeChannelId);
-      const partnerName =
-        targetUser?.username ||
-        activeChannelId
-          .split('__')
-          .slice(1)
-          .find((n) => n !== myUsernameLower) ||
-        'Özel Mesaj';
-      const isOnline = onlineUsernamesSet.has(partnerName.toLowerCase());
-      return {
-        isDm: true,
-        title: partnerName,
-        subtitle: targetUser ? `${getRoleLabel(targetUser.role)} • Birebir Özel Sohbet` : 'Birebir Özel Sohbet',
-        recipient: targetUser?.username || partnerName,
-        isOnline
-      };
-    }
+    const targetUser = users.find((u) => getDmChannelId(myUsername, u.username) === channelId);
+    const partnerName =
+      targetUser?.username ||
+      channelId
+        .split('__')
+        .slice(1)
+        .find((n) => n !== myUsernameLower) ||
+      'Özel Mesaj';
+    const partnerLower = partnerName.trim().toLowerCase();
+    const targetPresence = chatPresences.find((p) => p.username.trim().toLowerCase() === partnerLower);
+    const isOnline = onlineUsernamesSet.has(partnerLower);
+    const statusLabel = isOnline ? 'Çevrimiçi' : formatLastSeen(targetPresence?.lastActiveAt, now);
     return {
-      isDm: false,
-      title: '#Genel Saha',
-      subtitle: 'Tüm depo, güvenlik ve operasyon ekibi',
-      recipient: null,
-      isOnline: false
+      kind: 'dm' as const,
+      title: partnerName,
+      subtitle: targetUser ? `${getRoleLabel(targetUser.role)} · ${statusLabel}` : statusLabel,
+      recipient: targetUser?.username || partnerName,
+      role: targetUser?.role,
+      isOnline,
+      group: undefined as ChatGroup | undefined
     };
-  }, [activeChannelId, dmUsers, myUsername, myUsernameLower, onlineUsernamesSet]);
+  }, [channelId, chatGroups, users, myUsername, myUsernameLower, onlineUsernamesSet, chatPresences, now]);
 
-  // @mention candidates
-  const mentionCandidates = useMemo(() => {
-    const list: { id: string; name: string; role: string; isBroadcast?: boolean }[] = [
-      { id: 'herkes', name: 'herkes', role: 'Tüm Depo Ekibi', isBroadcast: true },
-      { id: 'tum_ekip', name: 'tum_ekip', role: 'Genel Anons', isBroadcast: true }
-    ];
-    const seen = new Set<string>(['herkes', 'tum_ekip']);
-
-    if (users && users.length > 0) {
-      users.forEach((u) => {
-        if (!seen.has(u.username.toLowerCase())) {
-          seen.add(u.username.toLowerCase());
-          list.push({
-            id: u.username,
-            name: u.username,
-            role: getRoleLabel(u.role)
-          });
-        }
-      });
-    }
-
-    if (mentionQuery === null) return [];
-    const query = mentionQuery.toLowerCase();
-    return list.filter(
-      (item) =>
-        item.name.toLowerCase().includes(query) ||
-        item.role.toLowerCase().includes(query)
-    );
-  }, [users, mentionQuery]);
-
-  // Incoming message audio & native notification
+  // Reset composer, popovers, filters and typing state whenever active conversation changes
   useEffect(() => {
-    if (isInitialLoadRef.current) {
-      isInitialLoadRef.current = false;
-      prevVisibleCountRef.current = visibleMessages.length;
-      return;
-    }
+    setText('');
+    setReplyingTo(null);
+    setEditingMessage(null);
+    setPendingImageUrl(null);
+    setPendingEntityCard(null);
+    setImageError(null);
+    setActivePopover('none');
+    setShowHeaderMenu(false);
+    setActiveReactionPickerId(null);
+    setActiveReadById(null);
+    setConfirmDeleteId(null);
+    setMobileActionMsgId(null);
+    setShowSearchBar(false);
+    setChatSearchQuery('');
+    setOnlyMentionsFilter(false);
+    setMentionQuery(null);
+    setMentionStartIndex(-1);
+    if (typingClearTimerRef.current) clearTimeout(typingClearTimerRef.current);
+    onUpdatePresence?.(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [channelId]);
 
-    if (visibleMessages.length > prevVisibleCountRef.current) {
-      const newMessages = visibleMessages.slice(prevVisibleCountRef.current);
-      newMessages.forEach((msg) => {
-        if (msg.sender.trim().toLowerCase() !== myUsernameLower) {
-          if (!isMuted) {
-            playChime('message');
-          }
-
-          const msgText = (msg.text || '').toLowerCase();
-          const isDm = (msg.channelId || '').startsWith('dm__');
-          const isMentioned =
-            (myUsernameLower && msgText.includes(`@${myUsernameLower}`)) ||
-            msgText.includes('@herkes') ||
-            msgText.includes('@tum_ekip');
-
-          if (isMentioned || isDm) {
-            const pushSettings = loadPushSettings();
-            if (pushSettings.notifyOnMention) {
-              sendNativeNotification({
-                title: isDm ? `🔒 ${msg.sender} size özel mesaj gönderdi` : `💬 ${msg.sender} sizden bahsetti!`,
-                body: msg.text || (msg.imageUrl ? '📷 Fotoğraf gönderdi' : '📌 Saha kartı paylaştı'),
-                soundType: isMuted ? undefined : 'message',
-                tag: 'chat-mention-' + msg.id
-              });
-            }
-          }
-        }
-      });
-    }
-    prevVisibleCountRef.current = visibleMessages.length;
-  }, [visibleMessages, myUsernameLower, isMuted]);
-
-  // Active channel unread messages
-  const activeChannelUnreadMessages = useMemo(() => {
-    if (!currentUser) return [];
-    return channelMessages.filter((m) => {
-      if (m.sender.trim().toLowerCase() === myUsernameLower) return false;
-      const readBy = Array.isArray(m.readBy) ? m.readBy : [];
-      return !readBy.some((u) => u.trim().toLowerCase() === myUsernameLower);
-    });
-  }, [channelMessages, currentUser, myUsernameLower]);
-
-  // Scroll & mark as read when opening chat or switching channel
   useEffect(() => {
-    if (!isOpen) {
-      setInitialUnreadId(null);
-      setInitialUnreadCount(0);
-      setInitialUnreadTime('');
+    return () => {
+      if (markAsReadTimerRef.current) clearTimeout(markAsReadTimerRef.current);
+      if (typingClearTimerRef.current) clearTimeout(typingClearTimerRef.current);
+    };
+  }, []);
+
+  // Mark messages as read & scroll on open / channel switch
+  useEffect(() => {
+    if (isMinimized) {
       if (markAsReadTimerRef.current) clearTimeout(markAsReadTimerRef.current);
       return;
     }
 
-    const unread = activeChannelUnreadMessages;
-    if (unread.length > 0) {
-      const firstMsg = unread[0];
-      const firstId = firstMsg.id;
-      const timeStr =
-        firstMsg.time ||
-        (firstMsg.timestamp
-          ? new Date(firstMsg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-          : '');
+    if (unreadMessages.length > 0) {
+      const firstMsg = unreadMessages[0];
+      setInitialUnreadId(firstMsg.id);
+      setInitialUnreadCount(unreadMessages.length);
+      setInitialUnreadTime(firstMsg.time || '');
 
-      setInitialUnreadId(firstId);
-      setInitialUnreadCount(unread.length);
-      setInitialUnreadTime(timeStr);
-
-      const performScroll = () => {
+      requestAnimationFrame(() => {
         if (!messagesContainerRef.current) return;
         const marker =
-          document.getElementById('unread-divider-marker') ||
-          document.getElementById(`chat-msg-${firstId}`);
+          document.getElementById(`unread-marker-${channelId}`) ||
+          document.getElementById(`chat-msg-${channelId}-${firstMsg.id}`);
         if (marker) {
           messagesContainerRef.current.scrollTo({
             top: Math.max(0, marker.offsetTop - 16),
             behavior: 'smooth'
           });
         }
-      };
-
-      requestAnimationFrame(() => {
-        performScroll();
-        setTimeout(performScroll, 80);
       });
 
       if (markAsReadTimerRef.current) clearTimeout(markAsReadTimerRef.current);
       markAsReadTimerRef.current = setTimeout(() => {
-        onMarkMessagesAsRead?.(unread.map((m) => m.id));
-      }, 3500);
+        onMarkMessagesAsRead?.(unreadMessages.map((m) => m.id));
+      }, 2200);
+      return () => {
+        if (markAsReadTimerRef.current) clearTimeout(markAsReadTimerRef.current);
+      };
     } else {
       setInitialUnreadId(null);
       setInitialUnreadCount(0);
@@ -500,26 +458,60 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
       return () => clearTimeout(timer);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, activeChannelId]);
+  }, [channelId, isMinimized]);
+
+  // Also mark incoming unread messages if window is open and active
+  useEffect(() => {
+    if (isMinimized || !unreadMessagesKey) return;
+    const idsToMark = unreadMessages.map((m) => m.id);
+    const t = setTimeout(() => {
+      onMarkMessagesAsRead?.(idsToMark);
+    }, 1800);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [unreadMessagesKey, isMinimized, channelId]);
 
   useEffect(() => {
     if (replyingTo) inputRef.current?.focus();
   }, [replyingTo]);
 
-  // Auto-resize textarea
   useEffect(() => {
     if (inputRef.current) {
       inputRef.current.style.height = 'auto';
-      inputRef.current.style.height = `${Math.min(110, inputRef.current.scrollHeight)}px`;
+      inputRef.current.style.height = `${Math.min(100, inputRef.current.scrollHeight)}px`;
     }
   }, [text]);
+
+  const mentionCandidates = useMemo(() => {
+    const list: { id: string; name: string; role: string }[] = [
+      { id: 'herkes', name: 'herkes', role: 'Tüm Ekip' },
+      { id: 'tum_ekip', name: 'tum_ekip', role: 'Genel Anons' }
+    ];
+    const seen = new Set<string>(['herkes', 'tum_ekip']);
+    const nonGuestUsers = users.filter((u) => u.role !== 'guest');
+    const pool =
+      meta.kind === 'group' && meta.group
+        ? nonGuestUsers.filter((u) => meta.group!.members.some((m) => m.toLowerCase() === u.username.toLowerCase()))
+        : nonGuestUsers;
+
+    pool.forEach((u) => {
+      if (!seen.has(u.username.toLowerCase())) {
+        seen.add(u.username.toLowerCase());
+        list.push({ id: u.username, name: u.username, role: getRoleLabel(u.role) });
+      }
+    });
+
+    if (mentionQuery === null) return [];
+    const q = mentionQuery.toLowerCase();
+    return list.filter((c) => c.name.toLowerCase().includes(q) || c.role.toLowerCase().includes(q));
+  }, [users, mentionQuery, meta]);
 
   const handleTypingBroadcast = () => {
     if (!onUpdatePresence) return;
     const nowTs = Date.now();
     if (nowTs - lastTypingSentRef.current > 2400) {
       lastTypingSentRef.current = nowTs;
-      onUpdatePresence(activeChannelId);
+      onUpdatePresence(channelId);
     }
     if (typingClearTimerRef.current) clearTimeout(typingClearTimerRef.current);
     typingClearTimerRef.current = setTimeout(() => {
@@ -531,13 +523,10 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
     const val = e.target.value;
     const cursorPos = e.target.selectionStart || val.length;
     setText(val);
-    if (val.trim()) {
-      handleTypingBroadcast();
-    }
+    if (val.trim()) handleTypingBroadcast();
 
     const textBeforeCursor = val.slice(0, cursorPos);
     const lastAtIndex = textBeforeCursor.lastIndexOf('@');
-
     if (lastAtIndex !== -1) {
       const charBeforeAt = lastAtIndex > 0 ? textBeforeCursor[lastAtIndex - 1] : ' ';
       if (charBeforeAt === ' ' || charBeforeAt === '\n' || lastAtIndex === 0) {
@@ -550,7 +539,6 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
         }
       }
     }
-
     setMentionQuery(null);
     setMentionStartIndex(-1);
   };
@@ -559,93 +547,53 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
     if (mentionStartIndex === -1) return;
     const beforeAt = text.slice(0, mentionStartIndex);
     const afterCursor = text.slice(inputRef.current?.selectionStart || text.length);
-    const newText = `${beforeAt}@${candidateName} ${afterCursor}`;
-    setText(newText);
+    setText(`${beforeAt}@${candidateName} ${afterCursor}`);
     setMentionQuery(null);
     setMentionStartIndex(-1);
 
     setTimeout(() => {
       if (inputRef.current) {
         inputRef.current.focus();
-        const newCursor = (beforeAt + `@${candidateName} `).length;
-        inputRef.current.setSelectionRange(newCursor, newCursor);
+        const pos = (beforeAt + `@${candidateName} `).length;
+        inputRef.current.setSelectionRange(pos, pos);
       }
     }, 10);
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (mentionQuery !== null && mentionCandidates.length > 0) {
-      if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        setSelectedMentionIdx((prev) => (prev + 1) % mentionCandidates.length);
-        return;
-      }
-      if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        setSelectedMentionIdx((prev) => (prev - 1 + mentionCandidates.length) % mentionCandidates.length);
-        return;
-      }
-      if (e.key === 'Enter' || e.key === 'Tab') {
-        e.preventDefault();
-        handleSelectMention(mentionCandidates[selectedMentionIdx].name);
-        return;
-      }
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        setMentionQuery(null);
-        return;
-      }
-    }
-
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSendInternal();
-    } else if (e.key === 'Escape' && editingMessage) {
-      e.preventDefault();
-      handleCancelEdit();
-    }
   };
 
   const handleImageFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = '';
     if (!file) return;
-
+    setImageError(null);
+    if (!file.type.startsWith('image/')) {
+      setImageError('Yalnızca resim dosyaları (JPG, PNG, WEBP) eklenebilir.');
+      return;
+    }
     setIsCompressingImage(true);
     try {
       let compressed = await compressImageFile(file, 800, 0.72);
       if (compressed.length > 480000) {
         compressed = await compressImageFile(file, 600, 0.52);
       }
+      if (compressed.length > 520000) {
+        setImageError('Görsel boyutu çok büyük olduğu için eklenemedi. Daha küçük bir fotoğraf seçin.');
+        return;
+      }
       setPendingImageUrl(compressed);
       setActivePopover('none');
       inputRef.current?.focus();
     } catch (err) {
       console.error('Chat image compress failed:', err);
+      setImageError('Fotoğraf işlenemedi. Lütfen farklı bir görsel deneyin.');
     } finally {
       setIsCompressingImage(false);
     }
   };
 
-  const handleStartEdit = (m: ChatMessage) => {
-    setReplyingTo(null);
-    setPendingImageUrl(null);
-    setPendingEntityCard(null);
-    setEditingMessage(m);
-    setText(m.text);
-    inputRef.current?.focus();
-  };
-
-  const handleCancelEdit = () => {
-    setEditingMessage(null);
-    setText('');
-  };
-
   const handleSendInternal = () => {
     const trimmed = text.trim();
-
     if (editingMessage) {
-      if (!trimmed) return;
+      if (!trimmed && !editingMessage.imageUrl && !editingMessage.entityCard) return;
       onEditMessage?.(editingMessage.id, trimmed);
       setEditingMessage(null);
       setText('');
@@ -672,8 +620,8 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
 
     onSendMessage({
       text: trimmed,
-      channelId: activeChannelId,
-      recipient: activeChannelMeta.isDm ? activeChannelMeta.recipient : null,
+      channelId,
+      recipient: meta.kind === 'dm' ? meta.recipient : null,
       replyTo: replyData,
       mentions: foundMentions.length > 0 ? foundMentions : undefined,
       imageUrl: pendingImageUrl,
@@ -699,13 +647,42 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
     }, 50);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    handleSendInternal();
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (mentionQuery !== null && mentionCandidates.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSelectedMentionIdx((p) => (p + 1) % mentionCandidates.length);
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSelectedMentionIdx((p) => (p - 1 + mentionCandidates.length) % mentionCandidates.length);
+        return;
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault();
+        handleSelectMention(mentionCandidates[selectedMentionIdx].name);
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setMentionQuery(null);
+        return;
+      }
+    }
+
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSendInternal();
+    } else if (e.key === 'Escape' && editingMessage) {
+      e.preventDefault();
+      setEditingMessage(null);
+      setText('');
+    }
   };
 
   const handleScrollToMessage = (messageId: number) => {
-    const el = document.getElementById(`chat-msg-${messageId}`);
+    const el = document.getElementById(`chat-msg-${channelId}-${messageId}`);
     if (el) {
       el.scrollIntoView({ behavior: 'smooth', block: 'center' });
       setHighlightedMessageId(messageId);
@@ -713,39 +690,33 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
     }
   };
 
-  const renderMessageContent = (msgText: string, isMine: boolean) => {
+  const renderMessageContent = (msgText: string) => {
     if (!msgText) return null;
     const parts = msgText.split(/(@[a-zA-Z0-9ğüşıöçĞÜŞİÖÇ_]+)/g);
-
-    return parts.map((part, index) => {
+    return parts.map((part, idx) => {
       if (part.startsWith('@')) {
         const username = part.slice(1);
         const isMe = myUsernameLower && username.toLowerCase() === myUsernameLower;
         const isAll = username.toLowerCase() === 'herkes' || username.toLowerCase() === 'tum_ekip';
-
         return (
           <span
-            key={index}
-            className={`inline-flex items-center px-1.5 py-0.2 rounded font-bold text-[10px] mx-0.5 shadow-2xs ${
+            key={idx}
+            className={`inline-flex items-center px-1.5 py-0.2 rounded font-bold text-[11px] mx-0.5 ${
               isMe
-                ? 'bg-amber-400 text-amber-950 font-black'
+                ? 'bg-amber-300 text-amber-950 font-black'
                 : isAll
-                ? 'bg-purple-600 text-white font-bold'
-                : isMine
-                ? 'bg-blue-800 text-blue-100'
+                ? 'bg-purple-100 dark:bg-purple-900/70 text-purple-800 dark:text-purple-200'
                 : 'bg-blue-100 dark:bg-blue-900/60 text-blue-800 dark:text-blue-200'
             }`}
           >
-            <AtSign className="w-2.5 h-2.5 mr-0.5 inline" />
-            {username}
+            @{username}
           </span>
         );
       }
-      return <span key={index}>{part}</span>;
+      return <span key={idx}>{part}</span>;
     });
   };
 
-  // Filtered vehicles & ramps for entity picker
   const selectableVehicles = useMemo(() => {
     const q = entitySearch.trim().toLowerCase();
     return vehicles
@@ -757,14 +728,12 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
           (v.cekiciPlaka && v.cekiciPlaka.toLowerCase().includes(q)) ||
           v.musteri.toLowerCase().includes(q)
       )
-      .slice(0, 18);
+      .slice(0, 16);
   }, [vehicles, entitySearch]);
 
   const selectableRamps = useMemo(() => {
     const q = entitySearch.trim().toLowerCase();
-    return ramps
-      .filter((r) => !q || r.ad.toLowerCase().includes(q) || r.durum.toLowerCase().includes(q))
-      .slice(0, 24);
+    return ramps.filter((r) => !q || r.ad.toLowerCase().includes(q) || r.durum.toLowerCase().includes(q)).slice(0, 20);
   }, [ramps, entitySearch]);
 
   const getWarehouseShort = (depoId?: number) => {
@@ -772,1200 +741,2710 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
     return wh ? wh.ad.split(' - ')[0] : `Depo ${depoId || 1}`;
   };
 
-  if (!currentUser) return null;
+  // Minimized Docked Tab (Facebook / LinkedIn Desktop Bar)
+  if (isMinimized && !isMobileView && !isMaximized) {
+    return (
+      <div className="pointer-events-auto w-60 h-12 bg-white dark:bg-slate-900 border border-b-0 border-slate-200 dark:border-slate-700 rounded-t-xl shadow-2xl px-3 flex items-center justify-between gap-2">
+        <button
+          type="button"
+          onClick={onToggleMinimize}
+          className="flex items-center gap-2 min-w-0 flex-1 text-left cursor-pointer"
+        >
+          <div className="relative shrink-0">
+            <div
+              className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-black ${
+                meta.kind === 'dm'
+                  ? getAvatarTone(meta.role)
+                  : 'bg-emerald-600 text-white'
+              }`}
+            >
+              {meta.kind === 'dm' ? (
+                getInitials(meta.title)
+              ) : (
+                <UsersIcon className="w-3.5 h-3.5" />
+              )}
+            </div>
+            {meta.isOnline && (
+              <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-white dark:border-slate-900" />
+            )}
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate">{meta.title}</div>
+          </div>
+          {unreadMessages.length > 0 && (
+            <span className="px-1.5 py-0.5 rounded-full bg-red-600 text-white text-[10px] font-black tabular-nums">
+              {unreadMessages.length}
+            </span>
+          )}
+        </button>
+
+        <button
+          type="button"
+          onClick={onClose}
+          title="Sohbeti Kapat"
+          className="p-1 text-slate-400 hover:text-slate-700 dark:hover:text-white rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer shrink-0"
+        >
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+    );
+  }
 
   return (
-    <div className="fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom))] md:bottom-6 right-3 sm:right-6 z-40 chat-widget">
-      {isOpen && (
-        <div
-          className={`bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl overflow-hidden flex flex-col z-50 transition-all duration-200 ${
-            isMaximized
-              ? 'fixed inset-2 sm:inset-4 md:inset-6 lg:inset-8 z-50 max-w-6xl mx-auto h-[92dvh] max-h-[95dvh]'
-              : 'fixed sm:absolute bottom-[calc(4.5rem+env(safe-area-inset-bottom)+8px)] sm:bottom-20 right-2 sm:right-0 left-2 sm:left-auto w-auto sm:w-[680px] md:w-[780px] lg:w-[860px] max-w-[calc(100vw-16px)] h-[84dvh] sm:h-[680px] max-h-[820px]'
-          }`}
-        >
-          {/* ================= ÜST BAŞLIK ================= */}
-          <div className="px-3.5 py-3 bg-slate-900 dark:bg-black text-white flex justify-between items-center border-b border-slate-800 shrink-0 gap-2">
-            <div className="flex items-center gap-2.5 min-w-0">
-              <button
-                type="button"
-                onClick={() => setShowMobileSidebar((prev) => !prev)}
-                className="md:hidden p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 cursor-pointer shrink-0"
-                title="Kanallar & Kişiler"
-              >
-                <Menu className="w-4 h-4" />
-              </button>
+    <div
+      className={`pointer-events-auto bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-2xl flex flex-col overflow-hidden transition-all duration-200 ${
+        isMaximized
+          ? 'fixed inset-3 sm:inset-6 lg:inset-10 z-[60] max-w-4xl mx-auto rounded-2xl'
+          : isMobileView
+          ? 'w-full h-full rounded-2xl'
+          : 'w-[360px] lg:w-[400px] h-[520px] max-h-[82dvh] rounded-t-xl border-b-0'
+      }`}
+    >
+      {/* ================= PENCERE BAŞLIĞI (LinkedIn / Facebook Tarzı) ================= */}
+      <div className="px-3 py-2.5 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-2 shrink-0">
+        <div className="flex items-center gap-2 min-w-0">
+          {isMobileView && onBackMobile && (
+            <button
+              type="button"
+              onClick={onBackMobile}
+              className="p-1.5 -ml-1 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 cursor-pointer shrink-0"
+              title="Sohbet Listesine Dön"
+            >
+              <ArrowLeft className="w-4 h-4" />
+            </button>
+          )}
 
-              <div className="relative shrink-0">
-                <div className="w-8 h-8 rounded-xl bg-blue-600/20 border border-blue-500/40 flex items-center justify-center text-blue-300">
-                  {activeChannelMeta.isDm ? <UsersIcon className="w-4 h-4" /> : <Hash className="w-4 h-4" />}
-                </div>
-                <span
-                  className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-slate-900 ${
-                    activeChannelMeta.isDm
-                      ? activeChannelMeta.isOnline
-                        ? 'bg-emerald-500'
-                        : 'bg-slate-500'
-                      : 'bg-emerald-500'
-                  }`}
-                />
-              </div>
-
-              <div className="min-w-0">
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <h4 className="font-bold text-xs sm:text-sm truncate">{activeChannelMeta.title}</h4>
-                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-emerald-300 font-mono tabular-nums">
-                    {onlineUsernamesSet.size} Çevrimiçi
-                  </span>
-                </div>
-                <p className="text-[10px] text-slate-400 truncate">
-                  {typingUsersInActiveChannel.length > 0 ? (
-                    <span className="text-emerald-400 font-bold animate-pulse">
-                      {typingUsersInActiveChannel.join(', ')} yazıyor...
-                    </span>
-                  ) : (
-                    activeChannelMeta.subtitle
-                  )}
-                </p>
-              </div>
+          <div className="relative shrink-0">
+            <div
+              className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-black shadow-2xs ${
+                meta.kind === 'dm'
+                  ? getAvatarTone(meta.role)
+                  : 'bg-emerald-600 text-white'
+              }`}
+            >
+              {meta.kind === 'dm' ? (
+                getInitials(meta.title)
+              ) : (
+                <UsersIcon className="w-4 h-4" />
+              )}
             </div>
+            <span
+              className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white dark:border-slate-900 ${
+                meta.isOnline ? 'bg-emerald-500' : 'bg-slate-400'
+              }`}
+            />
+          </div>
 
-            <div className="flex items-center gap-1 shrink-0">
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5">
+              <h4 className="font-bold text-xs sm:text-sm text-slate-900 dark:text-white truncate">
+                {meta.title}
+              </h4>
+              {meta.kind === 'group' && meta.group && (
+                <button
+                  type="button"
+                  onClick={() => onOpenManageGroup(meta.group!)}
+                  className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 cursor-pointer shrink-0"
+                  title="Üyeleri Gör & Kişi Ekle"
+                >
+                  {meta.group.members.length} kişi
+                </button>
+              )}
+            </div>
+            <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate">
+              {typingUsers.length > 0 ? (
+                <span className="text-emerald-600 dark:text-emerald-400 font-bold animate-pulse">
+                  {typingUsers.join(', ')} yazıyor...
+                </span>
+              ) : (
+                meta.subtitle
+              )}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-0.5 shrink-0 relative">
+          {/* Gruba Kişi Ekle / Grup Oluştur Hızlı Butonu */}
+          {meta.kind === 'group' && meta.group ? (
+            <button
+              type="button"
+              onClick={() => onOpenManageGroup(meta.group!)}
+              title="Gruba Kişi Ekle / Üyeleri Yönet"
+              className="p-1.5 rounded-full text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/60 transition cursor-pointer"
+            >
+              <UserPlus className="w-4 h-4" />
+            </button>
+          ) : meta.kind === 'dm' && meta.recipient ? (
+            <button
+              type="button"
+              onClick={() => onOpenCreateGroup([meta.recipient!])}
+              title="Bu Kişiyle Yeni Grup Oluştur"
+              className="p-1.5 rounded-full text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-800 dark:hover:text-white transition cursor-pointer"
+            >
+              <UserPlus className="w-4 h-4" />
+            </button>
+          ) : null}
+
+          <button
+            type="button"
+            onClick={() => setShowHeaderMenu((prev) => !prev)}
+            title="Sohbet Seçenekleri"
+            className={`p-1.5 rounded-full transition cursor-pointer ${
+              showHeaderMenu || showSearchBar || onlyMentionsFilter
+                ? 'bg-slate-100 dark:bg-slate-800 text-blue-600 dark:text-blue-400'
+                : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+            }`}
+          >
+            <MoreHorizontal className="w-4 h-4" />
+          </button>
+
+          {showHeaderMenu && (
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="absolute right-0 top-9 z-40 w-52 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl py-1 text-xs text-slate-700 dark:text-slate-200"
+            >
               <button
                 type="button"
-                onClick={() => setShowSearchBar((prev) => !prev)}
-                title="Mesajlarda Ara & Filtrele"
-                className={`p-1.5 rounded-lg transition cursor-pointer ${
-                  showSearchBar || chatSearchQuery || onlyMentionsFilter
-                    ? 'bg-blue-600 text-white'
-                    : 'text-slate-400 hover:text-white hover:bg-slate-800'
-                }`}
+                onClick={() => {
+                  setShowSearchBar((p) => !p);
+                  setShowHeaderMenu(false);
+                }}
+                className="w-full px-3 py-2 text-left hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-2 cursor-pointer"
               >
-                <Search className="w-4 h-4" />
+                <Search className="w-3.5 h-3.5 text-slate-500" />
+                <span>{showSearchBar ? 'Aramayı Gizle' : 'Mesajlarda Ara'}</span>
               </button>
 
               <button
                 type="button"
-                onClick={toggleMute}
-                title={isMuted ? 'Sohbet Sesini Aç' : 'Sohbeti Sessize Al'}
-                className={`p-1.5 rounded-lg transition cursor-pointer ${
-                  isMuted ? 'text-amber-400 bg-amber-950/50' : 'text-slate-400 hover:text-white hover:bg-slate-800'
-                }`}
+                onClick={() => {
+                  setOnlyMentionsFilter((p) => !p);
+                  setShowSearchBar(true);
+                  setShowHeaderMenu(false);
+                }}
+                className="w-full px-3 py-2 text-left hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-2 cursor-pointer"
               >
-                {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+                <AtSign className="w-3.5 h-3.5 text-amber-500" />
+                <span>{onlyMentionsFilter ? 'Tüm Mesajları Göster' : 'Sadece @Bahsetmeler'}</span>
               </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  onToggleMute();
+                  setShowHeaderMenu(false);
+                }}
+                className="w-full px-3 py-2 text-left hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-2 cursor-pointer"
+              >
+                {isMuted ? (
+                  <Volume2 className="w-3.5 h-3.5 text-emerald-500" />
+                ) : (
+                  <VolumeX className="w-3.5 h-3.5 text-amber-500" />
+                )}
+                <span>{isMuted ? 'Bildirim Sesini Aç' : 'Sohbeti Sessize Al'}</span>
+              </button>
+
+              {meta.kind === 'group' && meta.group && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onOpenManageGroup(meta.group!);
+                    setShowHeaderMenu(false);
+                  }}
+                  className="w-full px-3 py-2 text-left hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-2 cursor-pointer"
+                >
+                  <UserPlus className="w-3.5 h-3.5 text-emerald-500" />
+                  <span>Grubu & Üyeleri Düzenle</span>
+                </button>
+              )}
+
+              {meta.kind === 'group' &&
+                meta.group &&
+                onLeaveGroup &&
+                meta.group.createdBy.trim().toLowerCase() !== myUsernameLower && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onLeaveGroup(meta.group!.id);
+                      setShowHeaderMenu(false);
+                    }}
+                    className="w-full px-3 py-2 text-left hover:bg-amber-50 dark:hover:bg-amber-950/50 text-amber-700 dark:text-amber-300 flex items-center gap-2 cursor-pointer"
+                  >
+                    <LogOut className="w-3.5 h-3.5" />
+                    <span>Gruptan Ayrıl</span>
+                  </button>
+                )}
 
               {currentUser.role === 'admin' && onClearMessages && channelMessages.length > 0 && (
                 <button
                   type="button"
-                  onClick={() => onClearMessages(activeChannelId)}
-                  title="Bu Kanal Geçmişini Temizle (Admin)"
-                  className="px-2 py-1 text-[10px] text-red-300 hover:text-white bg-red-950/60 hover:bg-red-900 border border-red-800/80 rounded-lg transition cursor-pointer flex items-center gap-1"
+                  onClick={() => {
+                    onClearMessages(channelId);
+                    setShowHeaderMenu(false);
+                  }}
+                  className="w-full px-3 py-2 text-left hover:bg-red-50 dark:hover:bg-red-950/50 text-red-600 dark:text-red-400 flex items-center gap-2 cursor-pointer"
                 >
-                  <Trash2 className="w-3 h-3" />
-                  <span className="hidden sm:inline">Temizle</span>
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Sohbet Geçmişini Temizle</span>
+                </button>
+              )}
+
+              {meta.kind === 'group' &&
+                meta.group &&
+                onDeleteGroup &&
+                (currentUser.role === 'admin' ||
+                  meta.group.createdBy.toLowerCase() === myUsernameLower) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onDeleteGroup(meta.group!.id);
+                      setShowHeaderMenu(false);
+                    }}
+                    className="w-full px-3 py-2 text-left hover:bg-red-50 dark:hover:bg-red-950/50 text-red-600 dark:text-red-400 flex items-center gap-2 cursor-pointer"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Grubu Kalıcı Sil</span>
+                  </button>
+                )}
+            </div>
+          )}
+
+          {!isMobileView && (
+            <>
+              <button
+                type="button"
+                onClick={onToggleMaximize}
+                title={isMaximized ? 'Küçük Pencere' : 'Geniş Görünüm'}
+                className="p-1.5 rounded-full text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+              >
+                {isMaximized ? <Minimize2 className="w-3.5 h-3.5 text-blue-600" /> : <Maximize2 className="w-3.5 h-3.5" />}
+              </button>
+              {!isMaximized && (
+                <button
+                  type="button"
+                  onClick={onToggleMinimize}
+                  title="Simge Durumuna Küçült"
+                  className="p-1.5 rounded-full text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+                >
+                  <Minus className="w-4 h-4" />
+                </button>
+              )}
+            </>
+          )}
+
+          <button
+            type="button"
+            onClick={onClose}
+            title="Pencereyi Kapat"
+            className="p-1.5 rounded-full text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+
+      {/* Arama & @Mention Çubuğu */}
+      {showSearchBar && (
+        <div className="px-3 py-2 bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700 flex items-center gap-2 shrink-0">
+          <div className="relative flex-1">
+            <Search className="w-3.5 h-3.5 absolute left-2.5 top-2 text-slate-400" />
+            <input
+              type="text"
+              value={chatSearchQuery}
+              onChange={(e) => setChatSearchQuery(e.target.value)}
+              placeholder="Mesaj, kişi veya plaka ara..."
+              className="w-full pl-8 pr-7 py-1 text-xs rounded-full border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 outline-none focus:ring-1 focus:ring-blue-500"
+            />
+            {chatSearchQuery && (
+              <button
+                type="button"
+                onClick={() => setChatSearchQuery('')}
+                className="absolute right-2 top-1.5 text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={() => setOnlyMentionsFilter((p) => !p)}
+            className={`px-2 py-1 rounded-full text-[10px] font-bold flex items-center gap-1 cursor-pointer border ${
+              onlyMentionsFilter
+                ? 'bg-amber-500 text-slate-950 border-amber-500'
+                : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'
+            }`}
+          >
+            <AtSign className="w-3 h-3" />
+            <span>@Bana</span>
+          </button>
+        </div>
+      )}
+
+      {/* Sabitlenmiş Mesajlar Bandı */}
+      {pinnedMessages.length > 0 && (
+        <div className="px-3 py-1.5 bg-amber-50 dark:bg-amber-950/40 border-b border-amber-200 dark:border-amber-800/70 flex items-center justify-between gap-2 shrink-0 text-[11px]">
+          <button
+            type="button"
+            onClick={() => handleScrollToMessage(pinnedMessages[pinnedMessages.length - 1].id)}
+            className="flex items-center gap-1.5 min-w-0 text-left cursor-pointer flex-1"
+            title="Sabitlenen mesaja git"
+          >
+            <Pin className="w-3 h-3 text-amber-600 dark:text-amber-400 shrink-0" />
+            <span className="truncate text-amber-950 dark:text-amber-200">
+              <strong className="mr-1">Sabitli:</strong>
+              {pinnedMessages[pinnedMessages.length - 1].text ||
+                pinnedMessages[pinnedMessages.length - 1].entityCard?.title ||
+                '📷 Görsel'}
+            </span>
+          </button>
+          {onTogglePinMessage &&
+            (currentUser.role === 'admin' ||
+              pinnedMessages[pinnedMessages.length - 1].sender.toLowerCase() === myUsernameLower) && (
+              <button
+                type="button"
+                onClick={() => onTogglePinMessage(pinnedMessages[pinnedMessages.length - 1].id)}
+                className="p-1 text-amber-700 dark:text-amber-300 hover:bg-amber-200/60 dark:hover:bg-amber-900/50 rounded cursor-pointer shrink-0"
+                title="Sabitlemeyi Kaldır"
+              >
+                <PinOff className="w-3 h-3" />
+              </button>
+            )}
+        </div>
+      )}
+
+      {/* Okunmamış Mesaj Bandı */}
+      {initialUnreadCount > 0 && (
+        <div className="bg-rose-50 dark:bg-rose-950/60 border-b border-rose-200 dark:border-rose-900/60 px-3 py-1.5 flex items-center justify-between gap-2 shrink-0 text-[11px]">
+          <span className="text-rose-800 dark:text-rose-200 font-bold truncate tabular-nums">
+            {initialUnreadCount} okunmamış mesaj {initialUnreadTime ? `(${initialUnreadTime})` : ''}
+          </span>
+          <div className="flex items-center gap-1 shrink-0">
+            <button
+              type="button"
+              onClick={() => {
+                messagesContainerRef.current?.scrollTo({
+                  top: messagesContainerRef.current.scrollHeight,
+                  behavior: 'smooth'
+                });
+              }}
+              className="px-2 py-0.5 bg-white dark:bg-slate-800 text-rose-700 dark:text-rose-300 font-bold text-[10px] rounded-full border border-rose-200 dark:border-rose-800 cursor-pointer flex items-center gap-0.5"
+            >
+              <ArrowDown className="w-2.5 h-2.5" /> Son
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (unreadMessages.length > 0) {
+                  onMarkMessagesAsRead?.(unreadMessages.map((m) => m.id));
+                }
+                setInitialUnreadCount(0);
+                setInitialUnreadId(null);
+              }}
+              className="px-2 py-0.5 bg-rose-600 text-white font-bold text-[10px] rounded-full cursor-pointer flex items-center gap-0.5"
+            >
+              <CheckCheck className="w-2.5 h-2.5" /> Okundu
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ================= MESAJ AKIŞI (LinkedIn / Facebook Tarzı Temiz Satırlar) ================= */}
+      <div
+        ref={messagesContainerRef}
+        onClick={() => {
+          if (activeReactionPickerId !== null) setActiveReactionPickerId(null);
+          if (activeReadById !== null) setActiveReadById(null);
+          if (showHeaderMenu) setShowHeaderMenu(false);
+          if (mobileActionMsgId !== null) setMobileActionMsgId(null);
+        }}
+        className="flex-1 px-2.5 py-3 overflow-y-auto space-y-1 custom-scroll bg-white dark:bg-slate-950 text-slate-800 dark:text-slate-100"
+      >
+        {displayedMessages.length === 0 && (
+          <div className="h-full flex flex-col items-center justify-center text-slate-400 text-xs text-center p-4 space-y-2">
+            <div className="w-12 h-12 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400">
+              <MessageSquare className="w-6 h-6" />
+            </div>
+            <p className="font-bold text-slate-700 dark:text-slate-200">
+              {chatSearchQuery || onlyMentionsFilter
+                ? 'Eşleşen mesaj bulunamadı.'
+                : `${meta.title} sohbetini başlatın`}
+            </p>
+            <p className="text-[11px] text-slate-400 max-w-[240px]">
+              Fotoğraf, canlı araç/rampa kartı veya hazır operasyon şablonu gönderebilirsiniz.
+            </p>
+          </div>
+        )}
+
+        {displayedMessages.map((m, idx) => {
+          const isMine = m.sender.trim().toLowerCase() === myUsernameLower;
+          const isHighlighted = highlightedMessageId === m.id;
+          const prevMsg = idx > 0 ? displayedMessages[idx - 1] : null;
+          const curDateLabel = getDateLabel(m.timestamp || m.id);
+          const prevDateLabel = prevMsg ? getDateLabel(prevMsg.timestamp || prevMsg.id) : null;
+          const showDateDivider = idx === 0 || curDateLabel !== prevDateLabel;
+          const readByList = Array.isArray(m.readBy) ? m.readBy : [];
+          const otherReaders = readByList.filter((u) => u.trim().toLowerCase() !== m.sender.trim().toLowerCase());
+          const reactionEntries: Array<[string, string[]]> = m.reactions
+            ? Object.entries(m.reactions).filter(
+                (entry): entry is [string, string[]] => Array.isArray(entry[1]) && entry[1].length > 0
+              )
+            : [];
+          const senderOnline = onlineUsernamesSet.has(m.sender.trim().toLowerCase());
+
+          const liveCard = (() => {
+            if (!m.entityCard) return null;
+            if (m.entityCard.type === 'vehicle') {
+              const found = vehicles.find((v) => v.id === m.entityCard!.id);
+              if (found) {
+                return {
+                  ...m.entityCard,
+                  title: found.dorsePlaka,
+                  subtitle: found.musteri,
+                  status: found.durum,
+                  extra: found.cekiciPlaka ? `Çekici: ${found.cekiciPlaka}` : found.islemTuru,
+                  liveVehicle: found
+                };
+              }
+            } else if (m.entityCard.type === 'ramp') {
+              const found = ramps.find((r) => r.id === m.entityCard!.id);
+              if (found) {
+                return {
+                  ...m.entityCard,
+                  title: found.ad,
+                  subtitle: getWarehouseShort(found.depoId),
+                  status: found.durum,
+                  extra: found.arizaNotu || undefined,
+                  liveRamp: found
+                };
+              }
+            }
+            return { ...m.entityCard, liveVehicle: undefined, liveRamp: undefined };
+          })();
+
+          return (
+            <React.Fragment key={m.id}>
+              {showDateDivider && (
+                <div className="flex items-center gap-2 my-2 select-none">
+                  <div className="flex-1 h-px bg-slate-200 dark:bg-slate-800" />
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                    {curDateLabel}
+                  </span>
+                  <div className="flex-1 h-px bg-slate-200 dark:bg-slate-800" />
+                </div>
+              )}
+
+              {initialUnreadId === m.id && (
+                <div id={`unread-marker-${channelId}`} className="flex items-center gap-2 my-2 select-none">
+                  <div className="flex-1 h-[2px] bg-rose-400" />
+                  <span className="px-2.5 py-0.5 rounded-full bg-rose-600 text-white text-[10px] font-black">
+                    Yeni ({initialUnreadCount})
+                  </span>
+                  <div className="flex-1 h-[2px] bg-rose-400" />
+                </div>
+              )}
+
+              {/* LinkedIn / Facebook Mesaj Satırı (Mobilde dokunarak aksiyon menüsü) */}
+              <div
+                id={`chat-msg-${channelId}-${m.id}`}
+                onClick={(e) => {
+                  if ((e.target as HTMLElement).closest('button, a, input, textarea')) return;
+                  e.stopPropagation();
+                  setMobileActionMsgId((prev) => (prev === m.id ? null : m.id));
+                }}
+                className={`relative group rounded-xl px-2 py-2 transition ${
+                  isHighlighted
+                    ? 'bg-blue-50 dark:bg-blue-950/50 ring-1 ring-blue-500'
+                    : mobileActionMsgId === m.id
+                    ? 'bg-slate-100 dark:bg-slate-900 ring-1 ring-slate-300 dark:ring-slate-700'
+                    : m.isPinned
+                    ? 'bg-amber-50/70 dark:bg-amber-950/25 border border-amber-300/70 dark:border-amber-800/60'
+                    : 'hover:bg-slate-100/80 dark:hover:bg-slate-900/90'
+                }`}
+              >
+                {/* Hover & Touch Floating Reaction & Action Pill (LinkedIn / Messenger Style) */}
+                <div
+                  onClick={(e) => e.stopPropagation()}
+                  className={`absolute -top-3 right-2 z-20 ${
+                    mobileActionMsgId === m.id ? 'flex' : 'hidden md:group-hover:flex'
+                  } items-center gap-0.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-full px-1.5 py-0.5 shadow-lg`}
+                >
+                  {onToggleReaction &&
+                    QUICK_REACTIONS.slice(0, 3).map((em) => (
+                      <button
+                        key={em}
+                        type="button"
+                        onClick={() => {
+                          onToggleReaction(m.id, em);
+                          setMobileActionMsgId(null);
+                        }}
+                        className="w-6 h-6 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center justify-center text-xs cursor-pointer transition"
+                        title={`Tepki: ${em}`}
+                      >
+                        {em}
+                      </button>
+                    ))}
+
+                  {onToggleReaction && (
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={() => setActiveReactionPickerId((prev) => (prev === m.id ? null : m.id))}
+                        className="w-6 h-6 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center justify-center text-slate-500 dark:text-slate-300 cursor-pointer"
+                        title="Diğer Tepkiler"
+                      >
+                        <SmilePlus className="w-3.5 h-3.5" />
+                      </button>
+                      {activeReactionPickerId === m.id && (
+                        <div className="absolute right-0 top-7 z-30 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl p-1 flex items-center gap-0.5">
+                          {QUICK_REACTIONS.map((em) => (
+                            <button
+                              key={em}
+                              type="button"
+                              onClick={() => {
+                                onToggleReaction(m.id, em);
+                                setActiveReactionPickerId(null);
+                                setMobileActionMsgId(null);
+                              }}
+                              className="w-7 h-7 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center justify-center text-sm cursor-pointer"
+                            >
+                              {em}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingMessage(null);
+                      setReplyingTo(m);
+                      setMobileActionMsgId(null);
+                    }}
+                    className="w-6 h-6 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center justify-center text-slate-500 dark:text-slate-300 cursor-pointer"
+                    title="Yanıtla"
+                  >
+                    <CornerUpLeft className="w-3.5 h-3.5" />
+                  </button>
+
+                  {onTogglePinMessage && (isMine || currentUser.role === 'admin') && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onTogglePinMessage(m.id);
+                        setMobileActionMsgId(null);
+                      }}
+                      className="w-6 h-6 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center justify-center text-slate-500 dark:text-slate-300 cursor-pointer"
+                      title={m.isPinned ? 'Sabitlemeyi Kaldır' : 'Sabitle'}
+                    >
+                      {m.isPinned ? <PinOff className="w-3.5 h-3.5 text-amber-500" /> : <Pin className="w-3.5 h-3.5" />}
+                    </button>
+                  )}
+
+                  {isMine && onEditMessage && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setReplyingTo(null);
+                        setPendingImageUrl(null);
+                        setPendingEntityCard(null);
+                        setEditingMessage(m);
+                        setText(m.text);
+                        setMobileActionMsgId(null);
+                        inputRef.current?.focus();
+                      }}
+                      className="w-6 h-6 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center justify-center text-slate-500 dark:text-slate-300 cursor-pointer"
+                      title="Düzenle"
+                    >
+                      <Edit2 className="w-3 h-3" />
+                    </button>
+                  )}
+
+                  {(isMine || currentUser.role === 'admin') && onDeleteMessage && (
+                    confirmDeleteId === m.id ? (
+                      <div className="flex items-center gap-1 bg-red-600 text-white px-2 py-0.5 rounded-full text-[10px] font-bold">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onDeleteMessage(m.id);
+                            setConfirmDeleteId(null);
+                            setMobileActionMsgId(null);
+                          }}
+                          className="cursor-pointer underline"
+                        >
+                          Sil
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setConfirmDeleteId(null);
+                            setMobileActionMsgId(null);
+                          }}
+                          className="cursor-pointer opacity-80"
+                        >
+                          İptal
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setConfirmDeleteId(m.id)}
+                        className="w-6 h-6 rounded-full hover:bg-red-50 dark:hover:bg-red-950/60 flex items-center justify-center text-red-500 cursor-pointer"
+                        title="Sil"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )
+                  )}
+                </div>
+
+                {/* Satır İçeriği: Avatar + İsim & Mesaj */}
+                <div className="flex items-start gap-2.5">
+                  <div className="relative shrink-0 mt-0.5">
+                    <div
+                      className={`w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-black ${getAvatarTone(
+                        m.role
+                      )}`}
+                    >
+                      {getInitials(m.sender)}
+                    </div>
+                    {senderOnline && (
+                      <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-white dark:border-slate-950" />
+                    )}
+                  </div>
+
+                  <div className="flex-1 min-w-0 space-y-1">
+                    {/* Gönderen Başlığı */}
+                    <div className="flex items-center gap-1.5 flex-wrap text-xs">
+                      <span className="font-bold text-slate-900 dark:text-white">{m.sender}</span>
+                      <span className="text-[10px] px-1.5 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 font-semibold">
+                        {getRoleLabel(m.role)}
+                      </span>
+                      <span className="text-[10px] text-slate-400 font-mono tabular-nums">• {m.time}</span>
+                      {m.isPinned && (
+                        <span className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.2 rounded bg-amber-200 dark:bg-amber-900/70 text-amber-900 dark:text-amber-200 font-bold">
+                          <Pin className="w-2.5 h-2.5" /> Sabitli
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Yanıt Alıntısı */}
+                    {m.replyTo && (
+                      <button
+                        type="button"
+                        onClick={() => handleScrollToMessage(m.replyTo!.id)}
+                        className="w-full text-left text-[11px] px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800/80 border-l-2 border-blue-500 text-slate-600 dark:text-slate-300 hover:bg-slate-200/70 dark:hover:bg-slate-800 cursor-pointer transition"
+                      >
+                        <span className="font-bold text-blue-700 dark:text-blue-300">@{m.replyTo.sender}: </span>
+                        <span className="italic truncate">{m.replyTo.text}</span>
+                      </button>
+                    )}
+
+                    {/* Ekli Fotoğraf */}
+                    {m.imageUrl && (
+                      <button
+                        type="button"
+                        onClick={() => onOpenLightbox(m.imageUrl!)}
+                        className="block rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 max-w-[240px] cursor-pointer hover:opacity-95 transition"
+                        title="Fotoğrafı Büyüt"
+                      >
+                        <img src={m.imageUrl} alt="Sohbet fotoğrafı" className="w-full max-h-48 object-cover" />
+                      </button>
+                    )}
+
+                    {/* Etkileşimli Araç / Rampa Kartı */}
+                    {liveCard && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (liveCard.type === 'vehicle' && liveCard.liveVehicle && onNavigateToVehicle) {
+                            onNavigateToVehicle(liveCard.liveVehicle);
+                          } else if (liveCard.type === 'ramp' && liveCard.liveRamp && onNavigateToRamp) {
+                            onNavigateToRamp(liveCard.liveRamp);
+                          }
+                        }}
+                        className="w-full text-left p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 hover:bg-blue-50 dark:hover:bg-slate-800 flex items-center justify-between gap-2 transition cursor-pointer"
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <div className="w-8 h-8 rounded-lg bg-blue-100 dark:bg-blue-950 text-blue-600 dark:text-blue-300 flex items-center justify-center shrink-0">
+                            {liveCard.type === 'vehicle' ? (
+                              <Truck className="w-4 h-4" />
+                            ) : (
+                              <WarehouseIcon className="w-4 h-4" />
+                            )}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="font-mono font-black text-xs text-slate-900 dark:text-white truncate">
+                              {liveCard.title}
+                            </div>
+                            {liveCard.subtitle && (
+                              <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate">
+                                {liveCard.subtitle}
+                              </div>
+                            )}
+                            {liveCard.extra && (
+                              <div className="text-[9px] text-slate-400 truncate">{liveCard.extra}</div>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-1 shrink-0">
+                          {liveCard.status && (
+                            <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-950/70 text-blue-700 dark:text-blue-300">
+                              {liveCard.status}
+                            </span>
+                          )}
+                          <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
+                        </div>
+                      </button>
+                    )}
+
+                    {/* Mesaj Metni */}
+                    {(m.text || m.isEdited) && (
+                      <div className="text-[13px] text-slate-800 dark:text-slate-100 leading-relaxed whitespace-pre-wrap break-words">
+                        {renderMessageContent(m.text)}
+                        {m.isEdited && (
+                          <span className="text-[10px] italic text-slate-400 ml-1.5">(düzenlendi)</span>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Tepkiler & LinkedIn Tarzı Mini Okundu Avatarları */}
+                    {(reactionEntries.length > 0 || otherReaders.length > 0) && (
+                      <div className="flex items-center justify-between gap-2 pt-0.5 flex-wrap">
+                        <div className="flex items-center gap-1 flex-wrap">
+                          {reactionEntries.map(([emoji, usersArr]) => {
+                            const reactedByMe = usersArr.some((u) => u.trim().toLowerCase() === myUsernameLower);
+                            return (
+                              <button
+                                key={emoji}
+                                type="button"
+                                onClick={() => onToggleReaction?.(m.id, emoji)}
+                                title={usersArr.join(', ')}
+                                className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1 cursor-pointer tabular-nums border ${
+                                  reactedByMe
+                                    ? 'bg-blue-50 dark:bg-blue-950/70 text-blue-700 dark:text-blue-200 border-blue-300 dark:border-blue-700'
+                                    : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700'
+                                }`}
+                              >
+                                <span>{emoji}</span>
+                                <span>{usersArr.length}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        {otherReaders.length > 0 && (
+                          <div className="relative ml-auto">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setActiveReadById((prev) => (prev === m.id ? null : m.id));
+                              }}
+                              className="flex items-center gap-0.5 cursor-pointer"
+                              title={`Okuyanlar: ${otherReaders.join(', ')}`}
+                            >
+                              {otherReaders.slice(0, 3).map((r) => (
+                                <span
+                                  key={r}
+                                  className="w-4 h-4 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-[8px] font-black flex items-center justify-center border border-white dark:border-slate-950 -ml-1 first:ml-0"
+                                >
+                                  {getInitials(r)}
+                                </span>
+                              ))}
+                              {otherReaders.length > 3 && (
+                                <span className="text-[9px] font-bold text-slate-400 ml-0.5 tabular-nums">
+                                  +{otherReaders.length - 3}
+                                </span>
+                              )}
+                            </button>
+
+                            {activeReadById === m.id && (
+                              <div
+                                onClick={(e) => e.stopPropagation()}
+                                className="absolute bottom-full right-0 mb-1 z-30 min-w-[160px] max-w-[220px] bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl p-2 text-[10px]"
+                              >
+                                <div className="font-extrabold text-slate-500 dark:text-slate-400 uppercase pb-1 mb-1 border-b border-slate-100 dark:border-slate-700">
+                                  Görenler ({otherReaders.length})
+                                </div>
+                                <div className="flex flex-wrap gap-1">
+                                  {otherReaders.map((reader) => (
+                                    <span
+                                      key={reader}
+                                      className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-700 font-semibold text-slate-800 dark:text-slate-100"
+                                    >
+                                      {reader}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </React.Fragment>
+          );
+        })}
+      </div>
+
+      {imageError && (
+        <div className="px-3 py-1.5 bg-red-50 dark:bg-red-950/60 border-t border-red-200 dark:border-red-800 flex items-center justify-between gap-2 text-[11px] text-red-700 dark:text-red-300 shrink-0">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+            <span className="truncate font-semibold">{imageError}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setImageError(null)}
+            className="p-0.5 hover:bg-red-100 dark:hover:bg-red-900/50 rounded cursor-pointer shrink-0"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
+      {/* Düzenleme / Cevaplama / Ek Önizlemeleri */}
+      {editingMessage && (
+        <div className="px-3 py-1.5 bg-amber-50 dark:bg-amber-950/50 border-t border-amber-200 dark:border-amber-800 flex items-center justify-between text-xs text-amber-900 dark:text-amber-200 shrink-0">
+          <span className="truncate font-semibold">Düzenleniyor: "{editingMessage.text.slice(0, 40)}"</span>
+          <button
+            type="button"
+            onClick={() => {
+              setEditingMessage(null);
+              setText('');
+            }}
+            className="p-0.5 cursor-pointer"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
+      {replyingTo && (
+        <div className="px-3 py-1.5 bg-blue-50 dark:bg-blue-950/50 border-t border-blue-200 dark:border-blue-800 flex items-center justify-between text-xs text-blue-900 dark:text-blue-200 shrink-0">
+          <div className="truncate flex items-center gap-1.5">
+            <CornerUpLeft className="w-3.5 h-3.5 shrink-0" />
+            <span className="truncate">
+              <strong>@{replyingTo.sender}</strong>: "{(replyingTo.text || replyingTo.entityCard?.title || 'Fotoğraf').slice(0, 38)}"
+            </span>
+          </div>
+          <button type="button" onClick={() => setReplyingTo(null)} className="p-0.5 cursor-pointer">
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
+      {(pendingImageUrl || pendingEntityCard) && (
+        <div className="px-3 py-2 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-200 dark:border-slate-700 flex items-center gap-2.5 flex-wrap shrink-0">
+          {pendingImageUrl && (
+            <div className="relative">
+              <img src={pendingImageUrl} alt="Ek" className="h-12 w-12 object-cover rounded-lg border border-slate-300 dark:border-slate-600" />
+              <button
+                type="button"
+                onClick={() => setPendingImageUrl(null)}
+                className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-red-600 text-white flex items-center justify-center cursor-pointer"
+              >
+                <X className="w-2.5 h-2.5" />
+              </button>
+            </div>
+          )}
+          {pendingEntityCard && (
+            <div className="flex items-center gap-2 px-2 py-1 rounded-lg bg-white dark:bg-slate-900 border border-blue-300 dark:border-blue-700 text-xs">
+              <span className="font-mono font-bold">{pendingEntityCard.title}</span>
+              <button type="button" onClick={() => setPendingEntityCard(null)} className="text-slate-400 hover:text-red-500 cursor-pointer">
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* @Mention Autocomplete */}
+      {mentionQuery !== null && mentionCandidates.length > 0 && (
+        <div className="bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 max-h-36 overflow-y-auto custom-scroll p-1 shrink-0">
+          {mentionCandidates.map((c, idx) => (
+            <button
+              key={c.id}
+              type="button"
+              onClick={() => handleSelectMention(c.name)}
+              className={`w-full px-2.5 py-1.5 rounded-lg text-left flex items-center justify-between text-xs cursor-pointer ${
+                idx === selectedMentionIdx ? 'bg-blue-600 text-white font-bold' : 'hover:bg-slate-100 dark:hover:bg-slate-700'
+              }`}
+            >
+              <span>@{c.name}</span>
+              <span className="text-[10px] opacity-75">{c.role}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Alt Popoverlar (Emoji / Şablon / Araç-Rampa) */}
+      {activePopover === 'emoji' && (
+        <div className="p-2 bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 flex flex-wrap gap-1 shrink-0">
+          {EMOJI_PALETTE.map((em) => (
+            <button
+              key={em}
+              type="button"
+              onClick={() => {
+                setText((p) => `${p}${em}`);
+                inputRef.current?.focus();
+              }}
+              className="w-7 h-7 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center justify-center text-base cursor-pointer"
+            >
+              {em}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {activePopover === 'templates' && (
+        <div className="p-2 bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 space-y-1 max-h-36 overflow-y-auto custom-scroll shrink-0">
+          {QUICK_TEMPLATES.map((tpl) => (
+            <button
+              key={tpl}
+              type="button"
+              onClick={() => {
+                setText((p) => (p ? `${p} ${tpl}` : tpl));
+                setActivePopover('none');
+                inputRef.current?.focus();
+              }}
+              className="w-full text-left px-2.5 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-900 hover:bg-blue-50 dark:hover:bg-blue-950/50 text-[11px] text-slate-700 dark:text-slate-200 cursor-pointer"
+            >
+              {tpl}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {activePopover === 'entity' && (
+        <div className="p-2 bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 space-y-2 max-h-48 overflow-y-auto custom-scroll shrink-0">
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setEntityTab('vehicle')}
+              className={`px-2 py-0.5 rounded-full text-[10px] font-bold cursor-pointer ${
+                entityTab === 'vehicle' ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-300'
+              }`}
+            >
+              Araçlar
+            </button>
+            <button
+              type="button"
+              onClick={() => setEntityTab('ramp')}
+              className={`px-2 py-0.5 rounded-full text-[10px] font-bold cursor-pointer ${
+                entityTab === 'ramp' ? 'bg-purple-600 text-white' : 'bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-300'
+              }`}
+            >
+              Rampalar
+            </button>
+            <input
+              type="text"
+              value={entitySearch}
+              onChange={(e) => setEntitySearch(e.target.value)}
+              placeholder="Plaka / rampa..."
+              className="flex-1 px-2 py-0.5 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 outline-none"
+            />
+          </div>
+          <div className="grid grid-cols-1 gap-1">
+            {entityTab === 'vehicle' &&
+              selectableVehicles.map((v) => (
+                <button
+                  key={v.id}
+                  type="button"
+                  onClick={() => {
+                    setPendingEntityCard({
+                      type: 'vehicle',
+                      id: v.id,
+                      title: v.dorsePlaka,
+                      subtitle: v.musteri,
+                      status: v.durum,
+                      extra: v.cekiciPlaka ? `Çekici: ${v.cekiciPlaka}` : v.islemTuru
+                    });
+                    setActivePopover('none');
+                    inputRef.current?.focus();
+                  }}
+                  className="p-1.5 rounded-lg bg-slate-50 dark:bg-slate-900 hover:bg-blue-50 dark:hover:bg-blue-950/50 border border-slate-200 dark:border-slate-700 flex items-center justify-between text-left cursor-pointer"
+                >
+                  <div className="min-w-0">
+                    <div className="font-mono font-bold text-xs truncate">{v.dorsePlaka}</div>
+                    <div className="text-[10px] text-slate-500 truncate">{v.musteri}</div>
+                  </div>
+                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-200">
+                    {v.durum}
+                  </span>
+                </button>
+              ))}
+            {entityTab === 'ramp' &&
+              selectableRamps.map((r) => (
+                <button
+                  key={r.id}
+                  type="button"
+                  onClick={() => {
+                    setPendingEntityCard({
+                      type: 'ramp',
+                      id: r.id,
+                      title: r.ad,
+                      subtitle: getWarehouseShort(r.depoId),
+                      status: r.durum,
+                      extra: r.arizaNotu || undefined
+                    });
+                    setActivePopover('none');
+                    inputRef.current?.focus();
+                  }}
+                  className="p-1.5 rounded-lg bg-slate-50 dark:bg-slate-900 hover:bg-purple-50 dark:hover:bg-purple-950/50 border border-slate-200 dark:border-slate-700 flex items-center justify-between text-left cursor-pointer"
+                >
+                  <div className="min-w-0">
+                    <div className="font-mono font-bold text-xs truncate">{r.ad}</div>
+                    <div className="text-[10px] text-slate-500 truncate">{getWarehouseShort(r.depoId)}</div>
+                  </div>
+                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-200">
+                    {r.durum}
+                  </span>
+                </button>
+              ))}
+          </div>
+        </div>
+      )}
+
+      {/* ================= MESAJ YAZMA ALANI (LinkedIn / Facebook Tarzı) ================= */}
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          handleSendInternal();
+        }}
+        className="p-2.5 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 space-y-2 shrink-0"
+      >
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          onChange={handleImageFileSelect}
+          className="hidden"
+        />
+
+        <div className="bg-slate-100 dark:bg-slate-800 rounded-xl px-3 py-2 border border-transparent focus-within:border-blue-500 transition">
+          <textarea
+            ref={inputRef}
+            rows={2}
+            value={text}
+            onChange={handleInputChange}
+            onKeyDown={handleKeyDown}
+            placeholder={
+              editingMessage
+                ? 'Mesajı düzenleyin (Esc iptal)...'
+                : 'Bir mesaj yazın...'
+            }
+            className="w-full bg-transparent text-xs sm:text-[13px] text-slate-800 dark:text-slate-100 placeholder-slate-500 dark:placeholder-slate-400 outline-none resize-none max-h-[100px]"
+          />
+        </div>
+
+        {/* Alt Araç Çubuğu + Gönder Butonu */}
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1 text-slate-500 dark:text-slate-400">
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isCompressingImage || !!editingMessage}
+              className="p-1.5 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-blue-600 cursor-pointer disabled:opacity-40"
+              title="Fotoğraf Ekle"
+            >
+              <ImageIcon className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setActivePopover((p) => (p === 'entity' ? 'none' : 'entity'))}
+              disabled={!!editingMessage}
+              className={`p-1.5 rounded-full cursor-pointer disabled:opacity-40 ${
+                activePopover === 'entity'
+                  ? 'bg-blue-100 dark:bg-blue-950 text-blue-600'
+                  : 'hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-purple-600'
+              }`}
+              title="Araç / Rampa Kartı Ekle"
+            >
+              <Truck className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setActivePopover((p) => (p === 'templates' ? 'none' : 'templates'))}
+              className={`p-1.5 rounded-full cursor-pointer ${
+                activePopover === 'templates'
+                  ? 'bg-amber-100 dark:bg-amber-950 text-amber-600'
+                  : 'hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-amber-500'
+              }`}
+              title="Hazır Saha Şablonları"
+            >
+              <Zap className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setActivePopover((p) => (p === 'emoji' ? 'none' : 'emoji'))}
+              className={`p-1.5 rounded-full cursor-pointer ${
+                activePopover === 'emoji'
+                  ? 'bg-slate-200 dark:bg-slate-700 text-slate-900 dark:text-white'
+                  : 'hover:bg-slate-100 dark:hover:bg-slate-800'
+              }`}
+              title="Emoji"
+            >
+              <Smile className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setText((prev) => prev + (prev.endsWith(' ') || prev === '' ? '@' : ' @'));
+                setMentionQuery('');
+                setMentionStartIndex(text.length + (text.endsWith(' ') || text === '' ? 0 : 1));
+                inputRef.current?.focus();
+              }}
+              className="p-1.5 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+              title="Kişiden Bahset (@)"
+            >
+              <AtSign className="w-4 h-4" />
+            </button>
+          </div>
+
+          <button
+            type="submit"
+            disabled={
+              editingMessage
+                ? !text.trim() && !editingMessage.imageUrl && !editingMessage.entityCard
+                : !text.trim() && !pendingImageUrl && !pendingEntityCard
+            }
+            className={`px-4 py-1.5 rounded-full text-xs font-bold transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5 ${
+              editingMessage
+                ? 'bg-amber-600 hover:bg-amber-700 text-white'
+                : 'bg-blue-600 hover:bg-blue-700 text-white shadow-xs'
+            }`}
+          >
+            {editingMessage ? (
+              <>
+                <Check className="w-3.5 h-3.5" />
+                <span>Kaydet</span>
+              </>
+            ) : (
+              <span>Gönder</span>
+            )}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+};
+
+export const ChatWidget: React.FC<ChatWidgetProps> = ({
+  chatMessages,
+  chatPresences = [],
+  chatGroups = [],
+  currentUser,
+  users = [],
+  vehicles = [],
+  ramps = [],
+  warehouses = [],
+  onSendMessage,
+  onEditMessage,
+  onDeleteMessage,
+  onToggleReaction,
+  onTogglePinMessage,
+  onClearMessages,
+  onMarkMessagesAsRead,
+  onUpdatePresence,
+  onCreateGroup,
+  onUpdateGroupMembers,
+  onUpdateGroup,
+  onLeaveGroup,
+  onDeleteGroup,
+  onNavigateToVehicle,
+  onNavigateToRamp
+}) => {
+  // Desktop Docked Drawer + Open Windows
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [drawerTab, setDrawerTab] = useState<'groups' | 'people'>('groups');
+  const [drawerSearch, setDrawerSearch] = useState('');
+  const [onlyUnreadDrawer, setOnlyUnreadDrawer] = useState(false);
+  const [showDrawerMenu, setShowDrawerMenu] = useState(false);
+
+  // Open conversation windows (max 2 side-by-side on desktop; mobile shows active window)
+  const [openWindows, setOpenWindows] = useState<Array<{ id: string; minimized: boolean }>>([]);
+  const [maximizedChannelId, setMaximizedChannelId] = useState<string | null>(null);
+  const [mobileScreen, setMobileScreen] = useState<'closed' | 'list' | 'chat'>('closed');
+  const [mobileActiveChannelId, setMobileActiveChannelId] = useState<string | null>(null);
+
+  // Group Modals
+  const [showCreateGroupModal, setShowCreateGroupModal] = useState(false);
+  const [newGroupName, setNewGroupName] = useState('');
+  const [newGroupDesc, setNewGroupDesc] = useState('');
+  const [newGroupMembers, setNewGroupMembers] = useState<string[]>([]);
+  const [groupUserSearch, setGroupUserSearch] = useState('');
+
+  const [managingGroupId, setManagingGroupId] = useState<string | null>(null);
+  const [editGroupName, setEditGroupName] = useState('');
+  const [editGroupDesc, setEditGroupDesc] = useState('');
+  const [editMembersDraft, setEditMembersDraft] = useState<string[]>([]);
+  const [manageUserSearch, setManageUserSearch] = useState('');
+
+  const [lightboxImageUrl, setLightboxImageUrl] = useState<string | null>(null);
+  const [isMuted, setIsMuted] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('yms_chat_muted') === '1';
+    } catch {
+      return false;
+    }
+  });
+  const [now, setNow] = useState<number>(() => Date.now());
+  const prevVisibleCountRef = useRef(0);
+  const isInitialLoadRef = useRef(true);
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 10000);
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    const handleOpenChat = () => {
+      setIsDrawerOpen(true);
+      setMobileScreen('list');
+    };
+    window.addEventListener('open-chat-widget', handleOpenChat);
+    return () => window.removeEventListener('open-chat-widget', handleOpenChat);
+  }, []);
+
+  const myUsername = currentUser?.username || '';
+  const myUsernameLower = myUsername.trim().toLowerCase();
+
+  const toggleMute = () => {
+    setIsMuted((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('yms_chat_muted', next ? '1' : '0');
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  };
+
+  // Presence map & real-time online users set (evaluated strictly by system presence)
+  const presenceByUsernameMap = useMemo(() => {
+    const map = new Map<string, ChatPresence>();
+    chatPresences.forEach((p) => {
+      const key = p.username.trim().toLowerCase();
+      const existing = map.get(key);
+      if (!existing || p.lastActiveAt >= existing.lastActiveAt) {
+        map.set(key, p);
+      }
+    });
+    return map;
+  }, [chatPresences]);
+
+  const onlineUsernamesSet = useMemo(() => {
+    const set = new Set<string>();
+    presenceByUsernameMap.forEach((p, key) => {
+      if (isPresenceOnline(p, now)) {
+        set.add(key);
+      }
+    });
+    return set;
+  }, [presenceByUsernameMap, now]);
+
+  const isSelfOnline = useMemo(() => {
+    const selfP = presenceByUsernameMap.get(myUsernameLower);
+    if (!selfP) return typeof document !== 'undefined' ? document.visibilityState !== 'hidden' : true;
+    return isPresenceOnline(selfP, now);
+  }, [presenceByUsernameMap, myUsernameLower, now]);
+
+  // Groups visible to current user (only groups the user is a member or creator of)
+  const myGroups = useMemo(() => {
+    if (!currentUser || currentUser.role === 'guest') return [];
+    return chatGroups.filter(
+      (g) =>
+        g.createdBy.trim().toLowerCase() === myUsernameLower ||
+        g.members.some((u) => u.trim().toLowerCase() === myUsernameLower)
+    );
+  }, [chatGroups, currentUser, myUsernameLower]);
+
+  // Close open/maximized windows if a custom group is deleted or user is removed (or non-group/non-DM)
+  useEffect(() => {
+    const validGroupIds = new Set(myGroups.map((g) => g.id));
+    setOpenWindows((prev) => {
+      const next = prev.filter((w) => {
+        if (w.id.startsWith('grp_')) return validGroupIds.has(w.id);
+        return w.id.startsWith('dm__');
+      });
+      return next.length === prev.length ? prev : next;
+    });
+    if (maximizedChannelId && maximizedChannelId.startsWith('grp_') && !validGroupIds.has(maximizedChannelId)) {
+      setMaximizedChannelId(null);
+    }
+    if (
+      mobileActiveChannelId &&
+      ((mobileActiveChannelId.startsWith('grp_') && !validGroupIds.has(mobileActiveChannelId)) ||
+        (!mobileActiveChannelId.startsWith('grp_') && !mobileActiveChannelId.startsWith('dm__')))
+    ) {
+      setMobileActiveChannelId(null);
+      setMobileScreen('list');
+    }
+  }, [myGroups, maximizedChannelId, mobileActiveChannelId]);
+
+  // Visible messages (own DMs + own groups only; legacy department channels hidden)
+  const visibleMessages = useMemo(() => {
+    if (!currentUser || currentUser.role === 'guest') return [];
+    const myGroupIds = new Set(myGroups.map((g) => g.id));
+    return chatMessages.filter((m) => {
+      const ch = m.channelId || '';
+      if (ch.startsWith('dm__')) {
+        const participants = ch.split('__').slice(1);
+        return (
+          m.sender.trim().toLowerCase() === myUsernameLower ||
+          (m.recipient && m.recipient.trim().toLowerCase() === myUsernameLower) ||
+          participants.includes(myUsernameLower)
+        );
+      }
+      if (ch.startsWith('grp_')) {
+        return myGroupIds.has(ch);
+      }
+      return false;
+    });
+  }, [chatMessages, currentUser, myUsernameLower, myGroups]);
+
+  // Incoming notification audio & Web Push
+  useEffect(() => {
+    if (isInitialLoadRef.current) {
+      isInitialLoadRef.current = false;
+      prevVisibleCountRef.current = visibleMessages.length;
+      return;
+    }
+
+    if (visibleMessages.length > prevVisibleCountRef.current) {
+      const newMessages = visibleMessages.slice(prevVisibleCountRef.current);
+      newMessages.forEach((msg) => {
+        if (msg.sender.trim().toLowerCase() !== myUsernameLower) {
+          if (!isMuted) {
+            playChime('message');
+          }
+          const msgText = (msg.text || '').toLowerCase();
+          const isDm = (msg.channelId || '').startsWith('dm__');
+          const isMentioned =
+            (myUsernameLower && msgText.includes(`@${myUsernameLower}`)) ||
+            msgText.includes('@herkes') ||
+            msgText.includes('@tum_ekip');
+
+          if (isMentioned || isDm) {
+            const pushSettings = loadPushSettings();
+            if (pushSettings.notifyOnMention) {
+              sendNativeNotification({
+                title: isDm ? `🔒 ${msg.sender} size özel mesaj gönderdi` : `💬 ${msg.sender} sizden bahsetti!`,
+                body: msg.text || (msg.imageUrl ? '📷 Fotoğraf gönderdi' : '📌 Saha kartı paylaştı'),
+                soundType: isMuted ? undefined : 'message',
+                tag: 'chat-mention-' + msg.id
+              });
+            }
+          }
+        }
+      });
+    }
+    prevVisibleCountRef.current = visibleMessages.length;
+  }, [visibleMessages, myUsernameLower, isMuted]);
+
+  const totalUnreadCount = useMemo(() => {
+    if (!currentUser || currentUser.role === 'guest') return 0;
+    return visibleMessages.filter((m) => {
+      if (m.sender.trim().toLowerCase() === myUsernameLower) return false;
+      const readBy = Array.isArray(m.readBy) ? m.readBy : [];
+      return !readBy.some((u) => u.trim().toLowerCase() === myUsernameLower);
+    }).length;
+  }, [visibleMessages, currentUser, myUsernameLower]);
+
+  const getChannelStats = (chId: string) => {
+    const msgs = visibleMessages.filter((m) => (m.channelId || '') === chId);
+    const last = msgs[msgs.length - 1];
+    const unread = msgs.filter((m) => {
+      if (m.sender.trim().toLowerCase() === myUsernameLower) return false;
+      const readBy = Array.isArray(m.readBy) ? m.readBy : [];
+      return !readBy.some((u) => u.trim().toLowerCase() === myUsernameLower);
+    }).length;
+    return { last, unread, count: msgs.length };
+  };
+
+  // Custom Groups list (with active typing status)
+  const customGroupItems = useMemo(() => {
+    const q = drawerSearch.trim().toLowerCase();
+    return myGroups
+      .map((grp) => {
+        const stats = getChannelStats(grp.id);
+        const typingMember = chatPresences.find((p) => {
+          const pKey = p.username.trim().toLowerCase();
+          return (
+            pKey !== myUsernameLower &&
+            onlineUsernamesSet.has(pKey) &&
+            p.typingInChannel === grp.id &&
+            Boolean(p.typingAt && now - p.typingAt <= 6_000)
+          );
+        });
+        const subtitle = typingMember
+          ? `${typingMember.username} yazıyor...`
+          : stats.last
+          ? `${stats.last.sender}: ${stats.last.text || (stats.last.imageUrl ? '📷 Fotoğraf' : '📌 Kart')}`
+          : `${grp.members.length} üye${grp.description ? ` · ${grp.description}` : ' · Özel Grup'}`;
+        return {
+          id: grp.id,
+          title: grp.name,
+          subtitle,
+          isTyping: Boolean(typingMember),
+          last: stats.last,
+          unread: stats.unread,
+          sortTs: stats.last?.timestamp || stats.last?.id || grp.createdAt || 0,
+          group: grp
+        };
+      })
+      .filter((item) => {
+        if (onlyUnreadDrawer && item.unread === 0) return false;
+        if (!q) return true;
+        return (
+          item.title.toLowerCase().includes(q) ||
+          item.subtitle.toLowerCase().includes(q) ||
+          (item.group.description || '').toLowerCase().includes(q)
+        );
+      })
+      .sort((a, b) => {
+        if (a.unread !== b.unread && (a.unread > 0 || b.unread > 0)) {
+          return b.unread - a.unread;
+        }
+        return b.sortTs - a.sortTs;
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [myGroups, visibleMessages, drawerSearch, onlyUnreadDrawer, myUsernameLower, chatPresences, onlineUsernamesSet, now]);
+
+  const allDmPeople = useMemo(() => {
+    return users
+      .filter((u) => u.username.trim().toLowerCase() !== myUsernameLower && u.role !== 'guest')
+      .map((u) => {
+        const key = u.username.trim().toLowerCase();
+        const dmId = getDmChannelId(myUsername, u.username);
+        const stats = getChannelStats(dmId);
+        const presence = presenceByUsernameMap.get(key);
+        const isOnline = isPresenceOnline(presence, now);
+        const isTyping = Boolean(
+          presence &&
+            isOnline &&
+            presence.typingInChannel === dmId &&
+            presence.typingAt &&
+            now - presence.typingAt <= 6_000
+        );
+        const lastSeenText = isOnline ? 'Çevrimiçi' : formatLastSeen(presence?.lastActiveAt, now);
+        const lastMsgText = isTyping
+          ? 'Yazıyor...'
+          : stats.last
+          ? `${stats.last.sender === myUsername ? 'Sen' : stats.last.sender}: ${
+              stats.last.text || (stats.last.imageUrl ? '📷 Fotoğraf' : '📌 Kart')
+            }`
+          : null;
+        return {
+          user: u,
+          dmId,
+          isOnline,
+          isTyping,
+          lastActiveAt: presence?.lastActiveAt || 0,
+          lastSeenText,
+          lastMsgText,
+          last: stats.last,
+          unread: stats.unread,
+          sortTs: stats.last?.timestamp || stats.last?.id || 0
+        };
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [users, myUsername, myUsernameLower, presenceByUsernameMap, now, visibleMessages]);
+
+  const filteredDmPeople = useMemo(() => {
+    const q = drawerSearch.trim().toLowerCase();
+    return allDmPeople.filter((p) => {
+      if (onlyUnreadDrawer && p.unread === 0) return false;
+      if (!q) return true;
+      return (
+        p.user.username.toLowerCase().includes(q) ||
+        getRoleLabel(p.user.role).toLowerCase().includes(q) ||
+        (p.lastMsgText && p.lastMsgText.toLowerCase().includes(q))
+      );
+    });
+  }, [allDmPeople, drawerSearch, onlyUnreadDrawer]);
+
+  const onlineDmPeople = useMemo(() => {
+    return filteredDmPeople
+      .filter((p) => p.isOnline)
+      .sort((a, b) => {
+        if (a.unread !== b.unread && (a.unread > 0 || b.unread > 0)) return b.unread - a.unread;
+        if (a.sortTs !== b.sortTs) return b.sortTs - a.sortTs;
+        return a.user.username.localeCompare(b.user.username, 'tr');
+      });
+  }, [filteredDmPeople]);
+
+  const offlineDmPeople = useMemo(() => {
+    return filteredDmPeople
+      .filter((p) => !p.isOnline)
+      .sort((a, b) => {
+        if (a.unread !== b.unread && (a.unread > 0 || b.unread > 0)) return b.unread - a.unread;
+        if (a.lastActiveAt !== b.lastActiveAt) return b.lastActiveAt - a.lastActiveAt;
+        if (a.sortTs !== b.sortTs) return b.sortTs - a.sortTs;
+        return a.user.username.localeCompare(b.user.username, 'tr');
+      });
+  }, [filteredDmPeople]);
+
+  const totalOnlineOthersCount = useMemo(
+    () => allDmPeople.filter((p) => p.isOnline).length,
+    [allDmPeople]
+  );
+
+  const groupsTabUnread = useMemo(() => {
+    return myGroups.reduce((acc, grp) => acc + getChannelStats(grp.id).unread, 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visibleMessages, myGroups, myUsernameLower]);
+
+  const peopleTabUnread = useMemo(
+    () => allDmPeople.reduce((acc, p) => acc + p.unread, 0),
+    [allDmPeople]
+  );
+
+  const openConversation = (chId: string) => {
+    setMobileActiveChannelId(chId);
+    setMobileScreen('chat');
+    setOpenWindows((prev) => {
+      const exists = prev.find((w) => w.id === chId);
+      if (exists) {
+        return prev.map((w) => (w.id === chId ? { ...w, minimized: false } : w));
+      }
+      const next = [...prev, { id: chId, minimized: false }];
+      // Desktop max 2 docked windows side-by-side (keep newest 2)
+      return next.slice(-2);
+    });
+  };
+
+  const openCreateGroupDialog = (preselectedMembers: string[] = []) => {
+    setNewGroupName('');
+    setNewGroupDesc('');
+    setNewGroupMembers(preselectedMembers);
+    setGroupUserSearch('');
+    setShowCreateGroupModal(true);
+  };
+
+  const openManageGroupDialog = (grp: ChatGroup) => {
+    setManagingGroupId(grp.id);
+    setEditGroupName(grp.name);
+    setEditGroupDesc(grp.description || '');
+    setEditMembersDraft(grp.members);
+    setManageUserSearch('');
+  };
+
+  const managingGroup = useMemo(
+    () => chatGroups.find((g) => g.id === managingGroupId) || null,
+    [chatGroups, managingGroupId]
+  );
+
+  const handleSubmitCreateGroup = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newGroupName.trim() || !onCreateGroup) return;
+    const created = onCreateGroup({
+      name: newGroupName.trim(),
+      description: newGroupDesc.trim() || undefined,
+      members: newGroupMembers
+    });
+    setShowCreateGroupModal(false);
+    if (created && created.id) {
+      openConversation(created.id);
+    }
+  };
+
+  const handleSaveGroupDetails = (e?: React.FormEvent) => {
+    e?.preventDefault();
+    if (!managingGroup) return;
+    const cleanName = editGroupName.trim();
+    if (!cleanName) return;
+    if (onUpdateGroup) {
+      onUpdateGroup(managingGroup.id, {
+        name: cleanName,
+        description: editGroupDesc.trim() || undefined,
+        members: editMembersDraft
+      });
+    } else if (onUpdateGroupMembers) {
+      onUpdateGroupMembers(managingGroup.id, editMembersDraft);
+    }
+    setManagingGroupId(null);
+  };
+
+  if (!currentUser || currentUser.role === 'guest') return null;
+
+  return (
+    <>
+      {/* ========================================================================
+          MASAÜSTÜ: LINKEDIN & FACEBOOK TARZI ALT SAĞA SABİT MESAJLAŞMA BARI + PENCERELERİ
+         ======================================================================== */}
+      <div className="hidden md:flex fixed bottom-0 right-4 z-40 items-end gap-3 pointer-events-none chat-widget">
+        {/* Açık Sohbet Pencereleri (Sağ Çekmecenin Solunda Yan Yana En Fazla 2 Pencere) */}
+        {openWindows.map((win) => (
+          <ChatConversationWindow
+            key={win.id}
+            channelId={win.id}
+            isMinimized={win.minimized}
+            isMaximized={maximizedChannelId === win.id}
+            currentUser={currentUser}
+            users={users}
+            vehicles={vehicles}
+            ramps={ramps}
+            warehouses={warehouses}
+            chatGroups={chatGroups}
+            chatPresences={chatPresences}
+            visibleMessages={visibleMessages}
+            onlineUsernamesSet={onlineUsernamesSet}
+            isMuted={isMuted}
+            now={now}
+            onToggleMute={toggleMute}
+            onToggleMinimize={() =>
+              setOpenWindows((prev) =>
+                prev.map((w) => (w.id === win.id ? { ...w, minimized: !w.minimized } : w))
+              )
+            }
+            onToggleMaximize={() =>
+              setMaximizedChannelId((prev) => (prev === win.id ? null : win.id))
+            }
+            onClose={() => {
+              if (maximizedChannelId === win.id) setMaximizedChannelId(null);
+              setOpenWindows((prev) => prev.filter((w) => w.id !== win.id));
+            }}
+            onOpenManageGroup={openManageGroupDialog}
+            onOpenCreateGroup={openCreateGroupDialog}
+            onLeaveGroup={onLeaveGroup}
+            onDeleteGroup={onDeleteGroup}
+            onSendMessage={onSendMessage}
+            onEditMessage={onEditMessage}
+            onDeleteMessage={onDeleteMessage}
+            onToggleReaction={onToggleReaction}
+            onTogglePinMessage={onTogglePinMessage}
+            onClearMessages={onClearMessages}
+            onMarkMessagesAsRead={onMarkMessagesAsRead}
+            onUpdatePresence={onUpdatePresence}
+            onNavigateToVehicle={onNavigateToVehicle}
+            onNavigateToRamp={onNavigateToRamp}
+            onOpenLightbox={(url) => setLightboxImageUrl(url)}
+          />
+        ))}
+
+        {/* Sağ Sabit "Mesajlaşma" Çekmecesi (LinkedIn Tarzı) */}
+        <div
+          className={`pointer-events-auto w-[310px] bg-white dark:bg-slate-900 border border-b-0 border-slate-200 dark:border-slate-700 rounded-t-xl shadow-2xl flex flex-col overflow-hidden transition-all duration-200 ${
+            isDrawerOpen ? 'h-[520px] max-h-[82dvh]' : 'h-12'
+          }`}
+        >
+          {/* Çekmece Üst Barı */}
+          <div className="h-12 px-3 flex items-center justify-between gap-2 border-b border-slate-200 dark:border-slate-800 shrink-0 bg-white dark:bg-slate-900 relative">
+            <button
+              type="button"
+              onClick={() => setIsDrawerOpen((p) => !p)}
+              className="flex items-center gap-2.5 flex-1 min-w-0 text-left cursor-pointer"
+            >
+              <div className="relative shrink-0">
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-black ${getAvatarTone(currentUser.role)}`}>
+                  {getInitials(currentUser.username)}
+                </div>
+                <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white dark:border-slate-900 ${isSelfOnline ? 'bg-emerald-600' : 'bg-slate-400'}`} />
+              </div>
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="font-bold text-sm text-slate-900 dark:text-white truncate">Mesajlaşma</span>
+                {totalUnreadCount > 0 && (
+                  <span className="px-1.5 py-0.2 rounded-full bg-red-600 text-white text-[10px] font-black tabular-nums">
+                    {totalUnreadCount > 99 ? '99+' : totalUnreadCount}
+                  </span>
+                )}
+              </div>
+            </button>
+
+            <div className="flex items-center gap-0.5 shrink-0">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowDrawerMenu((p) => !p);
+                }}
+                title="Mesajlaşma Ayarları"
+                className="p-1.5 rounded-full text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+              >
+                <MoreHorizontal className="w-4 h-4" />
+              </button>
+
+              {onCreateGroup && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openCreateGroupDialog([]);
+                  }}
+                  title="Yeni Grup Oluştur"
+                  className="p-1.5 rounded-full text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                >
+                  <SquarePen className="w-4 h-4" />
                 </button>
               )}
 
               <button
                 type="button"
-                onClick={() => setIsMaximized((prev) => !prev)}
-                title={isMaximized ? 'Normal Boyuta Dön' : 'Tam Ekran / Geniş Mod'}
-                className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition cursor-pointer"
+                onClick={() => setIsDrawerOpen((p) => !p)}
+                title={isDrawerOpen ? 'Küçült' : 'Mesajlaşmayı Aç'}
+                className="p-1.5 rounded-full text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
               >
-                {isMaximized ? <Minimize2 className="w-4 h-4 text-blue-400" /> : <Maximize2 className="w-4 h-4" />}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setIsOpen(false)}
-                title="Küçült"
-                className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition cursor-pointer"
-              >
-                <Minus className="w-4 h-4" />
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setIsOpen(false)}
-                title="Kapat"
-                className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition cursor-pointer"
-              >
-                <X className="w-4 h-4" />
+                {isDrawerOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
               </button>
             </div>
+
+            {showDrawerMenu && (
+              <div
+                onClick={(e) => e.stopPropagation()}
+                className="absolute right-2 bottom-12 z-50 w-52 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-2xl py-1 text-xs text-slate-700 dark:text-slate-200"
+              >
+                <button
+                  type="button"
+                  onClick={() => {
+                    toggleMute();
+                    setShowDrawerMenu(false);
+                  }}
+                  className="w-full px-3 py-2 text-left hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-2 cursor-pointer"
+                >
+                  {isMuted ? <Volume2 className="w-3.5 h-3.5 text-emerald-500" /> : <VolumeX className="w-3.5 h-3.5 text-amber-500" />}
+                  <span>{isMuted ? 'Bildirim Sesini Aç' : 'Bildirimleri Sessize Al'}</span>
+                </button>
+                {onCreateGroup && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      openCreateGroupDialog([]);
+                      setShowDrawerMenu(false);
+                    }}
+                    className="w-full px-3 py-2 text-left hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-2 cursor-pointer"
+                  >
+                    <UserPlus className="w-3.5 h-3.5 text-blue-500" />
+                    <span>Yeni Grup Oluştur</span>
+                  </button>
+                )}
+              </div>
+            )}
           </div>
 
-          {/* ================= ANA GÖVDE (SOL KANAL/DM LİSTESİ + SAĞ MESAJ ALANI) ================= */}
-          <div className="flex-1 flex min-h-0 relative overflow-hidden">
-            {/* Sol Panel: Departman Kanalları & Aktif DM Listesi */}
-            <aside
-              className={`${
-                showMobileSidebar
-                  ? 'absolute inset-y-0 left-0 z-30 w-64 flex shadow-2xl'
-                  : 'hidden md:flex md:w-56 lg:w-60'
-              } flex-col bg-slate-50 dark:bg-slate-900/95 border-r border-slate-200 dark:border-slate-800 shrink-0 overflow-y-auto custom-scroll`}
-            >
-              <div className="p-2.5 space-y-3">
-                {/* Kanallar */}
-                <div>
-                  <div className="px-2 pb-1 flex items-center justify-between text-[10px] font-extrabold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                    <span>Departman Kanalları</span>
-                    {showMobileSidebar && (
-                      <button
-                        type="button"
-                        onClick={() => setShowMobileSidebar(false)}
-                        className="md:hidden text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-                  </div>
-                  <div className="space-y-1">
-                    {PUBLIC_CHANNELS.map((ch) => {
-                      const isActive = activeChannelId === ch.id;
-                      const unread = getUnreadForChannel(ch.id);
-                      return (
-                        <button
-                          key={ch.id}
-                          type="button"
-                          onClick={() => {
-                            setActiveChannelId(ch.id);
-                            setShowMobileSidebar(false);
-                          }}
-                          className={`w-full px-2.5 py-2 rounded-xl text-left text-xs font-bold flex items-center justify-between gap-2 transition cursor-pointer ${
-                            isActive
-                              ? 'bg-blue-600 text-white shadow-xs'
-                              : 'text-slate-700 dark:text-slate-200 hover:bg-slate-200/70 dark:hover:bg-slate-800'
-                          }`}
-                        >
-                          <span className="flex items-center gap-1.5 truncate">
-                            <Hash className={`w-3.5 h-3.5 shrink-0 ${isActive ? 'text-blue-100' : 'text-slate-400'}`} />
-                            <span className="truncate">{ch.name}</span>
-                          </span>
-                          {unread > 0 && (
-                            <span
-                              className={`text-[10px] font-black px-1.5 py-0.2 rounded-full tabular-nums ${
-                                isActive ? 'bg-white text-blue-700' : 'bg-red-600 text-white'
-                              }`}
-                            >
-                              {unread}
-                            </span>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Birebir Özel Mesajlar (DM) */}
-                <div>
-                  <div className="px-2 pb-1 text-[10px] font-extrabold uppercase tracking-wider text-slate-400 dark:text-slate-500 flex items-center justify-between">
-                    <span>Ekip & Özel Mesaj (DM)</span>
-                    <span className="font-mono tabular-nums">{dmUsers.length}</span>
-                  </div>
-                  <div className="space-y-1">
-                    {dmUsers.map((u) => {
-                      const dmId = getDmChannelId(myUsername, u.username);
-                      const isActive = activeChannelId === dmId;
-                      const isOnline = onlineUsernamesSet.has(u.username.trim().toLowerCase());
-                      const unread = getUnreadForChannel(dmId);
-                      return (
-                        <button
-                          key={u.username}
-                          type="button"
-                          onClick={() => {
-                            setActiveChannelId(dmId);
-                            setShowMobileSidebar(false);
-                          }}
-                          className={`w-full px-2.5 py-2 rounded-xl text-left text-xs flex items-center justify-between gap-2 transition cursor-pointer ${
-                            isActive
-                              ? 'bg-blue-600 text-white shadow-xs'
-                              : 'text-slate-700 dark:text-slate-200 hover:bg-slate-200/70 dark:hover:bg-slate-800'
-                          }`}
-                        >
-                          <div className="flex items-center gap-2 min-w-0">
-                            <span
-                              className={`w-2 h-2 rounded-full shrink-0 ${
-                                isOnline ? 'bg-emerald-500' : 'bg-slate-400 dark:bg-slate-600'
-                              }`}
-                            />
-                            <div className="min-w-0">
-                              <div className="font-bold truncate">{u.username}</div>
-                              <div className={`text-[9px] truncate ${isActive ? 'text-blue-100' : 'text-slate-400'}`}>
-                                {getRoleLabel(u.role)}
-                              </div>
-                            </div>
-                          </div>
-                          {unread > 0 && (
-                            <span
-                              className={`text-[10px] font-black px-1.5 py-0.2 rounded-full tabular-nums shrink-0 ${
-                                isActive ? 'bg-white text-blue-700' : 'bg-red-600 text-white'
-                              }`}
-                            >
-                              {unread}
-                            </span>
-                          )}
-                        </button>
-                      );
-                    })}
-                    {dmUsers.length === 0 && (
-                      <p className="px-2 py-2 text-[11px] text-slate-400">Başka kayıtlı kullanıcı yok.</p>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </aside>
-
-            {/* Sağ Ana Sohbet Alanı */}
-            <div className="flex-1 flex flex-col min-w-0 min-h-0">
-              {/* Arama & @Mention Filtre Çubuğu */}
-              {showSearchBar && (
-                <div className="px-3 py-2 bg-slate-100 dark:bg-slate-800/90 border-b border-slate-200 dark:border-slate-700 flex flex-wrap items-center gap-2 shrink-0">
-                  <div className="relative flex-1 min-w-[160px]">
+          {/* Çekmece Açık İçeriği */}
+          {isDrawerOpen && (
+            <>
+              {/* Arama Çubuğu */}
+              <div className="p-2.5 border-b border-slate-100 dark:border-slate-800 shrink-0">
+                <div className="relative flex items-center gap-1.5">
+                  <div className="relative flex-1">
                     <Search className="w-3.5 h-3.5 absolute left-2.5 top-2 text-slate-400" />
                     <input
                       type="text"
-                      value={chatSearchQuery}
-                      onChange={(e) => setChatSearchQuery(e.target.value)}
-                      placeholder="Mesaj, kişi veya plaka ara..."
-                      className="w-full pl-8 pr-7 py-1.5 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 outline-none focus:ring-1 focus:ring-blue-500"
+                      value={drawerSearch}
+                      onChange={(e) => setDrawerSearch(e.target.value)}
+                      placeholder={drawerTab === 'groups' ? 'Grup ara...' : 'Kişi veya mesaj ara...'}
+                      className="w-full pl-8 pr-3 py-1.5 text-xs rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100 placeholder-slate-500 outline-none focus:ring-1 focus:ring-blue-500"
                     />
-                    {chatSearchQuery && (
-                      <button
-                        type="button"
-                        onClick={() => setChatSearchQuery('')}
-                        className="absolute right-2 top-1.5 text-slate-400 hover:text-slate-600 cursor-pointer"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    )}
                   </div>
-
                   <button
                     type="button"
-                    onClick={() => setOnlyMentionsFilter((prev) => !prev)}
-                    className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold flex items-center gap-1 cursor-pointer transition border ${
-                      onlyMentionsFilter
-                        ? 'bg-amber-500 text-slate-950 border-amber-500'
-                        : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700'
+                    onClick={() => setOnlyUnreadDrawer((p) => !p)}
+                    title={onlyUnreadDrawer ? 'Tümünü Göster' : 'Sadece Okunmamışlar'}
+                    className={`p-1.5 rounded-lg border cursor-pointer transition ${
+                      onlyUnreadDrawer
+                        ? 'bg-emerald-600 text-white border-emerald-600'
+                        : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-300 border-transparent hover:border-slate-300 dark:hover:border-slate-600'
                     }`}
                   >
-                    <AtSign className="w-3 h-3" />
-                    <span>Bana Bahsedilenler</span>
+                    <SlidersHorizontal className="w-3.5 h-3.5" />
                   </button>
                 </div>
-              )}
-
-              {/* Sabitlenmiş Mesajlar Bandı */}
-              {pinnedMessages.length > 0 && (
-                <div className="px-3.5 py-2 bg-amber-50 dark:bg-amber-950/40 border-b border-amber-200 dark:border-amber-800/70 flex items-center justify-between gap-2 shrink-0 text-xs">
-                  <button
-                    type="button"
-                    onClick={() => handleScrollToMessage(pinnedMessages[pinnedMessages.length - 1].id)}
-                    className="flex items-center gap-2 min-w-0 text-left cursor-pointer flex-1"
-                    title="Sabitlenen mesaja git"
-                  >
-                    <Pin className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
-                    <div className="min-w-0 truncate text-amber-950 dark:text-amber-200">
-                      <span className="font-extrabold mr-1.5">Sabitli ({pinnedMessages.length}):</span>
-                      <span className="font-medium">
-                        {pinnedMessages[pinnedMessages.length - 1].text ||
-                          pinnedMessages[pinnedMessages.length - 1].entityCard?.title ||
-                          '📷 Görsel'}
-                      </span>
-                    </div>
-                  </button>
-                  {onTogglePinMessage &&
-                    (currentUser.role === 'admin' ||
-                      pinnedMessages[pinnedMessages.length - 1].sender.toLowerCase() === myUsernameLower) && (
-                      <button
-                        type="button"
-                        onClick={() => onTogglePinMessage(pinnedMessages[pinnedMessages.length - 1].id)}
-                        className="p-1 text-amber-700 dark:text-amber-300 hover:bg-amber-200/60 dark:hover:bg-amber-900/50 rounded cursor-pointer shrink-0"
-                        title="Sabitlemeyi Kaldır"
-                      >
-                        <PinOff className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-                </div>
-              )}
-
-              {/* Okunmamış Mesajlar Bildirim Bandı */}
-              {initialUnreadCount > 0 && (
-                <div className="bg-rose-50 dark:bg-rose-950/70 border-b border-rose-200 dark:border-rose-900/60 px-3.5 py-2 flex items-center justify-between gap-2 shrink-0 text-xs">
-                  <div className="flex items-center gap-2 min-w-0 text-rose-800 dark:text-rose-200 font-semibold truncate">
-                    <span className="w-2 h-2 rounded-full bg-rose-600 animate-pulse shrink-0" />
-                    <span className="truncate tabular-nums">
-                      <b>{initialUnreadCount} okunmamış mesaj</b>{' '}
-                      {initialUnreadTime ? `(Saat ${initialUnreadTime})` : ''}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (messagesContainerRef.current) {
-                          messagesContainerRef.current.scrollTo({
-                            top: messagesContainerRef.current.scrollHeight,
-                            behavior: 'smooth'
-                          });
-                        }
-                      }}
-                      className="px-2 py-1 bg-white dark:bg-slate-800 hover:bg-rose-100 dark:hover:bg-slate-700 text-rose-700 dark:text-rose-300 font-bold text-[10px] rounded-lg border border-rose-200 dark:border-rose-800 transition flex items-center gap-1 cursor-pointer"
-                    >
-                      <ArrowDown className="w-3 h-3" /> En Sona Git
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (activeChannelUnreadMessages.length > 0) {
-                          onMarkMessagesAsRead?.(activeChannelUnreadMessages.map((m) => m.id));
-                        }
-                        setInitialUnreadCount(0);
-                        setInitialUnreadId(null);
-                      }}
-                      className="px-2 py-1 bg-rose-600 hover:bg-rose-700 text-white font-bold text-[10px] rounded-lg transition flex items-center gap-1 cursor-pointer shadow-xs"
-                    >
-                      <CheckCheck className="w-3 h-3" /> Okundu Say
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Mesaj Listesi */}
-              <div
-                ref={messagesContainerRef}
-                onClick={() => {
-                  if (activeReactionPickerId !== null) setActiveReactionPickerId(null);
-                  if (activeReadById !== null) setActiveReadById(null);
-                }}
-                className="flex-1 p-3.5 sm:p-4 overflow-y-auto space-y-3 custom-scroll bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 text-sm leading-relaxed"
-              >
-                {displayedMessages.length === 0 && (
-                  <div className="h-full flex flex-col items-center justify-center text-slate-400 text-xs text-center p-4 space-y-1.5">
-                    <MessageSquare className="w-10 h-10 mb-1 opacity-30 text-slate-500" />
-                    <p className="font-semibold text-slate-600 dark:text-slate-300 text-sm">
-                      {chatSearchQuery || onlyMentionsFilter
-                        ? 'Arama veya filtreye uyan mesaj bulunamadı.'
-                        : `${activeChannelMeta.title} kanalında henüz mesaj yok.`}
-                    </p>
-                    <p className="text-[11px] text-slate-400">
-                      Fotoğraf, aktif araç/rampa kartı veya hazır saha mesajı göndererek iletişimi başlatabilirsiniz.
-                    </p>
-                  </div>
-                )}
-
-                {displayedMessages.map((m, idx) => {
-                  const isMine =
-                    Boolean(currentUser && m.sender) &&
-                    m.sender.trim().toLowerCase() === myUsernameLower;
-                  const isHighlighted = highlightedMessageId === m.id;
-                  const prevMsg = idx > 0 ? displayedMessages[idx - 1] : null;
-                  const curDateLabel = getDateLabel(m.timestamp || m.id);
-                  const prevDateLabel = prevMsg ? getDateLabel(prevMsg.timestamp || prevMsg.id) : null;
-                  const showDateDivider = idx === 0 || curDateLabel !== prevDateLabel;
-                  const readByList = Array.isArray(m.readBy) ? m.readBy : [];
-                  const reactionEntries: Array<[string, string[]]> = m.reactions
-                    ? Object.entries(m.reactions).filter(
-                        (entry): entry is [string, string[]] => Array.isArray(entry[1]) && entry[1].length > 0
-                      )
-                    : [];
-
-                  // Canlı araç/rampa kart verisini güncel state'ten zenginleştir
-                  const liveCard = (() => {
-                    if (!m.entityCard) return null;
-                    if (m.entityCard.type === 'vehicle') {
-                      const found = vehicles.find((v) => v.id === m.entityCard!.id);
-                      if (found) {
-                        return {
-                          ...m.entityCard,
-                          title: found.dorsePlaka,
-                          subtitle: found.musteri,
-                          status: found.durum,
-                          extra: found.cekiciPlaka ? `Çekici: ${found.cekiciPlaka}` : found.islemTuru,
-                          liveVehicle: found
-                        };
-                      }
-                    } else if (m.entityCard.type === 'ramp') {
-                      const found = ramps.find((r) => r.id === m.entityCard!.id);
-                      if (found) {
-                        return {
-                          ...m.entityCard,
-                          title: found.ad,
-                          subtitle: getWarehouseShort(found.depoId),
-                          status: found.durum,
-                          extra: found.arizaNotu || undefined,
-                          liveRamp: found
-                        };
-                      }
-                    }
-                    return { ...m.entityCard, liveVehicle: undefined, liveRamp: undefined };
-                  })();
-
-                  return (
-                    <React.Fragment key={m.id}>
-                      {showDateDivider && (
-                        <div className="flex items-center justify-center my-2 select-none">
-                          <span className="px-3 py-0.5 rounded-full bg-slate-200/80 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[10px] font-bold">
-                            {curDateLabel}
-                          </span>
-                        </div>
-                      )}
-
-                      {initialUnreadId === m.id && (
-                        <div id="unread-divider-marker" className="flex items-center gap-3 my-3 py-1 select-none">
-                          <div className="flex-1 h-[2px] bg-rose-400 dark:bg-rose-600/80" />
-                          <div className="px-3 py-1 bg-rose-600 text-white font-black text-[11px] rounded-full shadow-sm flex items-center gap-1.5">
-                            <span>Okunmamış Mesajlar ({initialUnreadCount})</span>
-                          </div>
-                          <div className="flex-1 h-[2px] bg-rose-400 dark:bg-rose-600/80" />
-                        </div>
-                      )}
-
-                      <div
-                        id={`chat-msg-${m.id}`}
-                        className={`flex flex-col group transition-all duration-200 ${
-                          isMine ? 'items-end' : 'items-start'
-                        } ${isHighlighted ? 'ring-2 ring-blue-500 rounded-2xl p-1' : ''}`}
-                      >
-                        <div
-                          className={`p-3 rounded-2xl shadow-2xs max-w-[88%] sm:max-w-[80%] space-y-1.5 relative transition text-[13px] leading-relaxed ${
-                            m.isPinned
-                              ? isMine
-                                ? 'bg-blue-600 dark:bg-blue-700 text-white rounded-tr-none ring-2 ring-amber-400/80'
-                                : 'bg-white dark:bg-slate-800 border-2 border-amber-400/70 text-slate-800 dark:text-slate-100 rounded-tl-none'
-                              : isMine
-                              ? 'bg-blue-600 dark:bg-blue-700 text-white rounded-tr-none'
-                              : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 rounded-tl-none'
-                          }`}
-                        >
-                          {/* Alıntı Önizleme */}
-                          {m.replyTo && (
-                            <div
-                              onClick={() => handleScrollToMessage(m.replyTo!.id)}
-                              className={`text-[11px] p-2 rounded-xl border-l-2 cursor-pointer transition mb-1 ${
-                                isMine
-                                  ? 'bg-blue-700/80 border-blue-300 text-blue-100 hover:bg-blue-700'
-                                  : 'bg-slate-100 dark:bg-slate-700/70 border-blue-500 text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700'
-                              }`}
-                            >
-                              <div className="flex items-center gap-1 font-bold">
-                                <CornerUpLeft className="w-3 h-3" />
-                                <span>@{m.replyTo.sender}</span>
-                              </div>
-                              <p className="truncate text-[10px] opacity-90 mt-0.5 italic">
-                                "{m.replyTo.text}"
-                              </p>
-                            </div>
-                          )}
-
-                          {/* Gönderen & Aksiyon Başlığı */}
-                          <div className="flex justify-between items-center gap-2 text-[10px] opacity-90 border-b border-black/10 dark:border-white/10 pb-1">
-                            <span className="font-bold flex items-center gap-1 flex-wrap">
-                              <span>{m.sender}</span>
-                              <span className="opacity-75 text-[9px]">({getRoleLabel(m.role)})</span>
-                              {m.isPinned && (
-                                <span className="inline-flex items-center gap-0.5 text-[9px] px-1 py-0.2 rounded bg-amber-400 text-amber-950 font-black">
-                                  <Pin className="w-2.5 h-2.5" /> Sabitli
-                                </span>
-                              )}
-                            </span>
-
-                            <div className="flex items-center gap-1 shrink-0">
-                              <span className="font-mono tabular-nums">{m.time}</span>
-
-                              {/* Tepki Seçici Tetikleyici */}
-                              {onToggleReaction && (
-                                <div className="relative">
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setActiveReactionPickerId((prev) => (prev === m.id ? null : m.id));
-                                    }}
-                                    title="Emoji Tepkisi Ver"
-                                    className="p-0.5 rounded opacity-75 hover:opacity-100 cursor-pointer"
-                                  >
-                                    <SmilePlus className="w-3 h-3" />
-                                  </button>
-
-                                  {activeReactionPickerId === m.id && (
-                                    <div
-                                      onClick={(e) => e.stopPropagation()}
-                                      className={`absolute bottom-full mb-1 z-30 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl p-1 flex items-center gap-1 ${
-                                        isMine ? 'right-0' : 'left-0'
-                                      }`}
-                                    >
-                                      {QUICK_REACTIONS.map((em) => (
-                                        <button
-                                          key={em}
-                                          type="button"
-                                          onClick={() => {
-                                            onToggleReaction(m.id, em);
-                                            setActiveReactionPickerId(null);
-                                          }}
-                                          className="w-7 h-7 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center justify-center text-sm cursor-pointer transition"
-                                        >
-                                          {em}
-                                        </button>
-                                      ))}
-                                    </div>
-                                  )}
-                                </div>
-                              )}
-
-                              {/* Yanıtla */}
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setEditingMessage(null);
-                                  setReplyingTo(m);
-                                }}
-                                title="Cevapla"
-                                className="p-0.5 rounded opacity-75 hover:opacity-100 cursor-pointer"
-                              >
-                                <CornerUpLeft className="w-3 h-3" />
-                              </button>
-
-                              {/* Sabitle */}
-                              {onTogglePinMessage && (isMine || currentUser.role === 'admin') && (
-                                <button
-                                  type="button"
-                                  onClick={() => onTogglePinMessage(m.id)}
-                                  title={m.isPinned ? 'Sabitlemeyi Kaldır' : 'Mesajı Sabitle'}
-                                  className="p-0.5 rounded opacity-75 hover:opacity-100 cursor-pointer"
-                                >
-                                  {m.isPinned ? <PinOff className="w-3 h-3 text-amber-300" /> : <Pin className="w-3 h-3" />}
-                                </button>
-                              )}
-
-                              {/* Düzenle */}
-                              {isMine && onEditMessage && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleStartEdit(m)}
-                                  title="Düzenle"
-                                  className="p-0.5 rounded opacity-80 hover:opacity-100 cursor-pointer"
-                                >
-                                  <Edit2 className="w-3 h-3" />
-                                </button>
-                              )}
-
-                              {/* Sil */}
-                              {(isMine || currentUser.role === 'admin') &&
-                                onDeleteMessage &&
-                                (confirmDeleteId === m.id ? (
-                                  <div className="flex items-center gap-1 bg-red-900 text-white px-1.5 py-0.5 rounded text-[9px] font-bold">
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        onDeleteMessage(m.id);
-                                        setConfirmDeleteId(null);
-                                      }}
-                                      className="underline cursor-pointer"
-                                    >
-                                      Sil
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => setConfirmDeleteId(null)}
-                                      className="opacity-80 cursor-pointer"
-                                    >
-                                      İptal
-                                    </button>
-                                  </div>
-                                ) : (
-                                  <button
-                                    type="button"
-                                    onClick={() => setConfirmDeleteId(m.id)}
-                                    title="Sil"
-                                    className="p-0.5 rounded opacity-80 hover:opacity-100 cursor-pointer text-red-300"
-                                  >
-                                    <Trash2 className="w-3 h-3" />
-                                  </button>
-                                ))}
-                            </div>
-                          </div>
-
-                          {/* Ekli Fotoğraf */}
-                          {m.imageUrl && (
-                            <button
-                              type="button"
-                              onClick={() => setLightboxImageUrl(m.imageUrl!)}
-                              className="block rounded-xl overflow-hidden border border-black/15 dark:border-white/15 max-w-[260px] cursor-pointer hover:opacity-95 transition"
-                              title="Fotoğrafı Büyüt"
-                            >
-                              <img
-                                src={m.imageUrl}
-                                alt="Sohbet eki"
-                                className="w-full max-h-52 object-cover"
-                              />
-                            </button>
-                          )}
-
-                          {/* Etkileşimli Araç / Rampa Kartı */}
-                          {liveCard && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (liveCard.type === 'vehicle' && liveCard.liveVehicle && onNavigateToVehicle) {
-                                  onNavigateToVehicle(liveCard.liveVehicle);
-                                } else if (liveCard.type === 'ramp' && liveCard.liveRamp && onNavigateToRamp) {
-                                  onNavigateToRamp(liveCard.liveRamp);
-                                }
-                              }}
-                              className={`w-full text-left p-2.5 rounded-xl border flex items-center justify-between gap-2.5 transition cursor-pointer ${
-                                isMine
-                                  ? 'bg-blue-800/70 hover:bg-blue-800 border-blue-400/40 text-white'
-                                  : 'bg-slate-50 dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-700 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100'
-                              }`}
-                            >
-                              <div className="flex items-center gap-2 min-w-0">
-                                <div
-                                  className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
-                                    isMine
-                                      ? 'bg-blue-600 text-white'
-                                      : 'bg-blue-100 dark:bg-blue-950 text-blue-600 dark:text-blue-300'
-                                  }`}
-                                >
-                                  {liveCard.type === 'vehicle' ? (
-                                    <Truck className="w-4 h-4" />
-                                  ) : (
-                                    <WarehouseIcon className="w-4 h-4" />
-                                  )}
-                                </div>
-                                <div className="min-w-0">
-                                  <div className="font-mono tabular-nums font-black text-xs truncate">
-                                    {liveCard.title}
-                                  </div>
-                                  {liveCard.subtitle && (
-                                    <div className="text-[10px] opacity-85 truncate">{liveCard.subtitle}</div>
-                                  )}
-                                  {liveCard.extra && (
-                                    <div className="text-[9px] opacity-75 truncate">{liveCard.extra}</div>
-                                  )}
-                                </div>
-                              </div>
-
-                              <div className="flex items-center gap-1 shrink-0">
-                                {liveCard.status && (
-                                  <span
-                                    className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded ${
-                                      isMine
-                                        ? 'bg-white/20 text-white'
-                                        : 'bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800'
-                                    }`}
-                                  >
-                                    {liveCard.status}
-                                  </span>
-                                )}
-                                <ChevronRight className="w-3.5 h-3.5 opacity-70" />
-                              </div>
-                            </button>
-                          )}
-
-                          {/* Metin İçeriği */}
-                          {(m.text || m.isEdited) && (
-                            <div className="whitespace-pre-wrap text-xs sm:text-[13px] flex flex-wrap items-baseline gap-1">
-                              <span>{renderMessageContent(m.text, isMine)}</span>
-                              {m.isEdited && (
-                                <span
-                                  className={`text-[9px] italic select-none ${
-                                    isMine ? 'text-blue-200/80' : 'text-slate-400'
-                                  }`}
-                                  title={m.editedAt ? `Düzenlenme: ${m.editedAt}` : 'Düzenlendi'}
-                                >
-                                  • düzenlendi
-                                </span>
-                              )}
-                            </div>
-                          )}
-
-                          {/* Tepkiler & Okundu Detayı Alt Satırı */}
-                          {(reactionEntries.length > 0 || readByList.length > 0) && (
-                            <div className="flex items-center justify-between gap-2 pt-1 flex-wrap">
-                              <div className="flex items-center gap-1 flex-wrap">
-                                {reactionEntries.map(([emoji, usersArr]) => {
-                                  const reactedByMe = usersArr.some(
-                                    (u) => u.trim().toLowerCase() === myUsernameLower
-                                  );
-                                  return (
-                                    <button
-                                      key={emoji}
-                                      type="button"
-                                      onClick={() => onToggleReaction?.(m.id, emoji)}
-                                      title={usersArr.join(', ')}
-                                      className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1 cursor-pointer transition tabular-nums border ${
-                                        reactedByMe
-                                          ? isMine
-                                            ? 'bg-white text-blue-700 border-white'
-                                            : 'bg-blue-50 dark:bg-blue-950/70 text-blue-700 dark:text-blue-200 border-blue-300 dark:border-blue-700'
-                                          : isMine
-                                          ? 'bg-blue-700/70 text-blue-100 border-blue-400/40'
-                                          : 'bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-600'
-                                      }`}
-                                    >
-                                      <span>{emoji}</span>
-                                      <span>{usersArr.length}</span>
-                                    </button>
-                                  );
-                                })}
-                              </div>
-
-                              {/* Kimler Okudu Butonu */}
-                              {readByList.length > 0 && (
-                                <div className="relative ml-auto">
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setActiveReadById((prev) => (prev === m.id ? null : m.id));
-                                    }}
-                                    className={`inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded cursor-pointer tabular-nums ${
-                                      isMine
-                                        ? 'text-blue-100/90 hover:bg-blue-700/80'
-                                        : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'
-                                    }`}
-                                    title="Kimlerin okuduğunu gör"
-                                  >
-                                    <CheckCheck className="w-3 h-3" />
-                                    <span>{readByList.length}</span>
-                                  </button>
-
-                                  {activeReadById === m.id && (
-                                    <div
-                                      onClick={(e) => e.stopPropagation()}
-                                      className={`absolute bottom-full mb-1 z-30 min-w-[160px] max-w-[220px] bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 rounded-xl shadow-xl p-2 text-[10px] ${
-                                        isMine ? 'right-0' : 'left-0'
-                                      }`}
-                                    >
-                                      <div className="font-extrabold text-slate-500 dark:text-slate-400 uppercase pb-1 mb-1 border-b border-slate-100 dark:border-slate-700">
-                                        Okuyanlar ({readByList.length})
-                                      </div>
-                                      <div className="flex flex-wrap gap-1">
-                                        {readByList.map((reader) => (
-                                          <span
-                                            key={reader}
-                                            className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-700 font-semibold"
-                                          >
-                                            {reader}
-                                          </span>
-                                        ))}
-                                      </div>
-                                    </div>
-                                  )}
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </React.Fragment>
-                  );
-                })}
-                <div ref={messagesEndRef} />
               </div>
 
-              {/* Düzenleme Önizleme Barı */}
-              {editingMessage && (
-                <div className="px-3 py-2 bg-amber-50 dark:bg-amber-950/50 border-t border-amber-200 dark:border-amber-800 flex items-center justify-between text-xs text-amber-900 dark:text-amber-200 shrink-0">
-                  <div className="flex items-center gap-2 overflow-hidden">
-                    <Edit2 className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
-                    <span className="font-bold truncate">
-                      Düzenleniyor: "{editingMessage.text.slice(0, 50)}"
+              {/* 2 Ayrı Sekme: Gruplar / Kişiler */}
+              <div className="grid grid-cols-2 border-b border-slate-200 dark:border-slate-800 text-xs font-bold shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setDrawerTab('groups')}
+                  className={`py-2 px-2 flex items-center justify-center gap-1.5 cursor-pointer transition border-b-2 whitespace-nowrap ${
+                    drawerTab === 'groups'
+                      ? 'border-emerald-600 text-emerald-700 dark:text-emerald-400'
+                      : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+                  }`}
+                >
+                  <span>Gruplar</span>
+                  {groupsTabUnread > 0 && (
+                    <span className="px-1.5 py-0.2 rounded-full bg-blue-600 text-white text-[10px] font-black tabular-nums">
+                      {groupsTabUnread}
                     </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleCancelEdit}
-                    className="p-1 text-slate-500 hover:text-red-600 cursor-pointer"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              )}
-
-              {/* Cevap Veriliyor Önizleme Barı (Dark Mode Düzeltildi!) */}
-              {replyingTo && (
-                <div className="px-3 py-2 bg-blue-50 dark:bg-blue-950/50 border-t border-blue-200 dark:border-blue-800 flex items-center justify-between text-xs text-blue-900 dark:text-blue-200 shrink-0">
-                  <div className="flex items-center gap-2 overflow-hidden">
-                    <CornerUpLeft className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
-                    <div className="truncate">
-                      <span className="font-bold text-blue-700 dark:text-blue-300">@{replyingTo.sender}</span>
-                      <span className="text-[11px] text-slate-600 dark:text-slate-300 ml-1.5 truncate">
-                        yanıtlanıyor: "{(replyingTo.text || replyingTo.entityCard?.title || 'Fotoğraf').slice(0, 45)}"
-                      </span>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setReplyingTo(null)}
-                    className="p-1 text-slate-500 hover:text-red-600 cursor-pointer"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              )}
-
-              {/* Bekleyen Fotoğraf veya Araç/Rampa Kartı Önizleme Barı */}
-              {(pendingImageUrl || pendingEntityCard) && (
-                <div className="px-3 py-2 bg-slate-100 dark:bg-slate-800/90 border-t border-slate-200 dark:border-slate-700 flex items-center gap-3 flex-wrap shrink-0">
-                  {pendingImageUrl && (
-                    <div className="relative inline-block">
-                      <img
-                        src={pendingImageUrl}
-                        alt="Eklenecek görsel"
-                        className="h-14 w-14 object-cover rounded-lg border border-slate-300 dark:border-slate-600"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setPendingImageUrl(null)}
-                        className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red-600 text-white flex items-center justify-center shadow cursor-pointer"
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
-                    </div>
                   )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDrawerTab('people')}
+                  className={`py-2 px-2 flex items-center justify-center gap-1.5 cursor-pointer transition border-b-2 whitespace-nowrap ${
+                    drawerTab === 'people'
+                      ? 'border-emerald-600 text-emerald-700 dark:text-emerald-400'
+                      : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+                  }`}
+                >
+                  <span>Kişiler</span>
+                  {peopleTabUnread > 0 ? (
+                    <span className="px-1.5 py-0.2 rounded-full bg-blue-600 text-white text-[10px] font-black tabular-nums">
+                      {peopleTabUnread}
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 tabular-nums">
+                      ({totalOnlineOthersCount})
+                    </span>
+                  )}
+                </button>
+              </div>
 
-                  {pendingEntityCard && (
-                    <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-blue-300 dark:border-blue-700 text-xs">
-                      {pendingEntityCard.type === 'vehicle' ? (
-                        <Truck className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-                      ) : (
-                        <WarehouseIcon className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
-                      )}
-                      <div>
-                        <div className="font-mono font-bold text-slate-900 dark:text-slate-100">
-                          {pendingEntityCard.title}
-                        </div>
-                        {pendingEntityCard.subtitle && (
-                          <div className="text-[10px] text-slate-500 dark:text-slate-400">
-                            {pendingEntityCard.subtitle}
+              {/* Liste Alanı */}
+              <div className="flex-1 overflow-y-auto custom-scroll">
+                {drawerTab === 'groups' ? (
+                  <div className="p-2.5 space-y-2.5">
+                    {/* Özel Gruplar */}
+                    <div>
+                      <div className="px-1 pb-1.5 flex items-center justify-between gap-2">
+                        <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
+                          Sohbet Grupları ({customGroupItems.length})
+                        </span>
+                        {onCreateGroup && (
+                          <button
+                            type="button"
+                            onClick={() => openCreateGroupDialog([])}
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold cursor-pointer transition"
+                          >
+                            <UserPlus className="w-3 h-3" />
+                            <span>Yeni Grup</span>
+                          </button>
+                        )}
+                      </div>
+                      <div className="space-y-1">
+                        {customGroupItems.map((item) => {
+                          const isOpenNow = openWindows.some((w) => w.id === item.id && !w.minimized);
+                          return (
+                            <div
+                              key={item.id}
+                              className={`flex items-center justify-between gap-1 p-1.5 rounded-xl transition ${
+                                isOpenNow
+                                  ? 'bg-emerald-50/80 dark:bg-emerald-950/35 ring-1 ring-emerald-500/30'
+                                  : 'hover:bg-slate-100 dark:hover:bg-slate-800/70'
+                              }`}
+                            >
+                              <button
+                                type="button"
+                                onClick={() => openConversation(item.id)}
+                                className="flex items-center gap-2.5 min-w-0 flex-1 text-left cursor-pointer"
+                              >
+                                <div className="w-9 h-9 rounded-full bg-emerald-600 text-white flex items-center justify-center shrink-0">
+                                  <UsersIcon className="w-4 h-4" />
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center justify-between gap-1">
+                                    <span className={`text-xs truncate ${item.unread > 0 ? 'font-black text-slate-950 dark:text-white' : 'font-bold text-slate-900 dark:text-white'}`}>
+                                      {item.title}
+                                    </span>
+                                    {item.last && (
+                                      <span className="text-[10px] text-slate-400 font-mono tabular-nums shrink-0">
+                                        {item.last.time}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center justify-between gap-1.5 mt-0.5">
+                                    <span
+                                      className={`text-[11px] truncate ${
+                                        item.isTyping
+                                          ? 'font-bold text-emerald-600 dark:text-emerald-400 animate-pulse'
+                                          : item.unread > 0
+                                          ? 'font-semibold text-slate-800 dark:text-slate-200'
+                                          : 'text-slate-500 dark:text-slate-400'
+                                      }`}
+                                    >
+                                      {item.subtitle}
+                                    </span>
+                                    {item.unread > 0 && (
+                                      <span className="px-1.5 py-0.2 rounded-full bg-blue-600 text-white text-[10px] font-black tabular-nums shrink-0">
+                                        {item.unread}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => openManageGroupDialog(item.group)}
+                                title="Grubu Düzenle / Kişi Ekle"
+                                className="p-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 cursor-pointer shrink-0"
+                              >
+                                <UserPlus className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          );
+                        })}
+                        {customGroupItems.length === 0 && (
+                          <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 text-center space-y-2">
+                            <p className="text-[11px] text-slate-400">
+                              {drawerSearch || onlyUnreadDrawer
+                                ? 'Filtreye uygun grup bulunamadı.'
+                                : 'Henüz dahil olduğunuz sohbet grubu yok.'}
+                            </p>
+                            {onCreateGroup && !drawerSearch && !onlyUnreadDrawer && (
+                              <button
+                                type="button"
+                                onClick={() => openCreateGroupDialog([])}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold cursor-pointer transition"
+                              >
+                                <UserPlus className="w-3.5 h-3.5" />
+                                <span>İlk Ekip Grubunu Oluştur</span>
+                              </button>
+                            )}
                           </div>
                         )}
                       </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-2.5 space-y-3.5">
+                    {/* Çevrimiçi Kişiler */}
+                    <div>
+                      <div className="px-1 pb-1.5 text-[10px] font-extrabold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 flex items-center justify-between">
+                        <span className="inline-flex items-center gap-1.5">
+                          <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                          <span>Çevrimiçi ({onlineDmPeople.length})</span>
+                        </span>
+                      </div>
+                      <div className="space-y-1">
+                        {onlineDmPeople.map((p) => {
+                          const isOpenNow = openWindows.some((w) => w.id === p.dmId && !w.minimized);
+                          return (
+                            <button
+                              key={p.user.username}
+                              type="button"
+                              onClick={() => openConversation(p.dmId)}
+                              className={`w-full px-2 py-2 rounded-xl flex items-center gap-2.5 text-left cursor-pointer transition ${
+                                isOpenNow
+                                  ? 'bg-emerald-50/80 dark:bg-emerald-950/35 ring-1 ring-emerald-500/30'
+                                  : 'hover:bg-slate-100 dark:hover:bg-slate-800/70'
+                              }`}
+                            >
+                              <div className="relative shrink-0">
+                                <div className={`w-9 h-9 rounded-full flex items-center justify-center text-[11px] font-black ${getAvatarTone(p.user.role)}`}>
+                                  {getInitials(p.user.username)}
+                                </div>
+                                <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white dark:border-slate-900 bg-emerald-500" />
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center justify-between gap-1">
+                                  <span className={`text-xs truncate ${p.unread > 0 ? 'font-black text-slate-950 dark:text-white' : 'font-bold text-slate-900 dark:text-white'}`}>
+                                    {p.user.username}
+                                  </span>
+                                  {p.last ? (
+                                    <span className="text-[10px] text-slate-400 font-mono tabular-nums shrink-0">{p.last.time}</span>
+                                  ) : (
+                                    <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 shrink-0">Çevrimiçi</span>
+                                  )}
+                                </div>
+                                <div className="flex items-center justify-between gap-1.5 mt-0.5">
+                                  <span
+                                    className={`text-[11px] truncate ${
+                                      p.isTyping
+                                        ? 'font-bold text-emerald-600 dark:text-emerald-400 animate-pulse'
+                                        : p.unread > 0
+                                        ? 'font-semibold text-slate-800 dark:text-slate-200'
+                                        : 'text-slate-500 dark:text-slate-400'
+                                    }`}
+                                  >
+                                    {p.lastMsgText || `${getRoleLabel(p.user.role)} · Sistemde aktif`}
+                                  </span>
+                                  {p.unread > 0 && (
+                                    <span className="px-1.5 py-0.2 rounded-full bg-blue-600 text-white text-[10px] font-black tabular-nums shrink-0">
+                                      {p.unread}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </button>
+                          );
+                        })}
+                        {onlineDmPeople.length === 0 && (
+                          <p className="text-[11px] text-slate-400 px-1">Şu an başka çevrimiçi kullanıcı yok.</p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Çevrimdışı Kişiler */}
+                    <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
+                      <div className="px-1 pb-1.5 text-[10px] font-extrabold uppercase tracking-wider text-slate-400 flex items-center justify-between">
+                        <span className="inline-flex items-center gap-1.5">
+                          <span className="w-2 h-2 rounded-full bg-slate-400" />
+                          <span>Çevrimdışı ({offlineDmPeople.length})</span>
+                        </span>
+                      </div>
+                      <div className="space-y-1">
+                        {offlineDmPeople.map((p) => {
+                          const isOpenNow = openWindows.some((w) => w.id === p.dmId && !w.minimized);
+                          return (
+                            <button
+                              key={p.user.username}
+                              type="button"
+                              onClick={() => openConversation(p.dmId)}
+                              className={`w-full px-2 py-2 rounded-xl flex items-center gap-2.5 text-left cursor-pointer transition ${
+                                isOpenNow
+                                  ? 'bg-emerald-50/80 dark:bg-emerald-950/35 ring-1 ring-emerald-500/30'
+                                  : 'hover:bg-slate-100 dark:hover:bg-slate-800/70'
+                              }`}
+                            >
+                              <div className="relative shrink-0 opacity-80">
+                                <div className={`w-9 h-9 rounded-full flex items-center justify-center text-[11px] font-black ${getAvatarTone(p.user.role)}`}>
+                                  {getInitials(p.user.username)}
+                                </div>
+                                <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white dark:border-slate-900 bg-slate-400" />
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center justify-between gap-1">
+                                  <span className={`text-xs truncate ${p.unread > 0 ? 'font-black text-slate-950 dark:text-white' : 'font-bold text-slate-800 dark:text-slate-200'}`}>
+                                    {p.user.username}
+                                  </span>
+                                  {p.last && (
+                                    <span className="text-[10px] text-slate-400 font-mono tabular-nums shrink-0">{p.last.time}</span>
+                                  )}
+                                </div>
+                                <div className="flex items-center justify-between gap-1.5 mt-0.5">
+                                  <span className="text-[11px] truncate text-slate-500 dark:text-slate-400">
+                                    {p.lastMsgText || `${getRoleLabel(p.user.role)} · ${p.lastSeenText}`}
+                                  </span>
+                                  {p.unread > 0 && (
+                                    <span className="px-1.5 py-0.2 rounded-full bg-blue-600 text-white text-[10px] font-black tabular-nums shrink-0">
+                                      {p.unread}
+                                    </span>
+                                  )}
+                                </div>
+                                {p.lastMsgText && (
+                                  <div className="text-[10px] text-slate-400 truncate mt-0.5">{p.lastSeenText}</div>
+                                )}
+                              </div>
+                            </button>
+                          );
+                        })}
+                        {offlineDmPeople.length === 0 && (
+                          <p className="text-[11px] text-slate-400 px-1">
+                            {drawerSearch || onlyUnreadDrawer ? 'Filtreye uygun çevrimdışı kişi yok.' : 'Çevrimdışı kullanıcı bulunmuyor.'}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* ========================================================================
+          MOBİL: YÜZEN MESAJLAŞMA BUTONU + TAM EKRAN LİSTE / SOHBET GÖRÜNÜMÜ
+         ======================================================================== */}
+      <div className="md:hidden chat-widget">
+        {mobileScreen === 'closed' ? (
+          <button
+            type="button"
+            onClick={() => setMobileScreen('list')}
+            className="fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom))] right-3 z-40 h-11 px-3.5 rounded-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-2xl flex items-center gap-2 cursor-pointer active:scale-95 transition"
+          >
+            <div className="relative">
+              <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-black ${getAvatarTone(currentUser.role)}`}>
+                {getInitials(currentUser.username)}
+              </div>
+              <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white dark:border-slate-900 ${isSelfOnline ? 'bg-emerald-500' : 'bg-slate-400'}`} />
+            </div>
+            <span className="text-xs font-bold text-slate-900 dark:text-white">Mesajlaşma</span>
+            {totalUnreadCount > 0 && (
+              <span className="px-1.5 py-0.2 rounded-full bg-red-600 text-white text-[10px] font-black tabular-nums">
+                {totalUnreadCount > 99 ? '99+' : totalUnreadCount}
+              </span>
+            )}
+          </button>
+        ) : (
+          <div className="fixed inset-x-2 top-3 bottom-[calc(4.5rem+env(safe-area-inset-bottom)+6px)] z-50">
+            {mobileScreen === 'list' ? (
+              <div className="w-full h-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+                <div className="px-3.5 py-3 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <div className="relative">
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-black ${getAvatarTone(currentUser.role)}`}>
+                        {getInitials(currentUser.username)}
+                      </div>
+                      <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white dark:border-slate-900 ${isSelfOnline ? 'bg-emerald-500' : 'bg-slate-400'}`} />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-sm text-slate-900 dark:text-white">Mesajlaşma</h4>
+                      <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold tabular-nums">
+                        {totalOnlineOthersCount} kişi çevrimiçi
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1">
+                    {onCreateGroup && (
                       <button
                         type="button"
-                        onClick={() => setPendingEntityCard(null)}
-                        className="p-0.5 text-slate-400 hover:text-red-600 cursor-pointer"
+                        onClick={() => openCreateGroupDialog([])}
+                        className="px-2.5 py-1.5 rounded-xl bg-emerald-600 text-white text-xs font-bold flex items-center gap-1 cursor-pointer"
                       >
-                        <X className="w-3.5 h-3.5" />
+                        <UserPlus className="w-3.5 h-3.5" />
+                        <span>Grup Kur</span>
                       </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setMobileScreen('closed')}
+                      className="p-1.5 rounded-full text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Arama ve Okunmamış Filtresi (Mobil) */}
+                <div className="p-2.5 border-b border-slate-100 dark:border-slate-800 flex items-center gap-1.5">
+                  <div className="relative flex-1">
+                    <Search className="w-4 h-4 absolute left-3 top-2 text-slate-400" />
+                    <input
+                      type="text"
+                      value={drawerSearch}
+                      onChange={(e) => setDrawerSearch(e.target.value)}
+                      placeholder={drawerTab === 'groups' ? 'Grup ara...' : 'Kişi veya mesaj ara...'}
+                      className="w-full pl-9 pr-3 py-1.5 text-sm rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100 outline-none"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setOnlyUnreadDrawer((p) => !p)}
+                    title={onlyUnreadDrawer ? 'Tümünü Göster' : 'Sadece Okunmamışlar'}
+                    className={`p-2 rounded-xl border cursor-pointer transition ${
+                      onlyUnreadDrawer
+                        ? 'bg-emerald-600 text-white border-emerald-600'
+                        : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-300 border-transparent'
+                    }`}
+                  >
+                    <SlidersHorizontal className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* 2 Ayrı Sekme: Gruplar / Kişiler (Mobil) */}
+                <div className="grid grid-cols-2 border-b border-slate-200 dark:border-slate-800 text-xs font-bold shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setDrawerTab('groups')}
+                    className={`py-2.5 px-2 flex items-center justify-center gap-1.5 cursor-pointer transition border-b-2 whitespace-nowrap ${
+                      drawerTab === 'groups'
+                        ? 'border-emerald-600 text-emerald-700 dark:text-emerald-400'
+                        : 'border-transparent text-slate-500 dark:text-slate-400'
+                    }`}
+                  >
+                    <span>Gruplar</span>
+                    {groupsTabUnread > 0 && (
+                      <span className="px-1.5 py-0.2 rounded-full bg-blue-600 text-white text-[10px] font-black tabular-nums">
+                        {groupsTabUnread}
+                      </span>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDrawerTab('people')}
+                    className={`py-2.5 px-2 flex items-center justify-center gap-1.5 cursor-pointer transition border-b-2 whitespace-nowrap ${
+                      drawerTab === 'people'
+                        ? 'border-emerald-600 text-emerald-700 dark:text-emerald-400'
+                        : 'border-transparent text-slate-500 dark:text-slate-400'
+                    }`}
+                  >
+                    <span>Kişiler</span>
+                    {peopleTabUnread > 0 ? (
+                      <span className="px-1.5 py-0.2 rounded-full bg-blue-600 text-white text-[10px] font-black tabular-nums">
+                        {peopleTabUnread}
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 tabular-nums">
+                        ({totalOnlineOthersCount})
+                      </span>
+                    )}
+                  </button>
+                </div>
+
+                <div className="flex-1 overflow-y-auto">
+                  {drawerTab === 'groups' ? (
+                    <div className="p-2.5 space-y-3">
+                      <div>
+                        <div className="px-1 pb-1.5 text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
+                          Sohbet Grupları ({customGroupItems.length})
+                        </div>
+                        <div className="divide-y divide-slate-100 dark:divide-slate-800/70">
+                          {customGroupItems.map((item) => (
+                            <div key={item.id} className="flex items-center justify-between gap-2 px-2 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                              <button
+                                type="button"
+                                onClick={() => openConversation(item.id)}
+                                className="flex items-center gap-2.5 flex-1 min-w-0 text-left cursor-pointer"
+                              >
+                                <div className="w-10 h-10 rounded-full bg-emerald-600 text-white flex items-center justify-center shrink-0">
+                                  <UsersIcon className="w-4 h-4" />
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span className="text-xs font-bold text-slate-900 dark:text-white truncate">{item.title}</span>
+                                    {item.last && <span className="text-[10px] text-slate-400 font-mono tabular-nums">{item.last.time}</span>}
+                                  </div>
+                                  <div
+                                    className={`text-[11px] truncate mt-0.5 ${
+                                      item.isTyping
+                                        ? 'font-bold text-emerald-600 dark:text-emerald-400 animate-pulse'
+                                        : 'text-slate-500 dark:text-slate-400'
+                                    }`}
+                                  >
+                                    {item.subtitle}
+                                  </div>
+                                </div>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => openManageGroupDialog(item.group)}
+                                className="p-2 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 cursor-pointer shrink-0"
+                                title="Grubu & Üyeleri Yönet"
+                              >
+                                <UserPlus className="w-4 h-4" />
+                              </button>
+                              {item.unread > 0 && (
+                                <span className="px-1.5 py-0.5 rounded-full bg-blue-600 text-white text-[10px] font-black tabular-nums shrink-0">
+                                  {item.unread}
+                                </span>
+                              )}
+                            </div>
+                          ))}
+                          {customGroupItems.length === 0 && (
+                            <div className="py-6 px-3 text-center space-y-2.5">
+                              <p className="text-xs text-slate-400">
+                                {drawerSearch || onlyUnreadDrawer
+                                  ? 'Filtreye uygun sohbet grubu bulunamadı.'
+                                  : 'Henüz dahil olduğunuz sohbet grubu yok.'}
+                              </p>
+                              {onCreateGroup && !drawerSearch && !onlyUnreadDrawer && (
+                                <button
+                                  type="button"
+                                  onClick={() => openCreateGroupDialog([])}
+                                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-600 text-white text-xs font-bold cursor-pointer"
+                                >
+                                  <UserPlus className="w-3.5 h-3.5" />
+                                  <span>Yeni Grup Oluştur</span>
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-2.5 space-y-4">
+                      <div>
+                        <div className="px-1 pb-1.5 text-[10px] font-extrabold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
+                          <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                          <span>Çevrimiçi ({onlineDmPeople.length})</span>
+                        </div>
+                        <div className="divide-y divide-slate-100 dark:divide-slate-800/70">
+                          {onlineDmPeople.map((p) => (
+                            <button
+                              key={p.user.username}
+                              type="button"
+                              onClick={() => openConversation(p.dmId)}
+                              className="w-full flex items-center justify-between gap-2.5 px-2 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-800/50 text-left cursor-pointer"
+                            >
+                              <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                                <div className="relative shrink-0">
+                                  <div className={`w-10 h-10 rounded-full flex items-center justify-center text-xs font-black ${getAvatarTone(p.user.role)}`}>
+                                    {getInitials(p.user.username)}
+                                  </div>
+                                  <span className="absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-white dark:border-slate-900 bg-emerald-500" />
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span className="text-xs font-bold text-slate-900 dark:text-white truncate">{p.user.username}</span>
+                                    {p.last ? (
+                                      <span className="text-[10px] text-slate-400 font-mono tabular-nums">{p.last.time}</span>
+                                    ) : (
+                                      <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">Çevrimiçi</span>
+                                    )}
+                                  </div>
+                                  <div
+                                    className={`text-[11px] truncate mt-0.5 ${
+                                      p.isTyping
+                                        ? 'font-bold text-emerald-600 dark:text-emerald-400 animate-pulse'
+                                        : 'text-slate-500 dark:text-slate-400'
+                                    }`}
+                                  >
+                                    {p.lastMsgText || `${getRoleLabel(p.user.role)} · Sistemde aktif`}
+                                  </div>
+                                </div>
+                              </div>
+                              {p.unread > 0 && (
+                                <span className="px-1.5 py-0.5 rounded-full bg-blue-600 text-white text-[10px] font-black tabular-nums shrink-0">
+                                  {p.unread}
+                                </span>
+                              )}
+                            </button>
+                          ))}
+                          {onlineDmPeople.length === 0 && (
+                            <p className="text-xs text-slate-400 px-1 py-2">Şu an başka çevrimiçi kullanıcı yok.</p>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
+                        <div className="px-1 pb-1.5 text-[10px] font-extrabold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                          <span className="w-2 h-2 rounded-full bg-slate-400" />
+                          <span>Çevrimdışı ({offlineDmPeople.length})</span>
+                        </div>
+                        <div className="divide-y divide-slate-100 dark:divide-slate-800/70">
+                          {offlineDmPeople.map((p) => (
+                            <button
+                              key={p.user.username}
+                              type="button"
+                              onClick={() => openConversation(p.dmId)}
+                              className="w-full flex items-center justify-between gap-2.5 px-2 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-800/50 text-left cursor-pointer"
+                            >
+                              <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                                <div className="relative shrink-0 opacity-80">
+                                  <div className={`w-10 h-10 rounded-full flex items-center justify-center text-xs font-black ${getAvatarTone(p.user.role)}`}>
+                                    {getInitials(p.user.username)}
+                                  </div>
+                                  <span className="absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-white dark:border-slate-900 bg-slate-400" />
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">{p.user.username}</span>
+                                    {p.last && <span className="text-[10px] text-slate-400 font-mono tabular-nums">{p.last.time}</span>}
+                                  </div>
+                                  <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
+                                    {p.lastMsgText || `${getRoleLabel(p.user.role)} · ${p.lastSeenText}`}
+                                  </div>
+                                  {p.lastMsgText && (
+                                    <div className="text-[10px] text-slate-400 truncate mt-0.5">{p.lastSeenText}</div>
+                                  )}
+                                </div>
+                              </div>
+                              {p.unread > 0 && (
+                                <span className="px-1.5 py-0.5 rounded-full bg-blue-600 text-white text-[10px] font-black tabular-nums shrink-0">
+                                  {p.unread}
+                                </span>
+                              )}
+                            </button>
+                          ))}
+                          {offlineDmPeople.length === 0 && (
+                            <p className="text-xs text-slate-400 px-1 py-2">Çevrimdışı kullanıcı bulunmuyor.</p>
+                          )}
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>
-              )}
+              </div>
+            ) : mobileActiveChannelId ? (
+              <ChatConversationWindow
+                channelId={mobileActiveChannelId}
+                isMinimized={false}
+                isMaximized={false}
+                isMobileView={true}
+                currentUser={currentUser}
+                users={users}
+                vehicles={vehicles}
+                ramps={ramps}
+                warehouses={warehouses}
+                chatGroups={chatGroups}
+                chatPresences={chatPresences}
+                visibleMessages={visibleMessages}
+                onlineUsernamesSet={onlineUsernamesSet}
+                isMuted={isMuted}
+                now={now}
+                onToggleMute={toggleMute}
+                onToggleMinimize={() => setMobileScreen('list')}
+                onToggleMaximize={() => {}}
+                onClose={() => setMobileScreen('closed')}
+                onBackMobile={() => setMobileScreen('list')}
+                onOpenManageGroup={openManageGroupDialog}
+                onOpenCreateGroup={openCreateGroupDialog}
+                onLeaveGroup={onLeaveGroup}
+                onDeleteGroup={onDeleteGroup}
+                onSendMessage={onSendMessage}
+                onEditMessage={onEditMessage}
+                onDeleteMessage={onDeleteMessage}
+                onToggleReaction={onToggleReaction}
+                onTogglePinMessage={onTogglePinMessage}
+                onClearMessages={onClearMessages}
+                onMarkMessagesAsRead={onMarkMessagesAsRead}
+                onUpdatePresence={onUpdatePresence}
+                onNavigateToVehicle={onNavigateToVehicle}
+                onNavigateToRamp={onNavigateToRamp}
+                onOpenLightbox={(url) => setLightboxImageUrl(url)}
+              />
+            ) : null}
+          </div>
+        )}
+      </div>
 
-              {/* @ Bahsetme Autocomplete Menüsü */}
-              {mentionQuery !== null && mentionCandidates.length > 0 && (
-                <div className="bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 shadow-xl max-h-40 overflow-y-auto custom-scroll text-xs shrink-0 p-1 divide-y divide-slate-100 dark:divide-slate-700/60">
-                  <div className="px-2.5 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
-                    <span>Kullanıcı Bahset (@)</span>
-                    <span>Yön tuşları veya tıkla</span>
-                  </div>
-                  {mentionCandidates.map((candidate, idx) => (
-                    <button
-                      key={candidate.id}
-                      type="button"
-                      onClick={() => handleSelectMention(candidate.name)}
-                      className={`w-full px-2.5 py-1.5 text-left flex items-center justify-between rounded-lg transition cursor-pointer text-xs ${
-                        idx === selectedMentionIdx
-                          ? 'bg-blue-600 text-white font-bold'
-                          : 'hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200'
-                      }`}
-                    >
-                      <div className="flex items-center gap-1.5 font-bold">
-                        <AtSign className="w-3.5 h-3.5 opacity-70" />
-                        <span>{candidate.name}</span>
-                      </div>
-                      <span
-                        className={`text-[9px] px-1.5 py-0.2 rounded font-medium ${
-                          idx === selectedMentionIdx
-                            ? 'bg-blue-700 text-blue-100'
-                            : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300'
-                        }`}
-                      >
-                        {candidate.role}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              )}
+      {/* ========================================================================
+          MODALLAR: YENİ GRUP OLUŞTUR & GRUBA KİŞİ EKLE / ÜYELERİ YÖNET
+         ======================================================================== */}
+      {showCreateGroupModal && (
+        <div className="fixed inset-0 z-[75] bg-slate-950/75 backdrop-blur-xs flex items-center justify-center p-4">
+          <form
+            onSubmit={handleSubmitCreateGroup}
+            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"
+          >
+            <div className="px-4 py-3 bg-emerald-600 text-white flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <UsersIcon className="w-5 h-5" />
+                <h4 className="font-bold text-sm">Yeni Sohbet Grubu Oluştur</h4>
+              </div>
+              <button type="button" onClick={() => setShowCreateGroupModal(false)} className="p-1 hover:bg-white/15 rounded-full cursor-pointer">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
 
-              {/* Hızlı Araç / Şablon / Emoji Seçici Panelleri */}
-              {activePopover === 'emoji' && (
-                <div className="p-2.5 bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 flex flex-wrap gap-1.5 shrink-0">
-                  {EMOJI_PALETTE.map((em) => (
-                    <button
-                      key={em}
-                      type="button"
-                      onClick={() => {
-                        setText((prev) => `${prev}${em}`);
-                        inputRef.current?.focus();
-                      }}
-                      className="w-8 h-8 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-base flex items-center justify-center cursor-pointer transition"
-                    >
-                      {em}
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              {activePopover === 'templates' && (
-                <div className="p-2.5 bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 space-y-1.5 max-h-44 overflow-y-auto custom-scroll shrink-0">
-                  <div className="text-[10px] font-bold uppercase text-slate-400 px-1">
-                    Hazır Saha Mesaj Şablonları
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-                    {QUICK_TEMPLATES.map((tpl) => (
-                      <button
-                        key={tpl}
-                        type="button"
-                        onClick={() => {
-                          setText((prev) => (prev ? `${prev} ${tpl}` : tpl));
-                          setActivePopover('none');
-                          inputRef.current?.focus();
-                        }}
-                        className="text-left px-2.5 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-900 hover:bg-blue-50 dark:hover:bg-blue-950/50 border border-slate-200 dark:border-slate-700 text-[11px] font-medium text-slate-700 dark:text-slate-200 cursor-pointer transition"
-                      >
-                        {tpl}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {activePopover === 'entity' && (
-                <div className="p-2.5 bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 space-y-2 max-h-56 overflow-y-auto custom-scroll shrink-0">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-1">
-                      <button
-                        type="button"
-                        onClick={() => setEntityTab('vehicle')}
-                        className={`px-2.5 py-1 rounded-lg text-[11px] font-bold cursor-pointer ${
-                          entityTab === 'vehicle'
-                            ? 'bg-blue-600 text-white'
-                            : 'bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-300'
-                        }`}
-                      >
-                        Aktif Araçlar
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setEntityTab('ramp')}
-                        className={`px-2.5 py-1 rounded-lg text-[11px] font-bold cursor-pointer ${
-                          entityTab === 'ramp'
-                            ? 'bg-purple-600 text-white'
-                            : 'bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-300'
-                        }`}
-                      >
-                        Rampalar
-                      </button>
-                    </div>
-
-                    <input
-                      type="text"
-                      value={entitySearch}
-                      onChange={(e) => setEntitySearch(e.target.value)}
-                      placeholder="Ara..."
-                      className="flex-1 max-w-[180px] px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-xs text-slate-800 dark:text-slate-100 outline-none"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-                    {entityTab === 'vehicle' &&
-                      selectableVehicles.map((v) => (
-                        <button
-                          key={v.id}
-                          type="button"
-                          onClick={() => {
-                            setPendingEntityCard({
-                              type: 'vehicle',
-                              id: v.id,
-                              title: v.dorsePlaka,
-                              subtitle: v.musteri,
-                              status: v.durum,
-                              extra: v.cekiciPlaka ? `Çekici: ${v.cekiciPlaka}` : v.islemTuru
-                            });
-                            setActivePopover('none');
-                            inputRef.current?.focus();
-                          }}
-                          className="p-2 rounded-xl bg-slate-50 dark:bg-slate-900 hover:bg-blue-50 dark:hover:bg-blue-950/50 border border-slate-200 dark:border-slate-700 text-left flex items-center justify-between gap-2 cursor-pointer"
-                        >
-                          <div className="min-w-0">
-                            <div className="font-mono font-bold text-xs text-slate-900 dark:text-slate-100 truncate">
-                              {v.dorsePlaka}
-                            </div>
-                            <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate">
-                              {v.musteri}
-                            </div>
-                          </div>
-                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-950 text-blue-800 dark:text-blue-200 shrink-0">
-                            {v.durum}
-                          </span>
-                        </button>
-                      ))}
-
-                    {entityTab === 'ramp' &&
-                      selectableRamps.map((r) => (
-                        <button
-                          key={r.id}
-                          type="button"
-                          onClick={() => {
-                            setPendingEntityCard({
-                              type: 'ramp',
-                              id: r.id,
-                              title: r.ad,
-                              subtitle: getWarehouseShort(r.depoId),
-                              status: r.durum,
-                              extra: r.arizaNotu || undefined
-                            });
-                            setActivePopover('none');
-                            inputRef.current?.focus();
-                          }}
-                          className="p-2 rounded-xl bg-slate-50 dark:bg-slate-900 hover:bg-purple-50 dark:hover:bg-purple-950/50 border border-slate-200 dark:border-slate-700 text-left flex items-center justify-between gap-2 cursor-pointer"
-                        >
-                          <div className="min-w-0">
-                            <div className="font-mono font-bold text-xs text-slate-900 dark:text-slate-100 truncate">
-                              {r.ad}
-                            </div>
-                            <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate">
-                              {getWarehouseShort(r.depoId)}
-                            </div>
-                          </div>
-                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-purple-100 dark:bg-purple-950 text-purple-800 dark:text-purple-200 shrink-0">
-                            {r.durum}
-                          </span>
-                        </button>
-                      ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Alt Çok Satırlı Yazım ve Araç Çubuğu */}
-              <form
-                onSubmit={handleSubmit}
-                className="p-2.5 sm:p-3 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 space-y-2 shrink-0"
-              >
+            <div className="p-4 space-y-3 text-xs">
+              <div>
+                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Grup Adı *</label>
                 <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  onChange={handleImageFileSelect}
-                  className="hidden"
+                  type="text"
+                  required
+                  maxLength={80}
+                  value={newGroupName}
+                  onChange={(e) => setNewGroupName(e.target.value)}
+                  placeholder="Örn: A Depo Gece Vardiyası"
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Açıklama (Opsiyonel)</label>
+                <input
+                  type="text"
+                  maxLength={150}
+                  value={newGroupDesc}
+                  onChange={(e) => setNewGroupDesc(e.target.value)}
+                  placeholder="Kısa ekip veya vardiya açıklaması"
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white outline-none"
+                />
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="font-bold text-slate-700 dark:text-slate-300">
+                    Kişileri Ekle ({newGroupMembers.length + 1} kişi seçili)
+                  </label>
+                </div>
+                <input
+                  type="text"
+                  value={groupUserSearch}
+                  onChange={(e) => setGroupUserSearch(e.target.value)}
+                  placeholder="Kişi ara..."
+                  className="w-full px-3 py-1.5 mb-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 outline-none"
+                />
+                <div className="max-h-48 overflow-y-auto custom-scroll border border-slate-200 dark:border-slate-700 rounded-xl divide-y divide-slate-100 dark:divide-slate-800">
+                  {[...allDmPeople]
+                    .sort((a, b) => {
+                      if (a.isOnline !== b.isOnline) return a.isOnline ? -1 : 1;
+                      return a.user.username.localeCompare(b.user.username, 'tr');
+                    })
+                    .map((p) => p.user)
+                    .filter((u) => !groupUserSearch.trim() || u.username.toLowerCase().includes(groupUserSearch.trim().toLowerCase()))
+                    .map((u) => {
+                      const checked = newGroupMembers.includes(u.username);
+                      const isOnline = onlineUsernamesSet.has(u.username.trim().toLowerCase());
+                      return (
+                        <label
+                          key={u.username}
+                          className="flex items-center justify-between px-3 py-2 hover:bg-slate-50 dark:hover:bg-slate-800/70 cursor-pointer"
+                        >
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() =>
+                                setNewGroupMembers((prev) =>
+                                  checked ? prev.filter((m) => m !== u.username) : [...prev, u.username]
+                                )
+                              }
+                              className="w-4 h-4 accent-emerald-600 rounded"
+                            />
+                            <span className="font-bold text-slate-800 dark:text-slate-100">{u.username}</span>
+                            <span className="text-[10px] px-1.5 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-slate-500">
+                              {getRoleLabel(u.role)}
+                            </span>
+                          </div>
+                          <span className={`w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600'}`} />
+                        </label>
+                      );
+                    })}
+                </div>
+              </div>
+            </div>
+
+            <div className="px-4 py-3 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowCreateGroupModal(false)}
+                className="px-3.5 py-2 rounded-xl border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 font-bold text-xs cursor-pointer"
+              >
+                İptal
+              </button>
+              <button
+                type="submit"
+                disabled={!newGroupName.trim()}
+                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs cursor-pointer disabled:opacity-40"
+              >
+                Grubu Oluştur
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {managingGroup && (
+        <div className="fixed inset-0 z-[75] bg-slate-950/75 backdrop-blur-xs flex items-center justify-center p-4">
+          <form
+            onSubmit={handleSaveGroupDetails}
+            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"
+          >
+            <div className="px-4 py-3 bg-slate-900 text-white flex items-center justify-between">
+              <div className="flex items-center gap-2 min-w-0">
+                <UserPlus className="w-5 h-5 text-emerald-400 shrink-0" />
+                <div className="min-w-0">
+                  <h4 className="font-bold text-sm truncate">{managingGroup.name} — Grup & Üye Yönetimi</h4>
+                  <p className="text-[10px] text-slate-400">Grup adını, açıklamasını ve üyeleri düzenleyin</p>
+                </div>
+              </div>
+              <button type="button" onClick={() => setManagingGroupId(null)} className="p-1 hover:bg-white/10 rounded-full cursor-pointer">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-4 space-y-3 text-xs">
+              <div>
+                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Grup Adı *</label>
+                <input
+                  type="text"
+                  required
+                  maxLength={80}
+                  value={editGroupName}
+                  onChange={(e) => setEditGroupName(e.target.value)}
+                  placeholder="Grup adı"
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Açıklama (Opsiyonel)</label>
+                <input
+                  type="text"
+                  maxLength={150}
+                  value={editGroupDesc}
+                  onChange={(e) => setEditGroupDesc(e.target.value)}
+                  placeholder="Kısa ekip veya vardiya açıklaması"
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Üyeler ({editMembersDraft.length} kişi)
+                </label>
+                <input
+                  type="text"
+                  value={manageUserSearch}
+                  onChange={(e) => setManageUserSearch(e.target.value)}
+                  placeholder="Eklenecek kişi ara..."
+                  className="w-full px-3 py-1.5 mb-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-100 outline-none"
                 />
 
-                <div className="flex items-center justify-between gap-1 text-slate-500 dark:text-slate-400">
-                  <div className="flex items-center gap-1 flex-wrap">
-                    <button
-                      type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      disabled={isCompressingImage || !!editingMessage}
-                      className="px-2 py-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-[11px] font-semibold flex items-center gap-1 cursor-pointer disabled:opacity-40"
-                      title="Fotoğraf / Ekran Görüntüsü Ekle"
-                    >
-                      <ImageIcon className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-                      <span className="hidden sm:inline">{isCompressingImage ? 'Hazırlanıyor...' : 'Fotoğraf'}</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setActivePopover((p) => (p === 'entity' ? 'none' : 'entity'))}
-                      disabled={!!editingMessage}
-                      className={`px-2 py-1 rounded-lg text-[11px] font-semibold flex items-center gap-1 cursor-pointer disabled:opacity-40 ${
-                        activePopover === 'entity'
-                          ? 'bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300'
-                          : 'hover:bg-slate-100 dark:hover:bg-slate-800'
-                      }`}
-                      title="Aktif Araç veya Rampa Kartı Paylaş"
-                    >
-                      <Truck className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
-                      <span className="hidden sm:inline">Araç / Rampa</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setActivePopover((p) => (p === 'templates' ? 'none' : 'templates'))}
-                      className={`px-2 py-1 rounded-lg text-[11px] font-semibold flex items-center gap-1 cursor-pointer ${
-                        activePopover === 'templates'
-                          ? 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300'
-                          : 'hover:bg-slate-100 dark:hover:bg-slate-800'
-                      }`}
-                      title="Hazır Saha Şablonu"
-                    >
-                      <Zap className="w-3.5 h-3.5 text-amber-500" />
-                      <span className="hidden sm:inline">Şablon</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setActivePopover((p) => (p === 'emoji' ? 'none' : 'emoji'))}
-                      className={`p-1.5 rounded-lg cursor-pointer ${
-                        activePopover === 'emoji'
-                          ? 'bg-slate-200 dark:bg-slate-700 text-slate-900 dark:text-white'
-                          : 'hover:bg-slate-100 dark:hover:bg-slate-800'
-                      }`}
-                      title="Emoji Ekle"
-                    >
-                      <Smile className="w-3.5 h-3.5" />
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setText((prev) => prev + (prev.endsWith(' ') || prev === '' ? '@' : ' @'));
-                        setMentionQuery('');
-                        setMentionStartIndex(text.length + (text.endsWith(' ') || text === '' ? 0 : 1));
-                        inputRef.current?.focus();
-                      }}
-                      className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
-                      title="Kişiden Bahset (@)"
-                    >
-                      <AtSign className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-
-                  <span className="hidden sm:inline text-[10px] text-slate-400">
-                    Enter: Gönder • Shift+Enter: Satır
-                  </span>
+                <div className="max-h-48 overflow-y-auto custom-scroll border border-slate-200 dark:border-slate-700 rounded-xl divide-y divide-slate-100 dark:divide-slate-800">
+                  {users
+                    .filter((u) => u.role !== 'guest')
+                    .filter((u) => !manageUserSearch.trim() || u.username.toLowerCase().includes(manageUserSearch.trim().toLowerCase()))
+                    .map((u) => {
+                      const isCreator = u.username.toLowerCase() === managingGroup.createdBy.toLowerCase();
+                      const isMember = editMembersDraft.some((m) => m.toLowerCase() === u.username.toLowerCase()) || isCreator;
+                      const isOnline = onlineUsernamesSet.has(u.username.trim().toLowerCase());
+                      return (
+                        <label
+                          key={u.username}
+                          className="flex items-center justify-between px-3 py-2 hover:bg-slate-50 dark:hover:bg-slate-800/70 cursor-pointer"
+                        >
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              disabled={isCreator}
+                              checked={isMember}
+                              onChange={() =>
+                                setEditMembersDraft((prev) =>
+                                  isMember
+                                    ? prev.filter((m) => m.toLowerCase() !== u.username.toLowerCase())
+                                    : [...prev, u.username]
+                                )
+                              }
+                              className="w-4 h-4 accent-emerald-600 rounded disabled:opacity-60"
+                            />
+                            <span className="font-bold text-slate-800 dark:text-slate-100">{u.username}</span>
+                            <span className="text-[10px] px-1.5 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-slate-500">
+                              {isCreator ? 'Kurucu' : getRoleLabel(u.role)}
+                            </span>
+                          </div>
+                          <span className={`w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600'}`} />
+                        </label>
+                      );
+                    })}
                 </div>
-
-                <div className="flex items-end gap-2">
-                  <textarea
-                    ref={inputRef}
-                    rows={1}
-                    value={text}
-                    onChange={handleInputChange}
-                    onKeyDown={handleKeyDown}
-                    placeholder={
-                      editingMessage
-                        ? 'Mesajınızı düzenleyin (Esc ile iptal)...'
-                        : `${activeChannelMeta.title} kanalına yazın (@ ile bahset)...`
-                    }
-                    className={`flex-1 border rounded-xl px-3.5 py-2 text-base sm:text-sm outline-none focus:ring-2 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 resize-none max-h-[110px] ${
-                      editingMessage
-                        ? 'border-amber-400 dark:border-amber-600 focus:ring-amber-500'
-                        : 'border-slate-200 dark:border-slate-700 focus:ring-blue-500'
-                    }`}
-                  />
-
-                  <button
-                    type="submit"
-                    disabled={!text.trim() && !pendingImageUrl && !pendingEntityCard}
-                    className={`min-h-[40px] px-4 py-2 disabled:opacity-40 text-white font-bold text-xs sm:text-sm rounded-xl shadow transition cursor-pointer flex items-center justify-center shrink-0 ${
-                      editingMessage
-                        ? 'bg-amber-600 hover:bg-amber-700'
-                        : 'bg-blue-600 hover:bg-blue-700'
-                    }`}
-                    title={editingMessage ? 'Değişikliği Kaydet' : 'Gönder'}
-                  >
-                    {editingMessage ? <Check className="w-4 h-4" /> : <Send className="w-4 h-4" />}
-                  </button>
-                </div>
-              </form>
+              </div>
             </div>
-          </div>
+
+            <div className="px-4 py-3 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between gap-2 flex-wrap">
+              <div>
+                {onLeaveGroup && managingGroup.createdBy.trim().toLowerCase() !== myUsernameLower ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onLeaveGroup(managingGroup.id);
+                      setManagingGroupId(null);
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-amber-50 dark:bg-amber-950/60 hover:bg-amber-100 dark:hover:bg-amber-900/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 font-bold text-xs cursor-pointer"
+                  >
+                    <LogOut className="w-3.5 h-3.5" />
+                    <span>Gruptan Ayrıl</span>
+                  </button>
+                ) : (
+                  <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
+                    Toplam {editMembersDraft.length} üye
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-2 ml-auto">
+                <button
+                  type="button"
+                  onClick={() => setManagingGroupId(null)}
+                  className="px-3.5 py-2 rounded-xl border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 font-bold text-xs cursor-pointer"
+                >
+                  İptal
+                </button>
+                <button
+                  type="submit"
+                  disabled={!editGroupName.trim()}
+                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs cursor-pointer disabled:opacity-40"
+                >
+                  Değişiklikleri Kaydet
+                </button>
+              </div>
+            </div>
+          </form>
         </div>
       )}
 
@@ -1990,35 +3469,6 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
           />
         </div>
       )}
-
-      {/* Sabit Sohbet Tetikleyici Butonu */}
-      <button
-        type="button"
-        onClick={() => setIsOpen((prev) => !prev)}
-        className={`w-12 h-14 md:w-14 md:h-16 rounded-2xl shadow-2xl flex flex-col items-center justify-center transition-all duration-200 transform hover:scale-105 active:scale-95 cursor-pointer relative ${
-          isOpen
-            ? 'bg-slate-800 hover:bg-slate-900 text-white ring-2 ring-blue-400'
-            : 'bg-blue-600 hover:bg-blue-700 text-white'
-        }`}
-        title={isOpen ? 'Sohbeti Kapat' : 'Saha & Güvenlik Sohbeti'}
-      >
-        {isOpen ? (
-          <>
-            <X className="w-5 h-5 md:w-6 md:h-6" />
-            <span className="text-[8px] md:text-[9px] font-bold mt-0.5">Kapat</span>
-          </>
-        ) : (
-          <>
-            <MessageSquare className="w-5 h-5 md:w-6 md:h-6" />
-            <span className="text-[8px] md:text-[9px] font-bold mt-0.5">Sohbet</span>
-            {totalUnreadCount > 0 && (
-              <span className="absolute -top-1 -right-1 bg-red-600 text-white font-black text-[10px] min-w-[20px] h-5 rounded-full flex items-center justify-center px-1 shadow-lg animate-bounce border-2 border-white tabular-nums">
-                {totalUnreadCount > 99 ? '99+' : totalUnreadCount}
-              </span>
-            )}
-          </>
-        )}
-      </button>
-    </div>
+    </>
   );
 };

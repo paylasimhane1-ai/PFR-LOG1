@@ -134,10 +134,25 @@
         "role": { "type": "string", "minLength": 1, "maxLength": 40 },
         "depoId": { "type": "number" },
         "lastActiveAt": { "type": "number" },
+        "isOnline": { "type": "boolean" },
         "typingInChannel": { "type": "string", "maxLength": 200 },
         "typingAt": { "type": "number" }
       },
       "required": ["username", "role", "lastActiveAt"]
+    },
+    "ChatGroup": {
+      "title": "ChatGroup",
+      "description": "Custom team messaging group with member list",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "name": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "description": { "type": "string", "maxLength": 200 },
+        "members": { "type": "array", "description": "Usernames belonging to this group" },
+        "createdBy": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["id", "name", "members", "createdBy", "createdAt"]
     },
     "Customer": {
       "title": "Customer",
@@ -237,6 +252,10 @@
     "/chatPresence/{presenceId}": {
       "schema": { "$ref": "#/entities/ChatPresence" },
       "description": "Live chat user online status and typing presence"
+    },
+    "/chatGroups/{groupId}": {
+      "schema": { "$ref": "#/entities/ChatGroup" },
+      "description": "Custom messaging groups and member assignments"
     },
     "/customers/{customerId}": {
       "schema": { "$ref": "#/entities/Customer" },
