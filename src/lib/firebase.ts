@@ -16,7 +16,7 @@ import {
   where,
   type DocumentReference
 } from 'firebase/firestore';
-import type { Vehicle, Ramp, ExpectedVehicle, AppNotification, ChatMessage, ChatPresence, ChatGroup, Warehouse, User, Customer, WhatsAppConfig, SlaSettings } from '../types';
+import type { Vehicle, Ramp, ExpectedVehicle, AppNotification, ChatMessage, ChatPresence, ChatGroup, ChatQuickMessagesSettings, Warehouse, User, Customer, WhatsAppConfig, SlaSettings } from '../types';
 import firebaseConfigData from '../../firebase-applet-config.json';
 
 /**
@@ -946,5 +946,36 @@ export async function saveSlaSettingsToFirestore(settings: SlaSettings): Promise
     await setDoc(doc(db, 'settings', 'sla'), cleaned);
   } catch (err) {
     handleFirestoreError(err, FirestoreOperationType.WRITE, 'settings/sla', 'SLA ayarları kaydedilemedi');
+  }
+}
+
+// -------------------------------------------------------------
+// Chat Quick Messages Sync & Mutations (Cross-Device Global Settings)
+// -------------------------------------------------------------
+
+export function subscribeToChatQuickMessages(
+  onData: (settings: ChatQuickMessagesSettings) => void
+): () => void {
+  const docRef = doc(db, 'settings', 'chatQuickMessages');
+  const unsubscribe = onSnapshot(
+    docRef,
+    (snapshot) => {
+      if (snapshot.exists()) {
+        onData(snapshot.data() as ChatQuickMessagesSettings);
+      }
+    },
+    (err) => {
+      handleFirestoreError(err, FirestoreOperationType.GET, 'settings/chatQuickMessages', 'Hızlı sohbet mesajları senkronizasyonu');
+    }
+  );
+  return unsubscribe;
+}
+
+export async function saveChatQuickMessagesToFirestore(settings: ChatQuickMessagesSettings): Promise<void> {
+  try {
+    const cleaned = removeUndefinedFields(settings);
+    await setDoc(doc(db, 'settings', 'chatQuickMessages'), cleaned);
+  } catch (err) {
+    handleFirestoreError(err, FirestoreOperationType.WRITE, 'settings/chatQuickMessages', 'Hızlı sohbet mesajları kaydedilemedi');
   }
 }

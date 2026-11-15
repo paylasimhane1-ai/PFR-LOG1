@@ -149,6 +149,7 @@
         "name": { "type": "string", "minLength": 1, "maxLength": 80 },
         "description": { "type": "string", "maxLength": 200 },
         "members": { "type": "array", "description": "Usernames belonging to this group" },
+        "pendingMemberRequests": { "type": "array", "description": "Pending member addition requests awaiting admin approval" },
         "createdBy": { "type": "string", "minLength": 1, "maxLength": 120 },
         "createdAt": { "type": "number" },
         "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
@@ -230,6 +231,17 @@
         "tahliyeMinutes": { "type": "number" },
         "warningThresholdPercent": { "type": "number" }
       }
+    },
+    "ChatQuickMessagesSettings": {
+      "title": "ChatQuickMessagesSettings",
+      "description": "Admin-editable quick template messages for internal team chat",
+      "type": "object",
+      "properties": {
+        "messages": { "type": "array", "description": "List of quick message templates" },
+        "updatedBy": { "type": "string", "maxLength": 120 },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["messages"]
     }
   },
   "firestore": {
@@ -280,6 +292,10 @@
     "/settings/sla": {
       "schema": { "$ref": "#/entities/SlaSettings" },
       "description": "Shared SLA target duration settings"
+    },
+    "/settings/chatQuickMessages": {
+      "schema": { "$ref": "#/entities/ChatQuickMessagesSettings" },
+      "description": "Admin-editable quick chat message templates"
     }
   }
 }

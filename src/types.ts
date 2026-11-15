@@ -186,11 +186,18 @@ export interface ChatPresence {
   typingAt?: number | null;
 }
 
+export interface ChatGroupPendingMemberRequest {
+  username: string;
+  requestedBy: string;
+  requestedAt: number;
+}
+
 export interface ChatGroup {
   id: string;
   name: string;
   description?: string;
   members: string[];
+  pendingMemberRequests?: ChatGroupPendingMemberRequest[];
   createdBy: string;
   createdAt: number;
   status?: 'pending' | 'approved' | 'rejected';
@@ -198,6 +205,21 @@ export interface ChatGroup {
   approvedAt?: number;
   rejectedReason?: string;
 }
+
+export interface ChatQuickMessagesSettings {
+  messages: string[];
+  updatedBy?: string;
+  updatedAt?: number;
+}
+
+export const DEFAULT_CHAT_QUICK_MESSAGES: string[] = [
+  'Araç rampaya yanaştı, işlem başlıyor.',
+  'Evraklar kontrol edildi ve onaylandı.',
+  'Acil öncelikli araç için kapı desteği rica ederiz.',
+  'Rampa boşaltıldı, sıradaki araç alınabilir.',
+  'Güvenlik çıkış kontrolü bekleniyor.',
+  'Şoför ile telefon/WhatsApp üzerinden teyit sağlandı.'
+];
 
 export type WhatsAppProvider = 'webhook' | 'greenapi' | 'ultramsg' | 'twilio' | 'sharelink';
 

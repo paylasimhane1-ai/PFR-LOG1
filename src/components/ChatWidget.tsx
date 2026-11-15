@@ -8,7 +8,8 @@ import {
   User,
   Vehicle,
   Ramp,
-  Warehouse
+  Warehouse,
+  DEFAULT_CHAT_QUICK_MESSAGES
 } from '../types';
 import { compressImageFile } from '../utils/helpers';
 import {
@@ -47,7 +48,9 @@ import {
   SlidersHorizontal,
   LogOut,
   AlertCircle,
-  Clock
+  Clock,
+  Plus,
+  RotateCcw
 } from 'lucide-react';
 import { playChime } from '../utils/audio';
 import { sendNativeNotification, loadPushSettings } from '../utils/notifications';
@@ -76,30 +79,25 @@ interface ChatWidgetProps {
   onDeleteMessage?: (id: number) => void;
   onToggleReaction?: (id: number, emoji: string) => void;
   onTogglePinMessage?: (id: number) => void;
-  onClearMessages?: (channelId?: string) => void;
   onMarkMessagesAsRead?: (messageIds: number[]) => void;
   onUpdatePresence?: (typingInChannel: string | null) => void;
   onCreateGroup?: (payload: { name: string; description?: string; members: string[] }) => ChatGroup | undefined | void;
   onApproveGroup?: (groupId: string) => void;
   onRejectGroup?: (groupId: string, reason?: string) => void;
+  onApproveGroupMember?: (groupId: string, username: string) => void;
+  onRejectGroupMember?: (groupId: string, username: string) => void;
   onUpdateGroupMembers?: (groupId: string, members: string[]) => void;
-  onUpdateGroup?: (groupId: string, updates: { name: string; description?: string; members: string[] }) => void;
+  onUpdateGroup?: (groupId: string, updates: { name: string; description?: string; members: string[]; cancelPendingUsernames?: string[] }) => void;
   onLeaveGroup?: (groupId: string) => void;
   onDeleteGroup?: (groupId: string) => void;
+  quickMessages?: string[];
+  onSaveQuickMessages?: (messages: string[]) => void;
   onNavigateToVehicle?: (vehicle: Vehicle) => void;
   onNavigateToRamp?: (ramp: Ramp) => void;
 }
 
 const QUICK_REACTIONS = ['👏', '👍', '✅', '🚨', '👀'];
 const EMOJI_PALETTE = ['👏', '👍', '✅', '🚨', '⚠️', '🚛', '📦', '🏭', '⏱️', '📞', '🙏', '👌', '🔥', '👀', '📌', '💬'];
-const QUICK_TEMPLATES = [
-  'Araç rampaya yanaştı, işlem başlıyor.',
-  'Evraklar kontrol edildi ve onaylandı.',
-  'Acil öncelikli araç için kapı desteği rica ederiz.',
-  'Rampa boşaltıldı, sıradaki araç alınabilir.',
-  'Güvenlik çıkış kontrolü bekleniyor.',
-  'Şoför ile telefon/WhatsApp üzerinden teyit sağlandı.'
-];
 
 export function getDmChannelId(u1: string, u2: string): string {
   const pair = [u1.trim().toLowerCase(), u2.trim().toLowerCase()].sort();
@@ -203,12 +201,13 @@ interface ConversationWindowProps {
   onRejectGroup?: (groupId: string, reason?: string) => void;
   onLeaveGroup?: (groupId: string) => void;
   onDeleteGroup?: (groupId: string) => void;
+  quickMessages: string[];
+  onOpenEditQuickMessages?: () => void;
   onSendMessage: (payload: ChatSendPayload) => void;
   onEditMessage?: (id: number, newText: string) => void;
   onDeleteMessage?: (id: number) => void;
   onToggleReaction?: (id: number, emoji: string) => void;
   onTogglePinMessage?: (id: number) => void;
-  onClearMessages?: (channelId?: string) => void;
   onMarkMessagesAsRead?: (messageIds: number[]) => void;
   onUpdatePresence?: (typingInChannel: string | null) => void;
   onNavigateToVehicle?: (vehicle: Vehicle) => void;
@@ -243,12 +242,13 @@ const ChatConversationWindow: React.FC<ConversationWindowProps> = ({
   onRejectGroup,
   onLeaveGroup,
   onDeleteGroup,
+  quickMessages,
+  onOpenEditQuickMessages,
   onSendMessage,
   onEditMessage,
   onDeleteMessage,
   onToggleReaction,
   onTogglePinMessage,
-  onClearMessages,
   onMarkMessagesAsRead,
   onUpdatePresence,
   onNavigateToVehicle,
@@ -982,25 +982,10 @@ const ChatConversationWindow: React.FC<ConversationWindowProps> = ({
                   </button>
                 )}
 
-              {currentUser.role === 'admin' && onClearMessages && channelMessages.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    onClearMessages(channelId);
-                    setShowHeaderMenu(false);
-                  }}
-                  className="w-full px-3 py-2 text-left hover:bg-red-50 dark:hover:bg-red-950/50 text-red-600 dark:text-red-400 flex items-center gap-2 cursor-pointer"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  <span>Sohbet Geçmişini Temizle</span>
-                </button>
-              )}
-
               {meta.kind === 'group' &&
                 meta.group &&
                 onDeleteGroup &&
-                (currentUser.role === 'admin' ||
-                  meta.group.createdBy.toLowerCase() === myUsernameLower) && (
+                currentUser.role === 'admin' && (
                   <button
                     type="button"
                     onClick={() => {
@@ -1010,7 +995,7 @@ const ChatConversationWindow: React.FC<ConversationWindowProps> = ({
                     className="w-full px-3 py-2 text-left hover:bg-red-50 dark:hover:bg-red-950/50 text-red-600 dark:text-red-400 flex items-center gap-2 cursor-pointer"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
-                    <span>Grubu Kalıcı Sil</span>
+                    <span>Grubu Kalıcı Sil (Admin)</span>
                   </button>
                 )}
             </div>
@@ -1118,6 +1103,29 @@ const ChatConversationWindow: React.FC<ConversationWindowProps> = ({
             )}
         </div>
       )}
+
+      {/* Onay Bekleyen Üye Ekleme Talepleri Bandı (Onaylı Gruplar) */}
+      {meta.kind === 'group' &&
+        meta.group &&
+        (!meta.group.status || meta.group.status === 'approved') &&
+        Array.isArray(meta.group.pendingMemberRequests) &&
+        meta.group.pendingMemberRequests.length > 0 && (
+          <div className="px-3 py-1.5 bg-blue-50 dark:bg-blue-950/40 border-b border-blue-200 dark:border-blue-800/70 flex items-center justify-between gap-2 shrink-0 text-[11px] text-blue-900 dark:text-blue-200">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <Clock className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
+              <span className="truncate font-semibold">
+                {meta.group.pendingMemberRequests.length} üye ekleme talebi Admin onayı bekliyor
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => onOpenManageGroup(meta.group!)}
+              className="px-2 py-0.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-[10px] shrink-0 cursor-pointer"
+            >
+              {currentUser.role === 'admin' ? 'İncele / Onayla' : 'Gör'}
+            </button>
+          </div>
+        )}
 
       {/* Okunmamış Mesaj Bandı */}
       {initialUnreadCount > 0 && (
@@ -1368,7 +1376,7 @@ const ChatConversationWindow: React.FC<ConversationWindowProps> = ({
                     </button>
                   )}
 
-                  {(isMine || currentUser.role === 'admin') && onDeleteMessage && (
+                  {isMine && onDeleteMessage && (
                     confirmDeleteId === m.id ? (
                       <div className="flex items-center gap-1 bg-red-600 text-white px-2 py-0.5 rounded-full text-[10px] font-bold">
                         <button
@@ -1711,21 +1719,59 @@ const ChatConversationWindow: React.FC<ConversationWindowProps> = ({
       )}
 
       {activePopover === 'templates' && (
-        <div className="p-2 bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 space-y-1 max-h-36 overflow-y-auto custom-scroll shrink-0">
-          {QUICK_TEMPLATES.map((tpl) => (
-            <button
-              key={tpl}
-              type="button"
-              onClick={() => {
-                setText((p) => (p ? `${p} ${tpl}` : tpl));
-                setActivePopover('none');
-                inputRef.current?.focus();
-              }}
-              className="w-full text-left px-2.5 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-900 hover:bg-blue-50 dark:hover:bg-blue-950/50 text-[11px] text-slate-700 dark:text-slate-200 cursor-pointer"
-            >
-              {tpl}
-            </button>
-          ))}
+        <div className="p-2 bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 space-y-1.5 max-h-44 overflow-y-auto custom-scroll shrink-0">
+          <div className="flex items-center justify-between px-1 pb-1 border-b border-slate-100 dark:border-slate-700">
+            <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-1">
+              <Zap className="w-3 h-3 text-amber-500" />
+              <span>Hızlı Mesajlar ({quickMessages.length})</span>
+            </span>
+            {currentUser.role === 'admin' && onOpenEditQuickMessages && (
+              <button
+                type="button"
+                onClick={() => {
+                  setActivePopover('none');
+                  onOpenEditQuickMessages();
+                }}
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-amber-100 dark:bg-amber-950/60 hover:bg-amber-200 dark:hover:bg-amber-900/60 text-amber-800 dark:text-amber-200 text-[10px] font-bold cursor-pointer"
+              >
+                <Edit2 className="w-2.5 h-2.5" />
+                <span>Düzenle</span>
+              </button>
+            )}
+          </div>
+          {quickMessages.length === 0 ? (
+            <div className="py-3 text-center text-[11px] text-slate-400 space-y-1.5">
+              <p>Henüz hızlı mesaj tanımlanmamış.</p>
+              {currentUser.role === 'admin' && onOpenEditQuickMessages && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActivePopover('none');
+                    onOpenEditQuickMessages();
+                  }}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-600 text-white text-[10px] font-bold cursor-pointer"
+                >
+                  <Plus className="w-3 h-3" />
+                  <span>Hızlı Mesaj Ekle</span>
+                </button>
+              )}
+            </div>
+          ) : (
+            quickMessages.map((tpl, idx) => (
+              <button
+                key={`${idx}-${tpl}`}
+                type="button"
+                onClick={() => {
+                  setText((p) => (p ? `${p} ${tpl}` : tpl));
+                  setActivePopover('none');
+                  inputRef.current?.focus();
+                }}
+                className="w-full text-left px-2.5 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-900 hover:bg-blue-50 dark:hover:bg-blue-950/50 text-[11px] text-slate-700 dark:text-slate-200 cursor-pointer"
+              >
+                {tpl}
+              </button>
+            ))
+          )}
         </div>
       )}
 
@@ -1868,7 +1914,9 @@ const ChatConversationWindow: React.FC<ConversationWindowProps> = ({
                   <p className="text-[11px] opacity-90 truncate">{meta.group.rejectedReason}</p>
                 )}
               </div>
-              {onDeleteGroup && (
+              {onDeleteGroup &&
+                (currentUser.role === 'admin' ||
+                  meta.group.createdBy.trim().toLowerCase() === myUsernameLower) && (
                 <button
                   type="button"
                   onClick={() => onDeleteGroup(meta.group!.id)}
@@ -2019,16 +2067,19 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
   onDeleteMessage,
   onToggleReaction,
   onTogglePinMessage,
-  onClearMessages,
   onMarkMessagesAsRead,
   onUpdatePresence,
   onCreateGroup,
   onApproveGroup,
   onRejectGroup,
+  onApproveGroupMember,
+  onRejectGroupMember,
   onUpdateGroupMembers,
   onUpdateGroup,
   onLeaveGroup,
   onDeleteGroup,
+  quickMessages = DEFAULT_CHAT_QUICK_MESSAGES,
+  onSaveQuickMessages,
   onNavigateToVehicle,
   onNavigateToRamp
 }) => {
@@ -2058,7 +2109,13 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
   const [editGroupName, setEditGroupName] = useState('');
   const [editGroupDesc, setEditGroupDesc] = useState('');
   const [editMembersDraft, setEditMembersDraft] = useState<string[]>([]);
+  const [cancelPendingDraft, setCancelPendingDraft] = useState<string[]>([]);
   const [manageUserSearch, setManageUserSearch] = useState('');
+
+  // Quick Messages Editor Modal (Admin)
+  const [showQuickMessagesModal, setShowQuickMessagesModal] = useState(false);
+  const [quickMessagesDraft, setQuickMessagesDraft] = useState<string[]>([]);
+  const [newQuickMsgInput, setNewQuickMsgInput] = useState('');
 
   const [lightboxImageUrl, setLightboxImageUrl] = useState<string | null>(null);
   const [isMuted, setIsMuted] = useState<boolean>(() => {
@@ -2143,13 +2200,24 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
     );
   }, [chatGroups, currentUser, myUsernameLower]);
 
-  // Admin approval queue (only visible to admins)
+  // Admin approval queue for new groups (only visible to admins)
   const pendingAdminGroups = useMemo(() => {
     if (!isAdminUser) return [];
     return chatGroups
       .filter((g) => g.status === 'pending')
       .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
   }, [chatGroups, isAdminUser]);
+
+  // Admin approval queue for adding new members to existing groups
+  const pendingMemberAdminRequests = useMemo(() => {
+    if (!isAdminUser) return [];
+    return chatGroups
+      .filter((g) => g.status !== 'rejected' && Array.isArray(g.pendingMemberRequests) && g.pendingMemberRequests.length > 0)
+      .flatMap((g) => (g.pendingMemberRequests || []).map((req) => ({ group: g, req })))
+      .sort((a, b) => (b.req.requestedAt || 0) - (a.req.requestedAt || 0));
+  }, [chatGroups, isAdminUser]);
+
+  const totalAdminPendingCount = pendingAdminGroups.length + pendingMemberAdminRequests.length;
 
   // Requester's own pending or rejected group requests (only visible to creator)
   const myPendingOrRejectedGroups = useMemo(() => {
@@ -2435,7 +2503,14 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
     setEditGroupName(grp.name);
     setEditGroupDesc(grp.description || '');
     setEditMembersDraft(grp.members);
+    setCancelPendingDraft([]);
     setManageUserSearch('');
+  };
+
+  const openQuickMessagesEditor = () => {
+    setQuickMessagesDraft([...quickMessages]);
+    setNewQuickMsgInput('');
+    setShowQuickMessagesModal(true);
   };
 
   const managingGroup = useMemo(
@@ -2461,13 +2536,13 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
   const handleSaveGroupDetails = (e?: React.FormEvent) => {
     e?.preventDefault();
     if (!managingGroup) return;
-    const cleanName = editGroupName.trim();
-    if (!cleanName) return;
+    const cleanName = editGroupName.trim() || managingGroup.name;
     if (onUpdateGroup) {
       onUpdateGroup(managingGroup.id, {
         name: cleanName,
         description: editGroupDesc.trim() || undefined,
-        members: editMembersDraft
+        members: editMembersDraft,
+        cancelPendingUsernames: cancelPendingDraft
       });
     } else if (onUpdateGroupMembers) {
       onUpdateGroupMembers(managingGroup.id, editMembersDraft);
@@ -2520,12 +2595,13 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
             onRejectGroup={onRejectGroup}
             onLeaveGroup={onLeaveGroup}
             onDeleteGroup={onDeleteGroup}
+            quickMessages={quickMessages}
+            onOpenEditQuickMessages={isAdminUser && onSaveQuickMessages ? openQuickMessagesEditor : undefined}
             onSendMessage={onSendMessage}
             onEditMessage={onEditMessage}
             onDeleteMessage={onDeleteMessage}
             onToggleReaction={onToggleReaction}
             onTogglePinMessage={onTogglePinMessage}
-            onClearMessages={onClearMessages}
             onMarkMessagesAsRead={onMarkMessagesAsRead}
             onUpdatePresence={onUpdatePresence}
             onNavigateToVehicle={onNavigateToVehicle}
@@ -2629,6 +2705,19 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
                     <span>Yeni Grup Oluştur</span>
                   </button>
                 )}
+                {isAdminUser && onSaveQuickMessages && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      openQuickMessagesEditor();
+                      setShowDrawerMenu(false);
+                    }}
+                    className="w-full px-3 py-2 text-left hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-2 cursor-pointer"
+                  >
+                    <Zap className="w-3.5 h-3.5 text-amber-500" />
+                    <span>Hızlı Mesajları Düzenle</span>
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -2680,9 +2769,9 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
                     <span className="px-1.5 py-0.2 rounded-full bg-blue-600 text-white text-[10px] font-black tabular-nums">
                       {groupsTabUnread}
                     </span>
-                  ) : isAdminUser && pendingAdminGroups.length > 0 ? (
-                    <span className="px-1.5 py-0.2 rounded-full bg-amber-500 text-slate-950 text-[10px] font-black tabular-nums" title="Onay bekleyen grup talebi">
-                      {pendingAdminGroups.length}
+                  ) : isAdminUser && totalAdminPendingCount > 0 ? (
+                    <span className="px-1.5 py-0.2 rounded-full bg-amber-500 text-slate-950 text-[10px] font-black tabular-nums" title="Onay bekleyen grup ve üye ekleme talebi">
+                      {totalAdminPendingCount}
                     </span>
                   ) : null}
                 </button>
@@ -2712,25 +2801,34 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
               <div className="flex-1 overflow-y-auto custom-scroll">
                 {drawerTab === 'groups' ? (
                   <div className="p-2.5 space-y-3">
-                    {/* Admin Onay Kuyruğu (Masaüstü Çekmece) */}
-                    {isAdminUser && pendingAdminGroups.length > 0 && (
+                    {/* Admin Onay Kuyruğu: Yeni Gruplar & Üye Ekleme (Masaüstü Çekmece) */}
+                    {isAdminUser && totalAdminPendingCount > 0 && (
                       <div className="rounded-xl border border-amber-300 dark:border-amber-700/80 bg-amber-50/70 dark:bg-amber-950/30 p-2 space-y-2">
                         <div className="flex items-center justify-between px-1">
                           <span className="text-[10px] font-black uppercase tracking-wider text-amber-800 dark:text-amber-300 flex items-center gap-1">
                             <Clock className="w-3 h-3" />
-                            <span>Onay Bekleyenler ({pendingAdminGroups.length})</span>
+                            <span>Onay Bekleyenler ({totalAdminPendingCount})</span>
                           </span>
                         </div>
                         <div className="space-y-1.5">
                           {pendingAdminGroups.map((pg) => (
                             <div key={pg.id} className="p-2 rounded-lg bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-800/60 space-y-1.5">
                               <div className="flex items-start justify-between gap-2">
-                                <div className="min-w-0">
-                                  <div className="font-bold text-xs text-slate-900 dark:text-white truncate">{pg.name}</div>
+                                <button
+                                  type="button"
+                                  onClick={() => openConversation(pg.id)}
+                                  className="min-w-0 text-left cursor-pointer"
+                                >
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="font-bold text-xs text-slate-900 dark:text-white truncate">{pg.name}</span>
+                                    <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-200 shrink-0">
+                                      Yeni Grup
+                                    </span>
+                                  </div>
                                   <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate">
                                     Talep: <strong>{pg.createdBy}</strong> · {pg.members.length} üye
                                   </div>
-                                </div>
+                                </button>
                               </div>
                               <div className="flex items-center gap-1.5">
                                 {onApproveGroup && (
@@ -2782,6 +2880,44 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
                               )}
                             </div>
                           ))}
+
+                          {pendingMemberAdminRequests.map(({ group, req }) => (
+                            <div key={`${group.id}__${req.username}`} className="p-2 rounded-lg bg-white dark:bg-slate-900 border border-blue-200 dark:border-blue-800/60 space-y-1.5">
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="font-bold text-xs text-slate-900 dark:text-white truncate">{req.username}</span>
+                                  <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-blue-100 dark:bg-blue-950/70 text-blue-700 dark:text-blue-200 shrink-0">
+                                    Üye Ekleme
+                                  </span>
+                                </div>
+                                <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate">
+                                  Grup: <strong>{group.name}</strong> · Talep: {req.requestedBy}
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                {onApproveGroupMember && (
+                                  <button
+                                    type="button"
+                                    onClick={() => onApproveGroupMember(group.id, req.username)}
+                                    className="flex-1 py-1 px-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold flex items-center justify-center gap-1 cursor-pointer"
+                                  >
+                                    <Check className="w-3 h-3" />
+                                    <span>Üyeyi Onayla</span>
+                                  </button>
+                                )}
+                                {onRejectGroupMember && (
+                                  <button
+                                    type="button"
+                                    onClick={() => onRejectGroupMember(group.id, req.username)}
+                                    className="flex-1 py-1 px-2 rounded-lg bg-red-50 dark:bg-red-950/60 hover:bg-red-100 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800 text-[10px] font-bold flex items-center justify-center gap-1 cursor-pointer"
+                                  >
+                                    <X className="w-3 h-3" />
+                                    <span>Reddet</span>
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          ))}
                         </div>
                       </div>
                     )}
@@ -2824,7 +2960,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
                                   : `Admin onayı bekleniyor · ${pg.members.length} üye`}
                               </p>
                             </button>
-                            {onDeleteGroup && (
+                            {onDeleteGroup && (pg.status === 'pending' || pg.status === 'rejected') && (
                               <button
                                 type="button"
                                 onClick={() => onDeleteGroup(pg.id)}
@@ -3123,6 +3259,16 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
                   </div>
 
                   <div className="flex items-center gap-1">
+                    {isAdminUser && onSaveQuickMessages && (
+                      <button
+                        type="button"
+                        onClick={openQuickMessagesEditor}
+                        title="Hızlı Mesajları Düzenle"
+                        className="p-1.5 rounded-xl bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-200 cursor-pointer"
+                      >
+                        <Zap className="w-4 h-4" />
+                      </button>
+                    )}
                     {onCreateGroup && (
                       <button
                         type="button"
@@ -3185,9 +3331,9 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
                       <span className="px-1.5 py-0.2 rounded-full bg-blue-600 text-white text-[10px] font-black tabular-nums">
                         {groupsTabUnread}
                       </span>
-                    ) : isAdminUser && pendingAdminGroups.length > 0 ? (
+                    ) : isAdminUser && totalAdminPendingCount > 0 ? (
                       <span className="px-1.5 py-0.2 rounded-full bg-amber-500 text-slate-950 text-[10px] font-black tabular-nums">
-                        {pendingAdminGroups.length}
+                        {totalAdminPendingCount}
                       </span>
                     ) : null}
                   </button>
@@ -3216,22 +3362,31 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
                 <div className="flex-1 overflow-y-auto">
                   {drawerTab === 'groups' ? (
                     <div className="p-2.5 space-y-3">
-                      {/* Admin Onay Kuyruğu (Mobil) */}
-                      {isAdminUser && pendingAdminGroups.length > 0 && (
+                      {/* Admin Onay Kuyruğu: Yeni Gruplar & Üye Ekleme (Mobil) */}
+                      {isAdminUser && totalAdminPendingCount > 0 && (
                         <div className="rounded-xl border border-amber-300 dark:border-amber-700/80 bg-amber-50/70 dark:bg-amber-950/30 p-2.5 space-y-2">
                           <div className="text-[10px] font-black uppercase tracking-wider text-amber-800 dark:text-amber-300 flex items-center gap-1">
                             <Clock className="w-3.5 h-3.5" />
-                            <span>Onay Bekleyenler ({pendingAdminGroups.length})</span>
+                            <span>Onay Bekleyenler ({totalAdminPendingCount})</span>
                           </div>
                           <div className="space-y-2">
                             {pendingAdminGroups.map((pg) => (
                               <div key={pg.id} className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-800/60 space-y-2">
-                                <div>
-                                  <div className="font-bold text-xs text-slate-900 dark:text-white">{pg.name}</div>
+                                <button
+                                  type="button"
+                                  onClick={() => openConversation(pg.id)}
+                                  className="w-full text-left cursor-pointer"
+                                >
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="font-bold text-xs text-slate-900 dark:text-white truncate">{pg.name}</span>
+                                    <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-200 shrink-0">
+                                      Yeni Grup
+                                    </span>
+                                  </div>
                                   <div className="text-[11px] text-slate-500 dark:text-slate-400">
                                     Talep: <strong>{pg.createdBy}</strong> · {pg.members.length} üye
                                   </div>
-                                </div>
+                                </button>
                                 <div className="flex items-center gap-2">
                                   {onApproveGroup && (
                                     <button
@@ -3282,6 +3437,44 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
                                 )}
                               </div>
                             ))}
+
+                            {pendingMemberAdminRequests.map(({ group, req }) => (
+                              <div key={`${group.id}__${req.username}`} className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-blue-200 dark:border-blue-800/60 space-y-2">
+                                <div>
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="font-bold text-xs text-slate-900 dark:text-white truncate">{req.username}</span>
+                                    <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-blue-100 dark:bg-blue-950/70 text-blue-700 dark:text-blue-200 shrink-0">
+                                      Üye Ekleme
+                                    </span>
+                                  </div>
+                                  <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                                    Grup: <strong>{group.name}</strong> · Talep: {req.requestedBy}
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  {onApproveGroupMember && (
+                                    <button
+                                      type="button"
+                                      onClick={() => onApproveGroupMember(group.id, req.username)}
+                                      className="flex-1 py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center justify-center gap-1 cursor-pointer"
+                                    >
+                                      <Check className="w-3.5 h-3.5" />
+                                      <span>Üyeyi Onayla</span>
+                                    </button>
+                                  )}
+                                  {onRejectGroupMember && (
+                                    <button
+                                      type="button"
+                                      onClick={() => onRejectGroupMember(group.id, req.username)}
+                                      className="flex-1 py-2 px-3 rounded-xl bg-red-50 dark:bg-red-950/60 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800 text-xs font-bold flex items-center justify-center gap-1 cursor-pointer"
+                                    >
+                                      <X className="w-3.5 h-3.5" />
+                                      <span>Reddet</span>
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
                           </div>
                         </div>
                       )}
@@ -3324,7 +3517,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
                                     : `Admin onayı bekleniyor · ${pg.members.length} üye`}
                                 </p>
                               </button>
-                              {onDeleteGroup && (
+                              {onDeleteGroup && (pg.status === 'pending' || pg.status === 'rejected') && (
                                 <button
                                   type="button"
                                   onClick={() => onDeleteGroup(pg.id)}
@@ -3539,12 +3732,13 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
                 onRejectGroup={onRejectGroup}
                 onLeaveGroup={onLeaveGroup}
                 onDeleteGroup={onDeleteGroup}
+                quickMessages={quickMessages}
+                onOpenEditQuickMessages={isAdminUser && onSaveQuickMessages ? openQuickMessagesEditor : undefined}
                 onSendMessage={onSendMessage}
                 onEditMessage={onEditMessage}
                 onDeleteMessage={onDeleteMessage}
                 onToggleReaction={onToggleReaction}
                 onTogglePinMessage={onTogglePinMessage}
-                onClearMessages={onClearMessages}
                 onMarkMessagesAsRead={onMarkMessagesAsRead}
                 onUpdatePresence={onUpdatePresence}
                 onNavigateToVehicle={onNavigateToVehicle}
@@ -3683,18 +3877,36 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
         </div>
       )}
 
-      {managingGroup && (
+      {managingGroup && (() => {
+        const isGroupCreator = managingGroup.createdBy.trim().toLowerCase() === myUsernameLower;
+        const canEditMeta = isAdminUser || isGroupCreator;
+        const existingLowerSet = new Set(managingGroup.members.map((m) => m.trim().toLowerCase()));
+        const pendingRequests = managingGroup.pendingMemberRequests || [];
+        const pendingLowerSet = new Set(pendingRequests.map((r) => r.username.trim().toLowerCase()));
+        const cancelSet = new Set(cancelPendingDraft.map((u) => u.trim().toLowerCase()));
+        const newPendingAdditionsCount = isAdminUser
+          ? 0
+          : editMembersDraft.filter((m) => {
+              const l = m.trim().toLowerCase();
+              return !existingLowerSet.has(l) && !pendingLowerSet.has(l);
+            }).length;
+
+        return (
         <div className="fixed inset-0 z-[75] bg-slate-950/75 backdrop-blur-xs flex items-center justify-center p-4">
           <form
             onSubmit={handleSaveGroupDetails}
-            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"
+            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden max-h-[90dvh] flex flex-col"
           >
-            <div className="px-4 py-3 bg-slate-900 text-white flex items-center justify-between">
+            <div className="px-4 py-3 bg-slate-900 text-white flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2 min-w-0">
                 <UserPlus className="w-5 h-5 text-emerald-400 shrink-0" />
                 <div className="min-w-0">
                   <h4 className="font-bold text-sm truncate">{managingGroup.name} — Grup & Üye Yönetimi</h4>
-                  <p className="text-[10px] text-slate-400">Grup adını, açıklamasını ve üyeleri düzenleyin</p>
+                  <p className="text-[10px] text-slate-400">
+                    {isAdminUser
+                      ? 'Grup adını, açıklamasını ve üyeleri yönetin'
+                      : 'Yeni üye ekleme talepleri Admin onayından geçer'}
+                  </p>
                 </div>
               </div>
               <button type="button" onClick={() => setManagingGroupId(null)} className="p-1 hover:bg-white/10 rounded-full cursor-pointer">
@@ -3702,35 +3914,95 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
               </button>
             </div>
 
-            <div className="p-4 space-y-3 text-xs">
-              <div>
-                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Grup Adı *</label>
-                <input
-                  type="text"
-                  required
-                  maxLength={80}
-                  value={editGroupName}
-                  onChange={(e) => setEditGroupName(e.target.value)}
-                  placeholder="Grup adı"
-                  className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-emerald-500"
-                />
-              </div>
+            <div className="p-4 space-y-3 text-xs overflow-y-auto custom-scroll">
+              {!isAdminUser && (
+                <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/70 text-amber-900 dark:text-amber-200 text-[11px] flex items-start gap-2">
+                  <Clock className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                  <span>
+                    Gruba yeni kişi ekleme talepleri <strong>Admin onayından</strong> geçtikten sonra kişi gruba dahil edilir.
+                  </span>
+                </div>
+              )}
 
-              <div>
-                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Açıklama (Opsiyonel)</label>
-                <input
-                  type="text"
-                  maxLength={150}
-                  value={editGroupDesc}
-                  onChange={(e) => setEditGroupDesc(e.target.value)}
-                  placeholder="Kısa ekip veya vardiya açıklaması"
-                  className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white outline-none"
-                />
-              </div>
+              {isAdminUser && pendingRequests.length > 0 && (
+                <div className="p-2.5 rounded-xl bg-blue-50 dark:bg-blue-950/35 border border-blue-200 dark:border-blue-800/70 space-y-2">
+                  <div className="text-[10px] font-black uppercase tracking-wider text-blue-800 dark:text-blue-300 flex items-center gap-1">
+                    <Clock className="w-3.5 h-3.5" />
+                    <span>Onay Bekleyen Üye Talepleri ({pendingRequests.length})</span>
+                  </div>
+                  <div className="space-y-1.5">
+                    {pendingRequests.map((req) => (
+                      <div key={req.username} className="flex items-center justify-between gap-2 p-2 rounded-lg bg-white dark:bg-slate-900 border border-blue-200 dark:border-blue-800/60">
+                        <div className="min-w-0">
+                          <div className="font-bold text-slate-900 dark:text-white truncate">{req.username}</div>
+                          <div className="text-[10px] text-slate-500 dark:text-slate-400">Talep: {req.requestedBy}</div>
+                        </div>
+                        <div className="flex items-center gap-1 shrink-0">
+                          {onApproveGroupMember && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                onApproveGroupMember(managingGroup.id, req.username);
+                                setEditMembersDraft((prev) =>
+                                  prev.some((m) => m.toLowerCase() === req.username.toLowerCase())
+                                    ? prev
+                                    : [...prev, req.username]
+                                );
+                              }}
+                              className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold flex items-center gap-1 cursor-pointer"
+                            >
+                              <Check className="w-3 h-3" />
+                              <span>Onayla</span>
+                            </button>
+                          )}
+                          {onRejectGroupMember && (
+                            <button
+                              type="button"
+                              onClick={() => onRejectGroupMember(managingGroup.id, req.username)}
+                              className="px-2.5 py-1 rounded-lg bg-red-50 dark:bg-red-950/60 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800 text-[10px] font-bold cursor-pointer"
+                            >
+                              Reddet
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {canEditMeta && (
+                <>
+                  <div>
+                    <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Grup Adı *</label>
+                    <input
+                      type="text"
+                      required
+                      maxLength={80}
+                      value={editGroupName}
+                      onChange={(e) => setEditGroupName(e.target.value)}
+                      placeholder="Grup adı"
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Açıklama (Opsiyonel)</label>
+                    <input
+                      type="text"
+                      maxLength={150}
+                      value={editGroupDesc}
+                      onChange={(e) => setEditGroupDesc(e.target.value)}
+                      placeholder="Kısa ekip veya vardiya açıklaması"
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white outline-none"
+                    />
+                  </div>
+                </>
+              )}
 
               <div>
                 <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Üyeler ({editMembersDraft.length} kişi)
+                  Üyeler ({managingGroup.members.length} onaylı{pendingRequests.length > 0 ? ` · ${pendingRequests.length} onay bekliyor` : ''})
                 </label>
                 <input
                   type="text"
@@ -3745,34 +4017,60 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
                     .filter((u) => u.role !== 'guest')
                     .filter((u) => !manageUserSearch.trim() || u.username.toLowerCase().includes(manageUserSearch.trim().toLowerCase()))
                     .map((u) => {
-                      const isCreator = u.username.toLowerCase() === managingGroup.createdBy.toLowerCase();
-                      const isMember = editMembersDraft.some((m) => m.toLowerCase() === u.username.toLowerCase()) || isCreator;
-                      const isOnline = onlineUsernamesSet.has(u.username.trim().toLowerCase());
+                      const uLower = u.username.trim().toLowerCase();
+                      const isCreator = uLower === managingGroup.createdBy.trim().toLowerCase();
+                      const isExistingMember = existingLowerSet.has(uLower) || isCreator;
+                      const isAlreadyPending = pendingLowerSet.has(uLower) && !cancelSet.has(uLower);
+                      const isDraftChecked = editMembersDraft.some((m) => m.trim().toLowerCase() === uLower) || isCreator;
+                      const checked = isDraftChecked || isAlreadyPending;
+                      const isNewlySelectedForApproval = !isAdminUser && !isExistingMember && !pendingLowerSet.has(uLower) && isDraftChecked;
+                      const disableCheckbox = isCreator || (!isAdminUser && !isGroupCreator && isExistingMember);
+                      const isOnline = onlineUsernamesSet.has(uLower);
+
                       return (
                         <label
                           key={u.username}
                           className="flex items-center justify-between px-3 py-2 hover:bg-slate-50 dark:hover:bg-slate-800/70 cursor-pointer"
                         >
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 min-w-0">
                             <input
                               type="checkbox"
-                              disabled={isCreator}
-                              checked={isMember}
-                              onChange={() =>
+                              disabled={disableCheckbox}
+                              checked={checked}
+                              onChange={() => {
+                                if (pendingLowerSet.has(uLower) && !isAdminUser) {
+                                  // Toggle pending cancellation for non-admin
+                                  setCancelPendingDraft((prev) =>
+                                    prev.some((x) => x.toLowerCase() === uLower)
+                                      ? prev.filter((x) => x.toLowerCase() !== uLower)
+                                      : [...prev, u.username]
+                                  );
+                                  return;
+                                }
                                 setEditMembersDraft((prev) =>
-                                  isMember
-                                    ? prev.filter((m) => m.toLowerCase() !== u.username.toLowerCase())
+                                  isDraftChecked
+                                    ? prev.filter((m) => m.trim().toLowerCase() !== uLower)
                                     : [...prev, u.username]
-                                )
-                              }
+                                );
+                              }}
                               className="w-4 h-4 accent-emerald-600 rounded disabled:opacity-60"
                             />
-                            <span className="font-bold text-slate-800 dark:text-slate-100">{u.username}</span>
-                            <span className="text-[10px] px-1.5 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-slate-500">
+                            <span className="font-bold text-slate-800 dark:text-slate-100 truncate">{u.username}</span>
+                            <span className="text-[10px] px-1.5 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 shrink-0">
                               {isCreator ? 'Kurucu' : getRoleLabel(u.role)}
                             </span>
+                            {isAlreadyPending && (
+                              <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-200 shrink-0">
+                                Onay Bekliyor
+                              </span>
+                            )}
+                            {isNewlySelectedForApproval && (
+                              <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-200 shrink-0">
+                                Onaya Gidecek
+                              </span>
+                            )}
                           </div>
-                          <span className={`w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600'}`} />
+                          <span className={`w-2 h-2 rounded-full shrink-0 ${isOnline ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600'}`} />
                         </label>
                       );
                     })}
@@ -3780,9 +4078,9 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
               </div>
             </div>
 
-            <div className="px-4 py-3 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between gap-2 flex-wrap">
+            <div className="px-4 py-3 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between gap-2 flex-wrap shrink-0">
               <div>
-                {onLeaveGroup && managingGroup.createdBy.trim().toLowerCase() !== myUsernameLower ? (
+                {onLeaveGroup && !isGroupCreator ? (
                   <button
                     type="button"
                     onClick={() => {
@@ -3796,7 +4094,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
                   </button>
                 ) : (
                   <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
-                    Toplam {editMembersDraft.length} üye
+                    Toplam {managingGroup.members.length} onaylı üye
                   </span>
                 )}
               </div>
@@ -3813,11 +4111,180 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
                   disabled={!editGroupName.trim()}
                   className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs cursor-pointer disabled:opacity-40"
                 >
-                  Değişiklikleri Kaydet
+                  {!isAdminUser && newPendingAdditionsCount > 0
+                    ? `Üye Talebi Gönder (+${newPendingAdditionsCount})`
+                    : 'Değişiklikleri Kaydet'}
                 </button>
               </div>
             </div>
           </form>
+        </div>
+        );
+      })()}
+
+      {/* Admin: Sohbet Hızlı Mesajları Düzenleme Modalı */}
+      {showQuickMessagesModal && isAdminUser && (
+        <div className="fixed inset-0 z-[76] bg-slate-950/75 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden max-h-[90dvh] flex flex-col">
+            <div className="px-4 py-3 bg-slate-900 text-white flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2">
+                <Zap className="w-5 h-5 text-amber-400" />
+                <div>
+                  <h4 className="font-bold text-sm">Sohbet Hızlı Mesajlarını Düzenle</h4>
+                  <p className="text-[10px] text-slate-400">
+                    Tüm ekip üyelerinin sohbet penceresinde görünen hazır şablonları yönetin
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowQuickMessagesModal(false)}
+                className="p-1 hover:bg-white/10 rounded-full cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-4 space-y-3 text-xs overflow-y-auto custom-scroll">
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  maxLength={300}
+                  value={newQuickMsgInput}
+                  onChange={(e) => setNewQuickMsgInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      const val = newQuickMsgInput.trim();
+                      if (!val || quickMessagesDraft.length >= 50) return;
+                      setQuickMessagesDraft((prev) => [...prev, val]);
+                      setNewQuickMsgInput('');
+                    }
+                  }}
+                  placeholder="Yeni hızlı mesaj yazın..."
+                  className="flex-1 px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-amber-500"
+                />
+                <button
+                  type="button"
+                  disabled={!newQuickMsgInput.trim() || quickMessagesDraft.length >= 50}
+                  onClick={() => {
+                    const val = newQuickMsgInput.trim();
+                    if (!val || quickMessagesDraft.length >= 50) return;
+                    setQuickMessagesDraft((prev) => [...prev, val]);
+                    setNewQuickMsgInput('');
+                  }}
+                  className="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs flex items-center gap-1 cursor-pointer disabled:opacity-40 shrink-0"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Ekle</span>
+                </button>
+              </div>
+
+              <div className="space-y-1.5">
+                {quickMessagesDraft.length === 0 ? (
+                  <div className="p-5 text-center rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 text-slate-400">
+                    Liste boş. Yukarıdan yeni hızlı mesaj ekleyebilir veya varsayılanları yükleyebilirsiniz.
+                  </div>
+                ) : (
+                  quickMessagesDraft.map((msg, idx) => (
+                    <div
+                      key={idx}
+                      className="flex items-center gap-1.5 p-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60"
+                    >
+                      <span className="w-5 text-center text-[10px] font-bold text-slate-400 tabular-nums shrink-0">
+                        {idx + 1}.
+                      </span>
+                      <input
+                        type="text"
+                        maxLength={300}
+                        value={msg}
+                        onChange={(e) =>
+                          setQuickMessagesDraft((prev) =>
+                            prev.map((item, i) => (i === idx ? e.target.value : item))
+                          )
+                        }
+                        className="flex-1 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-xs outline-none focus:ring-1 focus:ring-amber-500"
+                      />
+                      <button
+                        type="button"
+                        disabled={idx === 0}
+                        onClick={() => {
+                          if (idx === 0) return;
+                          setQuickMessagesDraft((prev) => {
+                            const next = [...prev];
+                            [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
+                            return next;
+                          });
+                        }}
+                        title="Yukarı Taşı"
+                        className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-30 cursor-pointer shrink-0"
+                      >
+                        <ChevronUp className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        disabled={idx === quickMessagesDraft.length - 1}
+                        onClick={() => {
+                          if (idx === quickMessagesDraft.length - 1) return;
+                          setQuickMessagesDraft((prev) => {
+                            const next = [...prev];
+                            [next[idx], next[idx + 1]] = [next[idx + 1], next[idx]];
+                            return next;
+                          });
+                        }}
+                        title="Aşağı Taşı"
+                        className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-30 cursor-pointer shrink-0"
+                      >
+                        <ChevronDown className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setQuickMessagesDraft((prev) => prev.filter((_, i) => i !== idx))
+                        }
+                        title="Sil"
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/50 cursor-pointer shrink-0"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            <div className="px-4 py-3 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between gap-2 flex-wrap shrink-0">
+              <button
+                type="button"
+                onClick={() => setQuickMessagesDraft([...DEFAULT_CHAT_QUICK_MESSAGES])}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 font-bold text-xs cursor-pointer"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>Varsayılanlara Dön</span>
+              </button>
+
+              <div className="flex items-center gap-2 ml-auto">
+                <button
+                  type="button"
+                  onClick={() => setShowQuickMessagesModal(false)}
+                  className="px-3.5 py-2 rounded-xl border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 font-bold text-xs cursor-pointer"
+                >
+                  İptal
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onSaveQuickMessages?.(quickMessagesDraft);
+                    setShowQuickMessagesModal(false);
+                  }}
+                  className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Check className="w-3.5 h-3.5" />
+                  <span>Kaydet</span>
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 

@@ -202,11 +202,16 @@ service cloud.firestore {
 
     function isValidChatGroup(d) {
       return d.keys().hasAll(['id', 'name', 'members', 'createdBy', 'createdAt']) &&
-        d.keys().hasOnly(['id', 'name', 'description', 'members', 'createdBy', 'createdAt', 'status', 'approvedBy', 'approvedAt', 'rejectedReason']) &&
+        d.keys().hasOnly(['id', 'name', 'description', 'members', 'pendingMemberRequests', 'createdBy', 'createdAt', 'status', 'approvedBy', 'approvedAt', 'rejectedReason']) &&
         d.id is string && d.id.size() >= 1 && d.id.size() <= 128 &&
         d.name is string && d.name.size() >= 1 && d.name.size() <= 80 &&
         isOptStr(d, 'description', 200) &&
         d.members is list && d.members.size() >= 1 && d.members.size() <= 200 && d.members[0] is string &&
+        (!('pendingMemberRequests' in d) || d.pendingMemberRequests == null || (
+          d.pendingMemberRequests is list &&
+          d.pendingMemberRequests.size() <= 100 &&
+          (d.pendingMemberRequests.size() == 0 || d.pendingMemberRequests[0] is map)
+        )) &&
         d.createdBy is string && d.createdBy.size() >= 1 && d.createdBy.size() <= 120 &&
         d.createdAt is number &&
         (!('status' in d) || d.status == null || d.status in ['pending', 'approved', 'rejected']) &&
@@ -286,6 +291,15 @@ service cloud.firestore {
         d.warningThresholdPercent is number && d.warningThresholdPercent >= 10 && d.warningThresholdPercent <= 100;
     }
 
+    function isValidChatQuickMessagesSettings(d) {
+      return d.keys().hasAll(['messages']) &&
+        d.keys().hasOnly(['messages', 'updatedBy', 'updatedAt']) &&
+        d.messages is list && d.messages.size() <= 50 &&
+        (d.messages.size() == 0 || (d.messages[0] is string && d.messages[0].size() <= 300)) &&
+        isOptStr(d, 'updatedBy', 120) &&
+        isOptNum(d, 'updatedAt');
+    }
+
     match /vehicles/{vehicleId} {
       allow read: if true;
       allow create, update: if isNumericId(vehicleId) && isValidVehicle(incoming());
@@ -347,9 +361,10 @@ service cloud.firestore {
     }
 
     match /settings/{settingId} {
-      allow read: if settingId in ['whatsapp', 'sla'];
+      allow read: if settingId in ['whatsapp', 'sla', 'chatQuickMessages'];
       allow create, update: if (settingId == 'whatsapp' && isValidWhatsAppSettings(incoming())) ||
-        (settingId == 'sla' && isValidSlaSettings(incoming()));
+        (settingId == 'sla' && isValidSlaSettings(incoming())) ||
+        (settingId == 'chatQuickMessages' && isValidChatQuickMessagesSettings(incoming()));
       allow delete: if false;
     }
 

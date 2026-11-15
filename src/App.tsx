@@ -13,7 +13,9 @@ import {
   Customer,
   WhatsAppConfig,
   PushNotificationSettings,
-  SlaSettings
+  SlaSettings,
+  DEFAULT_CHAT_QUICK_MESSAGES,
+  ChatGroupPendingMemberRequest
 } from './types';
 import {
   initialWarehouses,
@@ -157,6 +159,8 @@ import {
   saveRampsBatchToFirestore,
   subscribeToSlaSettings,
   saveSlaSettingsToFirestore,
+  subscribeToChatQuickMessages,
+  saveChatQuickMessagesToFirestore,
   subscribeToFirestoreErrors
 } from './lib/firebase';
 
@@ -249,6 +253,7 @@ export default function App() {
   });
   const [chatPresences, setChatPresences] = useState<ChatPresence[]>([]);
   const [chatGroups, setChatGroups] = useState<ChatGroup[]>([]);
+  const [chatQuickMessages, setChatQuickMessages] = useState<string[]>(DEFAULT_CHAT_QUICK_MESSAGES);
 
   // Modal Visibility States
   const [showAddExpectedModal, setShowAddExpectedModal] = useState(false);
@@ -740,6 +745,12 @@ export default function App() {
       }
     });
 
+    const unsubChatQuickMessages = subscribeToChatQuickMessages((remoteQuick) => {
+      if (remoteQuick && Array.isArray(remoteQuick.messages)) {
+        setChatQuickMessages(remoteQuick.messages);
+      }
+    });
+
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
@@ -756,6 +767,7 @@ export default function App() {
       unsubCustomers();
       unsubWhatsApp();
       unsubSla();
+      unsubChatQuickMessages();
     };
   }, []);
 
@@ -921,9 +933,18 @@ export default function App() {
     return scopedNotifications.filter((n) => n.status === 'BEKLİYOR').length;
   }, [scopedNotifications, currentUser]);
 
-  // Admin onayı bekleyen yeni sohbet grubu sayısı
+  // Admin onayı bekleyen yeni sohbet grubu ve gruba üye ekleme talebi sayısı
   const pendingChatGroupsCount = useMemo(
-    () => chatGroups.filter((g) => g.status === 'pending').length,
+    () =>
+      chatGroups.filter((g) => g.status === 'pending').length +
+      chatGroups.reduce(
+        (sum, g) =>
+          sum +
+          (g.status !== 'rejected' && Array.isArray(g.pendingMemberRequests)
+            ? g.pendingMemberRequests.length
+            : 0),
+        0
+      ),
     [chatGroups]
   );
 
@@ -3346,6 +3367,13 @@ export default function App() {
   };
 
   const handleDeleteChatMessage = (id: number) => {
+    if (!currentUser) return;
+    const target = chatMessages.find((m) => m.id === id);
+    if (!target) return;
+    if (target.sender.trim().toLowerCase() !== currentUser.username.trim().toLowerCase()) {
+      showToast('Sadece kendi gönderdiğiniz mesajları silebilirsiniz.', 'warning');
+      return;
+    }
     setChatMessages((prev) => prev.filter((m) => m.id !== id));
     deleteChatMessageFromFirestore(id);
     showToast('Mesaj silindi.', 'info');
@@ -3422,20 +3450,10 @@ export default function App() {
     });
   }, [currentUser]);
 
-  const handleClearChatMessages = (channelId?: string) => {
-    const isChannelClear = Boolean(channelId);
-    askConfirm(
-      isChannelClear ? 'Sohbet Geçmişini Temizle' : 'Tüm Sohbet Geçmişini Temizle',
-      isChannelClear
-        ? 'Bu sohbetteki tüm mesajlaşma geçmişini kalıcı olarak silmek istediğinizden emin misiniz? Bu işlem tüm cihazlarda geçerli olacaktır.'
-        : 'Tüm sohbet geçmişini kalıcı olarak silmek istediğinizden emin misiniz? Bu işlem tüm cihazlarda geçerli olacaktır.',
-      () => {
-        setChatMessages((prev) => (channelId ? prev.filter((m) => (m.channelId || '') !== channelId) : []));
-        clearChatMessagesFromFirestore(channelId);
-        showToast(isChannelClear ? 'Sohbet geçmişi temizlendi.' : 'Tüm sohbet geçmişi temizlendi.', 'info');
-      },
-      'danger',
-      isChannelClear ? 'Evet, Temizle' : 'Evet, Tümünü Sil'
+  const handleClearChatMessages = (_channelId?: string) => {
+    showToast(
+      'Sohbet geçmişini koruma kuralı gereği toplu sohbet temizleme kapalıdır; üyeler yalnızca kendi mesajlarını silebilir.',
+      'warning'
     );
   };
 
@@ -3547,7 +3565,10 @@ export default function App() {
       createdAt: target.createdAt,
       status: 'approved',
       approvedBy: currentUser.username,
-      approvedAt: Date.now()
+      approvedAt: Date.now(),
+      ...(target.pendingMemberRequests && target.pendingMemberRequests.length > 0
+        ? { pendingMemberRequests: target.pendingMemberRequests }
+        : {})
     };
     setChatGroups((prev) => prev.map((g) => (g.id === groupId ? updated : g)));
     saveChatGroupToFirestore(updated);
@@ -3578,35 +3599,211 @@ export default function App() {
     if (!currentUser) return;
     const target = chatGroups.find((g) => g.id === groupId);
     if (!target) return;
-    const uniqueMembers = Array.from(
+    const isAdminUser = currentUser.role === 'admin';
+    const existingLower = new Set(target.members.map((m) => m.trim().toLowerCase()));
+    const requestedMembers = Array.from(
       new Set([target.createdBy, ...members].map((m) => m.trim()).filter(Boolean))
     );
-    const updated: ChatGroup = { ...target, members: uniqueMembers };
+
+    if (isAdminUser) {
+      const requestedLower = new Set(requestedMembers.map((m) => m.toLowerCase()));
+      const remainingPending = (target.pendingMemberRequests || []).filter(
+        (req) => !requestedLower.has(req.username.trim().toLowerCase())
+      );
+      const updated: ChatGroup = {
+        ...target,
+        members: requestedMembers,
+        pendingMemberRequests: remainingPending
+      };
+      setChatGroups((prev) => prev.map((g) => (g.id === groupId ? updated : g)));
+      saveChatGroupToFirestore(updated);
+      showToast(`"${target.name}" grup üyeleri güncellendi (${requestedMembers.length} kişi).`, 'success');
+      return;
+    }
+
+    const existingPending = target.pendingMemberRequests || [];
+    const pendingLower = new Set(existingPending.map((r) => r.username.trim().toLowerCase()));
+    const nowTs = Date.now();
+    const newlyAddedRequests: ChatGroupPendingMemberRequest[] = [];
+
+    requestedMembers.forEach((m) => {
+      const lower = m.toLowerCase();
+      if (!existingLower.has(lower) && !pendingLower.has(lower)) {
+        pendingLower.add(lower);
+        newlyAddedRequests.push({
+          username: m,
+          requestedBy: currentUser.username,
+          requestedAt: nowTs
+        });
+      }
+    });
+
+    if (newlyAddedRequests.length === 0) return;
+
+    const updated: ChatGroup = {
+      ...target,
+      pendingMemberRequests: [...existingPending, ...newlyAddedRequests]
+    };
     setChatGroups((prev) => prev.map((g) => (g.id === groupId ? updated : g)));
     saveChatGroupToFirestore(updated);
-    showToast(`"${target.name}" grup üyeleri güncellendi (${uniqueMembers.length} kişi).`, 'success');
+    showToast(
+      `"${target.name}" grubuna ${newlyAddedRequests.length} yeni üye ekleme talebi Admin onayına gönderildi.`,
+      'info'
+    );
   };
 
   const handleUpdateChatGroup = (
     groupId: string,
-    updates: { name: string; description?: string; members: string[] }
+    updates: { name: string; description?: string; members: string[]; cancelPendingUsernames?: string[] }
   ) => {
     if (!currentUser) return;
     const target = chatGroups.find((g) => g.id === groupId);
     if (!target) return;
+    const isAdminUser = currentUser.role === 'admin';
+    const isCreator = target.createdBy.trim().toLowerCase() === currentUser.username.trim().toLowerCase();
     const cleanName = updates.name.trim() || target.name;
-    const uniqueMembers = Array.from(
+    const cleanDesc = updates.description?.trim() || undefined;
+    const requestedMembers = Array.from(
       new Set([target.createdBy, ...updates.members].map((m) => m.trim()).filter(Boolean))
     );
+    const existingLower = new Set(target.members.map((m) => m.trim().toLowerCase()));
+
+    if (isAdminUser) {
+      const requestedLower = new Set(requestedMembers.map((m) => m.toLowerCase()));
+      const remainingPending = (target.pendingMemberRequests || []).filter(
+        (req) => !requestedLower.has(req.username.trim().toLowerCase())
+      );
+      const updated: ChatGroup = {
+        ...target,
+        name: cleanName,
+        description: cleanDesc,
+        members: requestedMembers,
+        pendingMemberRequests: remainingPending
+      };
+      setChatGroups((prev) => prev.map((g) => (g.id === groupId ? updated : g)));
+      saveChatGroupToFirestore(updated);
+      showToast(`"${cleanName}" grubu güncellendi.`, 'success');
+      return;
+    }
+
+    // Non-admin: new members MUST pass through Admin approval
+    const requestedLower = new Set(requestedMembers.map((m) => m.toLowerCase()));
+    const keptExistingMembers = isCreator
+      ? target.members.filter(
+          (m) =>
+            m.trim().toLowerCase() === target.createdBy.trim().toLowerCase() ||
+            requestedLower.has(m.trim().toLowerCase())
+        )
+      : target.members;
+
+    const cancelSet = new Set((updates.cancelPendingUsernames || []).map((u) => u.trim().toLowerCase()));
+    const filteredExistingPending = (target.pendingMemberRequests || []).filter(
+      (req) => !cancelSet.has(req.username.trim().toLowerCase())
+    );
+    const pendingLower = new Set(filteredExistingPending.map((r) => r.username.trim().toLowerCase()));
+    const nowTs = Date.now();
+    const newlyAddedRequests: ChatGroupPendingMemberRequest[] = [];
+
+    requestedMembers.forEach((m) => {
+      const lower = m.toLowerCase();
+      if (!existingLower.has(lower) && !pendingLower.has(lower)) {
+        pendingLower.add(lower);
+        newlyAddedRequests.push({
+          username: m,
+          requestedBy: currentUser.username,
+          requestedAt: nowTs
+        });
+      }
+    });
+
+    const nextPending = [...filteredExistingPending, ...newlyAddedRequests];
+    const metaChanged =
+      cleanName !== target.name || (cleanDesc || '') !== (target.description || '');
+    const existingChanged = keptExistingMembers.length !== target.members.length;
+
     const updated: ChatGroup = {
       ...target,
-      name: cleanName,
-      description: updates.description?.trim() || undefined,
-      members: uniqueMembers
+      name: isAdminUser || isCreator ? cleanName : target.name,
+      description: isAdminUser || isCreator ? cleanDesc : target.description,
+      members: keptExistingMembers,
+      pendingMemberRequests: nextPending
     };
     setChatGroups((prev) => prev.map((g) => (g.id === groupId ? updated : g)));
     saveChatGroupToFirestore(updated);
-    showToast(`"${cleanName}" grubu güncellendi.`, 'success');
+
+    if (newlyAddedRequests.length > 0) {
+      showToast(
+        `${newlyAddedRequests.length} yeni üye ekleme talebi Admin onayına gönderildi. Onaylandığında gruba eklenecektir.`,
+        'info'
+      );
+    } else if (cancelSet.size > 0) {
+      showToast('Bekleyen üye ekleme talebi güncellendi.', 'info');
+    } else if (metaChanged || existingChanged) {
+      showToast(`"${updated.name}" grubu güncellendi.`, 'success');
+    }
+  };
+
+  const handleApproveChatGroupMember = (groupId: string, username: string) => {
+    if (!currentUser || currentUser.role !== 'admin') {
+      showToast('Üye onaylama yetkisi yalnızca Admin kullanıcılara aittir.', 'warning');
+      return;
+    }
+    const target = chatGroups.find((g) => g.id === groupId);
+    if (!target) return;
+    const uname = username.trim();
+    const uLower = uname.toLowerCase();
+    const nextMembers = target.members.some((m) => m.trim().toLowerCase() === uLower)
+      ? target.members
+      : [...target.members, uname];
+    const nextPending = (target.pendingMemberRequests || []).filter(
+      (r) => r.username.trim().toLowerCase() !== uLower
+    );
+    const updated: ChatGroup = {
+      ...target,
+      members: nextMembers,
+      pendingMemberRequests: nextPending
+    };
+    setChatGroups((prev) => prev.map((g) => (g.id === groupId ? updated : g)));
+    saveChatGroupToFirestore(updated);
+    showToast(`"${uname}", "${target.name}" grubuna Admin onayıyla eklendi.`, 'success');
+  };
+
+  const handleRejectChatGroupMember = (groupId: string, username: string) => {
+    if (!currentUser || currentUser.role !== 'admin') {
+      showToast('Üye reddetme yetkisi yalnızca Admin kullanıcılara aittir.', 'warning');
+      return;
+    }
+    const target = chatGroups.find((g) => g.id === groupId);
+    if (!target) return;
+    const uLower = username.trim().toLowerCase();
+    const nextPending = (target.pendingMemberRequests || []).filter(
+      (r) => r.username.trim().toLowerCase() !== uLower
+    );
+    const updated: ChatGroup = {
+      ...target,
+      pendingMemberRequests: nextPending
+    };
+    setChatGroups((prev) => prev.map((g) => (g.id === groupId ? updated : g)));
+    saveChatGroupToFirestore(updated);
+    showToast(`"${username}" için "${target.name}" grubuna ekleme talebi reddedildi.`, 'info');
+  };
+
+  const handleSaveChatQuickMessages = (nextMessages: string[]) => {
+    if (!currentUser || currentUser.role !== 'admin') {
+      showToast('Hızlı mesajları yalnızca Admin kullanıcılar düzenleyebilir.', 'warning');
+      return;
+    }
+    const cleaned = nextMessages
+      .map((m) => m.trim().slice(0, 300))
+      .filter(Boolean)
+      .slice(0, 50);
+    setChatQuickMessages(cleaned);
+    saveChatQuickMessagesToFirestore({
+      messages: cleaned,
+      updatedBy: currentUser.username,
+      updatedAt: Date.now()
+    });
+    showToast('Sohbet hızlı mesajları güncellendi ve tüm ekip için kaydedildi.', 'success');
   };
 
   const handleLeaveChatGroup = (groupId: string) => {
@@ -3637,20 +3834,44 @@ export default function App() {
   };
 
   const handleDeleteChatGroup = (groupId: string) => {
+    if (!currentUser) return;
     const target = chatGroups.find((g) => g.id === groupId);
     if (!target) return;
+    const isAdmin = currentUser.role === 'admin';
+    const isCreator = target.createdBy.trim().toLowerCase() === currentUser.username.trim().toLowerCase();
+    const isUnapprovedRequest = target.status === 'pending' || target.status === 'rejected';
+
+    if (!isAdmin) {
+      if (!isUnapprovedRequest || !isCreator) {
+        showToast('Kurulan sohbet gruplarını yalnızca Admin kullanıcılar kalıcı olarak silebilir.', 'warning');
+        return;
+      }
+      askConfirm(
+        'Grup Talebini İptal Et',
+        `"${target.name}" grup talebini iptal etmek istediğinizden emin misiniz?`,
+        () => {
+          setChatGroups((prev) => prev.filter((g) => g.id !== groupId));
+          deleteChatGroupFromFirestore(groupId);
+          showToast(`"${target.name}" grup talebi iptal edildi.`, 'info');
+        },
+        'warning',
+        'Evet, Talebi İptal Et'
+      );
+      return;
+    }
+
     askConfirm(
-      'Sohbet Grubunu Sil',
-      `"${target.name}" grubunu ve bu gruptaki mesajları silmek istediğinizden emin misiniz?`,
+      'Sohbet Grubunu Kalıcı Sil',
+      `"${target.name}" grubunu ve bu gruptaki tüm sohbet geçmişini kalıcı olarak silmek istediğinizden emin misiniz?`,
       () => {
         setChatGroups((prev) => prev.filter((g) => g.id !== groupId));
         setChatMessages((prev) => prev.filter((m) => m.channelId !== groupId));
         deleteChatGroupFromFirestore(groupId);
         clearChatMessagesFromFirestore(groupId);
-        showToast(`"${target.name}" grubu silindi.`, 'info');
+        showToast(`"${target.name}" grubu Admin yetkisiyle kalıcı olarak silindi.`, 'info');
       },
       'danger',
-      'Evet, Grubu Sil'
+      'Evet, Kalıcı Sil'
     );
   };
 
@@ -3876,13 +4097,14 @@ export default function App() {
               </button>
               <button
                 onClick={() => setShowUserManagementModal(true)}
+                title="Kullanıcı Yönetimi, Özel Yetkiler ve Sohbet Yönetimi"
                 className="w-full py-1.5 px-2 bg-blue-700 hover:bg-blue-800 text-white text-xs rounded-lg font-bold transition flex items-center justify-center gap-1.5 shadow cursor-pointer relative"
               >
-                <Users className="w-3 h-3" /> Kullanıcı Yönetimi
+                <Users className="w-3 h-3" /> Kullanıcı & Sohbet Yönetimi
                 {pendingChatGroupsCount > 0 && (
                   <span
                     className="ml-auto px-1.5 py-0.2 rounded-full bg-red-600 text-white text-[10px] font-black tabular-nums"
-                    title="Onay bekleyen yeni grup talebi"
+                    title="Onay bekleyen yeni grup veya üye talebi"
                   >
                     {pendingChatGroupsCount}
                   </span>
@@ -4514,16 +4736,19 @@ export default function App() {
           onDeleteMessage={handleDeleteChatMessage}
           onToggleReaction={handleToggleChatReaction}
           onTogglePinMessage={handleTogglePinChatMessage}
-          onClearMessages={handleClearChatMessages}
           onMarkMessagesAsRead={handleMarkChatMessagesAsRead}
           onUpdatePresence={handleUpdateChatPresence}
           onCreateGroup={handleCreateChatGroup}
           onApproveGroup={handleApproveChatGroup}
           onRejectGroup={handleRejectChatGroup}
+          onApproveGroupMember={handleApproveChatGroupMember}
+          onRejectGroupMember={handleRejectChatGroupMember}
           onUpdateGroupMembers={handleUpdateChatGroupMembers}
           onUpdateGroup={handleUpdateChatGroup}
           onLeaveGroup={handleLeaveChatGroup}
           onDeleteGroup={handleDeleteChatGroup}
+          quickMessages={chatQuickMessages}
+          onSaveQuickMessages={handleSaveChatQuickMessages}
           onNavigateToVehicle={(v) => {
             setSelectedDetailVehicle(v);
             setShowDetailViewModal(true);
@@ -4590,7 +4815,11 @@ export default function App() {
         onDeleteUser={handleDeleteUser}
         onApproveChatGroup={handleApproveChatGroup}
         onRejectChatGroup={handleRejectChatGroup}
+        onApproveChatGroupMember={handleApproveChatGroupMember}
+        onRejectChatGroupMember={handleRejectChatGroupMember}
         onDeleteChatGroup={handleDeleteChatGroup}
+        quickMessages={chatQuickMessages}
+        onSaveQuickMessages={handleSaveChatQuickMessages}
       />
 
       {/* 4. Detaylı Araç Bilgi & Fotoğraf İnceleme Modalı */}
@@ -4890,7 +5119,7 @@ export default function App() {
                 >
                   <span className="flex items-center gap-2.5">
                     <Users className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                    <span>Kullanıcı, İzin & Grup Onayları</span>
+                    <span>Kullanıcı, İzin & Sohbet Yönetimi</span>
                   </span>
                   {pendingChatGroupsCount > 0 ? (
                     <span className="text-[10px] bg-red-600 text-white px-2 py-0.5 rounded-full font-black tabular-nums">
