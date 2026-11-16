@@ -1,19 +1,22 @@
 import React, { useState } from 'react';
 import { Warehouse, User } from '../types';
+import { verifyPassword } from '../utils/authCrypto';
 import { Warehouse as WarehouseIcon, AlertCircle, Clock, Eye, EyeOff } from 'lucide-react';
 
 interface LoginViewProps {
   warehouses: Warehouse[];
   users: User[];
-  onLoginSuccess: (user: User, depoId: number) => void;
+  onLoginSuccess: (user: User, depoId: number, plainPassword?: string) => void;
   onLoginAsGuest: () => void;
+  onLoginFailed?: (username: string, depoId: number) => void;
 }
 
 export const LoginView: React.FC<LoginViewProps> = ({
   warehouses,
   users,
   onLoginSuccess,
-  onLoginAsGuest
+  onLoginAsGuest,
+  onLoginFailed
 }) => {
   const activeWarehouses = warehouses.filter((w) => w.aktif !== false);
   const [username, setUsername] = useState('');
@@ -21,25 +24,39 @@ export const LoginView: React.FC<LoginViewProps> = ({
   const [showPassword, setShowPassword] = useState(false);
   const [depoId, setDepoId] = useState<number>(() => activeWarehouses[0]?.id || 1);
   const [error, setError] = useState('');
+  const [isVerifying, setIsVerifying] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const user = users.find(
-      (u) => u.username.toLowerCase() === username.trim().toLowerCase() && u.password === password
-    );
+    if (isVerifying) return;
+    setIsVerifying(true);
+    try {
+      const targetName = username.trim().toLowerCase();
+      const candidates = users.filter((u) => u.username.toLowerCase() === targetName);
+      let matchedUser: User | null = null;
+      for (const candidate of candidates) {
+        if (await verifyPassword(password, candidate.password)) {
+          matchedUser = candidate;
+          break;
+        }
+      }
 
-    if (user) {
-      setError('');
-      const targetDepo = user.role !== 'admin' && user.depoId && user.depoId !== 0 ? user.depoId : depoId;
-      onLoginSuccess(user, targetDepo);
-    } else {
-      setError('Kullanıcı adı veya şifre hatalı!');
+      if (matchedUser) {
+        setError('');
+        const targetDepo = matchedUser.role !== 'admin' && matchedUser.depoId && matchedUser.depoId !== 0 ? matchedUser.depoId : depoId;
+        onLoginSuccess(matchedUser, targetDepo, password);
+      } else {
+        setError('Kullanıcı adı veya şifre hatalı!');
+        onLoginFailed?.(username.trim() || 'Bilinmiyor', depoId);
+      }
+    } finally {
+      setIsVerifying(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-950 px-4 py-8">
-      <div className="max-w-md w-full bg-white dark:bg-slate-900 rounded-2xl shadow-2xl p-7 sm:p-8 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-100 transition-colors">
+    <div className="min-h-[100dvh] flex items-center justify-center bg-slate-950 px-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] pt-[max(1.5rem,env(safe-area-inset-top))] pb-[max(1.5rem,env(safe-area-inset-bottom))] overflow-x-clip">
+      <div className="max-w-md w-full bg-white dark:bg-slate-900 rounded-2xl shadow-2xl p-6 sm:p-8 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-100 transition-colors">
         <div className="text-center mb-6">
           <div className="flex justify-center mb-3">
             <img
@@ -109,7 +126,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer transition"
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 min-w-[40px] min-h-[40px] flex items-center justify-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer transition"
                 title={showPassword ? 'Şifreyi Gizle' : 'Şifreyi Göster'}
               >
                 {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -119,9 +136,10 @@ export const LoginView: React.FC<LoginViewProps> = ({
 
           <button
             type="submit"
-            className="w-full py-3 bg-blue-600 hover:bg-blue-700 active:scale-[0.99] text-white font-bold rounded-xl shadow-lg shadow-blue-600/30 transition text-sm cursor-pointer mt-2"
+            disabled={isVerifying}
+            className="w-full min-h-[44px] py-3 bg-blue-600 hover:bg-blue-700 active:scale-[0.99] text-white font-bold rounded-xl shadow-lg shadow-blue-600/30 transition text-sm cursor-pointer mt-2 disabled:opacity-60"
           >
-            Sisteme Giriş Yap
+            {isVerifying ? 'Doğrulanıyor...' : 'Sisteme Giriş Yap'}
           </button>
         </form>
 
@@ -129,7 +147,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
           <button
             type="button"
             onClick={onLoginAsGuest}
-            className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-750 text-slate-800 dark:text-slate-200 font-bold rounded-xl text-xs transition flex items-center justify-center gap-2 border border-slate-200 dark:border-slate-700 cursor-pointer shadow-2xs active:scale-[0.99]"
+            className="w-full min-h-[44px] py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-750 text-slate-800 dark:text-slate-200 font-bold rounded-xl text-xs transition flex items-center justify-center gap-2 border border-slate-200 dark:border-slate-700 cursor-pointer shadow-2xs active:scale-[0.99]"
           >
             <Clock className="w-4 h-4 text-blue-600 dark:text-blue-400" />
             Misafir Girişi (Şifresiz Sorgulama)

@@ -11,11 +11,19 @@ import {
   Customer,
   SlaSettings,
   ChatGroup,
-  DEFAULT_CHAT_QUICK_MESSAGES
+  DEFAULT_CHAT_QUICK_MESSAGES,
+  AuditLog
 } from '../types';
+import {
+  getActionLabel,
+  AUDIT_ROLE_LABELS,
+  AUDIT_CATEGORY_LABELS,
+  AUDIT_SEVERITY_LABELS
+} from '../utils/audit';
 import { CustomerAutocomplete } from './CustomerAutocomplete';
 import { VehicleLifecycleTimeline } from './RampSlaIndicator';
 import { DEFAULT_SLA_SETTINGS } from '../utils/slaHelpers';
+import { isPasswordHashed } from '../utils/authCrypto';
 import {
   cleanPhone,
   getStatusBadgeClass,
@@ -82,7 +90,8 @@ import {
   ZoomIn,
   ZoomOut,
   RotateCcw,
-  Zap
+  Zap,
+  History
 } from 'lucide-react';
 
 /* =========================================================
@@ -150,21 +159,25 @@ export const AddExpectedVehicleModal: React.FC<AddExpectedVehicleModalProps> = (
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-      <div className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-2xl shadow-2xl max-w-xl w-full overflow-hidden flex flex-col border border-slate-200 dark:border-slate-800 transition-colors">
-        <div className="p-4 bg-slate-900 text-white flex items-center justify-between">
-          <div>
+    <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 z-50">
+      <div className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-none sm:rounded-2xl shadow-2xl max-w-xl w-full h-[var(--vvh,100dvh)] sm:h-auto sm:max-h-[90dvh] overflow-hidden flex flex-col border-0 sm:border border-slate-200 dark:border-slate-800 transition-colors">
+        <div className="px-4 py-3.5 pt-[max(0.875rem,env(safe-area-inset-top))] sm:p-4 bg-slate-900 text-white flex items-center justify-between shrink-0">
+          <div className="min-w-0 pr-2">
             <h3 className="font-bold text-sm flex items-center gap-2">
-              <CalendarPlus className="w-4 h-4 text-amber-400" /> Beklenen Araç Tanımla
+              <CalendarPlus className="w-4 h-4 text-amber-400 shrink-0" /> Beklenen Araç Tanımla
             </h3>
-            <p className="text-[10px] text-slate-400">Aşağıdaki alanları doldurarak beklenen araç oluşturabilirsiniz</p>
+            <p className="text-[10px] text-slate-400 truncate">Aşağıdaki alanları doldurarak beklenen araç oluşturabilirsiniz</p>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-white cursor-pointer">
+          <button
+            type="button"
+            onClick={onClose}
+            className="min-w-[40px] min-h-[40px] rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 flex items-center justify-center cursor-pointer shrink-0"
+          >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-5 space-y-3 text-xs max-h-[85vh] overflow-y-auto custom-scroll">
+        <form onSubmit={handleSubmit} className="p-4 sm:p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:pb-5 space-y-3 text-xs flex-1 min-h-0 overflow-y-auto custom-scroll">
           <div>
             <label className="block font-bold text-slate-700 dark:text-slate-200 mb-1">Hedef Depo / Tesis</label>
             <select
@@ -180,7 +193,7 @@ export const AddExpectedVehicleModal: React.FC<AddExpectedVehicleModalProps> = (
             </select>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block font-semibold text-slate-600 dark:text-slate-300 mb-1">Dorse Plakası *</label>
               <input
@@ -263,7 +276,7 @@ export const AddExpectedVehicleModal: React.FC<AddExpectedVehicleModalProps> = (
                 <option value="Serbest Depo">Serbest Depo</option>
               </select>
             </div>
-            <div className="col-span-2">
+            <div className="sm:col-span-2">
               <label className="block font-semibold text-slate-600 dark:text-slate-300 mb-1">İşlem Türü</label>
               <select
                 value={form.islemTuru}
@@ -301,13 +314,13 @@ export const AddExpectedVehicleModal: React.FC<AddExpectedVehicleModalProps> = (
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-xl font-semibold cursor-pointer hover:bg-slate-200 dark:hover:bg-slate-700"
+              className="px-4 py-2 min-h-[42px] bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-xl font-semibold cursor-pointer hover:bg-slate-200 dark:hover:bg-slate-700"
             >
               İptal
             </button>
             <button
               type="submit"
-              className="px-5 py-2 bg-amber-500 hover:bg-amber-600 text-slate-900 font-extrabold rounded-xl shadow cursor-pointer transition active:scale-95"
+              className="px-5 py-2 min-h-[42px] bg-amber-500 hover:bg-amber-600 text-slate-900 font-extrabold rounded-xl shadow cursor-pointer transition active:scale-95"
             >
               Beklenen Araç Ekle
             </button>
@@ -377,21 +390,25 @@ export const EditExpectedVehicleModal: React.FC<EditExpectedVehicleModalProps> =
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-      <div className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-2xl shadow-2xl max-w-xl w-full overflow-hidden flex flex-col border border-slate-200 dark:border-slate-800 transition-colors">
-        <div className="p-4 bg-slate-900 text-white flex items-center justify-between">
-          <div>
+    <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 z-50">
+      <div className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-none sm:rounded-2xl shadow-2xl max-w-xl w-full h-[var(--vvh,100dvh)] sm:h-auto sm:max-h-[90dvh] overflow-hidden flex flex-col border-0 sm:border border-slate-200 dark:border-slate-800 transition-colors">
+        <div className="px-4 py-3.5 pt-[max(0.875rem,env(safe-area-inset-top))] sm:p-4 bg-slate-900 text-white flex items-center justify-between shrink-0">
+          <div className="min-w-0 pr-2">
             <h3 className="font-bold text-sm flex items-center gap-2">
-              <Edit3 className="w-4 h-4 text-amber-400" /> Beklenen Araç Bilgilerini Düzenle
+              <Edit3 className="w-4 h-4 text-amber-400 shrink-0" /> Beklenen Araç Bilgilerini Düzenle
             </h3>
-            <p className="text-[10px] text-slate-400">Yanlış girilen bilgileri güncelleyip kaydedebilirsiniz</p>
+            <p className="text-[10px] text-slate-400 truncate">Yanlış girilen bilgileri güncelleyip kaydedebilirsiniz</p>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-white cursor-pointer">
+          <button
+            type="button"
+            onClick={onClose}
+            className="min-w-[40px] min-h-[40px] rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 flex items-center justify-center cursor-pointer shrink-0"
+          >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-5 space-y-3 text-xs max-h-[85vh] overflow-y-auto custom-scroll">
+        <form onSubmit={handleSubmit} className="p-4 sm:p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:pb-5 space-y-3 text-xs flex-1 min-h-0 overflow-y-auto custom-scroll">
           <div>
             <label className="block font-bold text-slate-700 dark:text-slate-200 mb-1">Hedef Depo / Tesis</label>
             <select
@@ -407,7 +424,7 @@ export const EditExpectedVehicleModal: React.FC<EditExpectedVehicleModalProps> =
             </select>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block font-semibold text-slate-600 dark:text-slate-300 mb-1">Dorse Plakası *</label>
               <input
@@ -490,7 +507,7 @@ export const EditExpectedVehicleModal: React.FC<EditExpectedVehicleModalProps> =
                 <option value="Serbest Depo">Serbest Depo</option>
               </select>
             </div>
-            <div className="col-span-2">
+            <div className="sm:col-span-2">
               <label className="block font-semibold text-slate-600 dark:text-slate-300 mb-1">İşlem Türü</label>
               <select
                 value={form.islemTuru}
@@ -528,13 +545,13 @@ export const EditExpectedVehicleModal: React.FC<EditExpectedVehicleModalProps> =
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-xl font-semibold cursor-pointer hover:bg-slate-200 dark:hover:bg-slate-700"
+              className="px-4 py-2 min-h-[42px] bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-xl font-semibold cursor-pointer hover:bg-slate-200 dark:hover:bg-slate-700"
             >
               İptal
             </button>
             <button
               type="submit"
-              className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-extrabold rounded-xl shadow cursor-pointer transition active:scale-95"
+              className="px-5 py-2 min-h-[42px] bg-blue-600 hover:bg-blue-700 text-white font-extrabold rounded-xl shadow cursor-pointer transition active:scale-95"
             >
               Değişiklikleri Kaydet
             </button>
@@ -590,36 +607,40 @@ export const SecurityActionModal: React.FC<SecurityActionModalProps> = ({
   );
 
   return (
-    <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-      <div className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-2xl shadow-2xl max-w-md w-full overflow-hidden flex flex-col border border-slate-200 dark:border-slate-800 transition-colors">
-        <div className="p-4 bg-slate-900 text-white flex items-center justify-between">
-          <div>
+    <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 z-50">
+      <div className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-t-3xl sm:rounded-2xl shadow-2xl max-w-md w-full max-h-[calc(var(--vvh,100dvh)-env(safe-area-inset-top,0px)-0.5rem)] sm:max-h-[90dvh] overflow-hidden flex flex-col border-0 sm:border border-slate-200 dark:border-slate-800 transition-colors">
+        <div className="p-4 bg-slate-900 text-white flex items-center justify-between shrink-0">
+          <div className="min-w-0 pr-2">
             <h3 className="font-bold text-sm flex items-center gap-2">
-              <ShieldAlert className="w-4 h-4 text-amber-400" /> Güvenlik Sürücü Yönlendirme
+              <ShieldAlert className="w-4 h-4 text-amber-400 shrink-0" /> Güvenlik Sürücü Yönlendirme
             </h3>
-            <p className="text-[10px] text-slate-400">
+            <p className="text-[10px] text-slate-400 truncate">
               Çağrılan Araç: <b>{notification.plaka}</b>
             </p>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-white cursor-pointer">
+          <button
+            type="button"
+            onClick={onClose}
+            className="min-w-[40px] min-h-[40px] rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 flex items-center justify-center cursor-pointer shrink-0"
+          >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        <div className="p-5 space-y-4 text-xs">
+        <div className="p-4 sm:p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:pb-5 space-y-4 text-xs overflow-y-auto flex-1 min-h-0 custom-scroll">
           <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 p-3 rounded-xl space-y-1">
             <p className="font-bold text-slate-800 dark:text-slate-100 text-sm flex items-center gap-1">
-              <Building className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" /> {notification.musteri}
+              <Building className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" /> {notification.musteri}
             </p>
             <p className="font-semibold text-slate-700 dark:text-slate-300">Şoför: {notification.soforAd || '-'}</p>
-            <div className="font-semibold text-slate-700 dark:text-slate-300 flex items-center justify-between">
+            <div className="font-semibold text-slate-700 dark:text-slate-300 flex items-center justify-between gap-2 flex-wrap">
               <span>Tel: {notification.soforTel || '-'}</span>
               {notification.soforTel && (
                 <a
                   href={`tel:${cleanPhone(notification.soforTel)}`}
-                  className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded font-bold text-[10px] flex items-center gap-1"
+                  className="px-2.5 py-1 min-h-[34px] bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-[11px] flex items-center gap-1"
                 >
-                  <PhoneCall className="w-3 h-3" /> Şoförü Ara
+                  <PhoneCall className="w-3.5 h-3.5" /> Şoförü Ara
                 </a>
               )}
             </div>
@@ -677,7 +698,7 @@ export const SecurityActionModal: React.FC<SecurityActionModalProps> = ({
                 }
                 onConfirm(notification, selectedRampId, note);
               }}
-              className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-xl transition shadow-md flex items-center justify-center gap-2 cursor-pointer"
+              className="w-full py-2.5 min-h-[44px] bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-xl transition shadow-md flex items-center justify-center gap-2 cursor-pointer"
             >
               <UserCheck className="w-4 h-4" /> Rampayı Seç & Yönlendirmeyi Onayla
             </button>
@@ -695,7 +716,7 @@ export const SecurityActionModal: React.FC<SecurityActionModalProps> = ({
                 }
                 onSaveNoteOnly(notification, note);
               }}
-              className="w-full py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed text-slate-700 dark:text-slate-200 font-semibold rounded-xl transition cursor-pointer"
+              className="w-full py-2 min-h-[40px] bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed text-slate-700 dark:text-slate-200 font-semibold rounded-xl transition cursor-pointer"
             >
               Sadece Geri Bildirim Notunu Kaydet
             </button>
@@ -772,18 +793,20 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
   const [rejectingGroupId, setRejectingGroupId] = useState<string | null>(null);
   const [quickMessagesDraft, setQuickMessagesDraft] = useState<string[]>(quickMessages);
   const [newQuickMsgInput, setNewQuickMsgInput] = useState('');
+  const [showFormPassword, setShowFormPassword] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
       setQuickMessagesDraft(quickMessages);
       setNewQuickMsgInput('');
+      setShowFormPassword(false);
     }
   }, [isOpen, quickMessages]);
 
   const isAdminActor = currentUser?.role === 'admin';
   const pendingChatGroups = chatGroups.filter((g) => g.status === 'pending').sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
   const pendingMemberRequests = chatGroups
-    .filter((g) => g.status !== 'rejected' && Array.isArray(g.pendingMemberRequests) && g.pendingMemberRequests.length > 0)
+    .filter((g) => g.status !== 'rejected' && g.status !== 'archived' && Array.isArray(g.pendingMemberRequests) && g.pendingMemberRequests.length > 0)
     .flatMap((g) =>
       (g.pendingMemberRequests || []).map((req) => ({
         group: g,
@@ -858,11 +881,12 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
 
   const handleStartEdit = (u: User) => {
     setEditingUser(u);
+    setShowFormPassword(false);
     const userRole = (u.role || 'personel') as UserRole;
     const userPerms = u.permissions || getDefaultPermissionsForRole(userRole);
     setForm({
       username: u.username,
-      password: u.password,
+      password: '',
       role: userRole,
       depoId: u.depoId ?? 0,
       permissions: { ...userPerms }
@@ -871,6 +895,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
 
   const handleCancelEdit = () => {
     setEditingUser(null);
+    setShowFormPassword(false);
     setForm({
       username: '',
       password: '',
@@ -884,8 +909,11 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
     e.preventDefault();
     const uname = form.username.trim();
     const pwd = form.password.trim();
-    if (!uname || !pwd) {
-      onNotify?.('Kullanıcı adı ve şifre zorunludur.', 'warning');
+    if (!uname || (!editingUser && !pwd)) {
+      onNotify?.(
+        editingUser ? 'Kullanıcı adı zorunludur.' : 'Kullanıcı adı ve şifre zorunludur.',
+        'warning'
+      );
       return;
     }
 
@@ -896,8 +924,8 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
 
     if (editingUser) {
       onEditUser({
-        username: uname,
-        password: pwd,
+        username: editingUser.username,
+        password: pwd ? pwd : editingUser.password,
         role: form.role,
         depoId: Number(form.depoId),
         permissions: finalPermissions
@@ -968,36 +996,37 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 z-50">
-      <div className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-2xl shadow-2xl max-w-3xl w-full overflow-hidden flex flex-col max-h-[92vh] border border-slate-200 dark:border-slate-800 transition-colors">
+    <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 z-50">
+      <div className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-none sm:rounded-2xl shadow-2xl max-w-3xl w-full overflow-hidden flex flex-col h-[var(--vvh,100dvh)] sm:h-auto sm:max-h-[92dvh] border-0 sm:border border-slate-200 dark:border-slate-800 transition-colors">
         {/* Header */}
-        <div className="p-4 bg-slate-900 text-white flex items-center justify-between border-b border-slate-800">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-blue-600/20 text-blue-400 border border-blue-500/30 flex items-center justify-center">
+        <div className="px-4 py-3.5 pt-[max(0.875rem,env(safe-area-inset-top))] sm:p-4 bg-slate-900 text-white flex items-center justify-between border-b border-slate-800 shrink-0">
+          <div className="flex items-center gap-3 min-w-0 pr-2">
+            <div className="w-9 h-9 rounded-xl bg-blue-600/20 text-blue-400 border border-blue-500/30 flex items-center justify-center shrink-0">
               <Users className="w-5 h-5" />
             </div>
-            <div>
-              <h3 className="font-bold text-sm text-white flex items-center gap-2">
-                Kullanıcı & Özel Yetki Yönetimi
+            <div className="min-w-0">
+              <h3 className="font-bold text-sm text-white flex items-center gap-2 flex-wrap">
+                <span>Kullanıcı & Özel Yetki Yönetimi</span>
                 <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-400/30">
                   Granular RBAC
                 </span>
               </h3>
-              <p className="text-[11px] text-slate-400">
+              <p className="text-[11px] text-slate-400 line-clamp-2 sm:line-clamp-none">
                 Operasyon / Personel kullanıcılarına araçları &apos;EVRAK HAZIR&apos; durumuna getirme yetkisi ve diğer saha izinlerini buradan verip yönetebilirsiniz.
               </p>
             </div>
           </div>
           <button
+            type="button"
             onClick={onClose}
-            className="w-8 h-8 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 flex items-center justify-center transition cursor-pointer"
+            className="min-w-[40px] min-h-[40px] rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 flex items-center justify-center transition cursor-pointer shrink-0"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Tab Seçimi: Kullanıcılar, Özel Yetki Alanları ve Grup Onayları */}
-        <div className="flex items-center gap-2 px-4 sm:px-5 pt-2.5 bg-slate-900 border-b border-slate-800 overflow-x-auto custom-scroll">
+        <div className="flex items-center gap-2 px-4 sm:px-5 pt-2.5 bg-slate-900 border-b border-slate-800 overflow-x-auto custom-scroll shrink-0">
           <button
             type="button"
             onClick={() => setModalTab('users')}
@@ -1055,7 +1084,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
           /* =========================================================
              MERKEZİ SOHBET YÖNETİMİ (ADMIN)
              ========================================================= */
-          <div className="p-5 overflow-y-auto space-y-5 custom-scroll text-xs">
+          <div className="p-4 sm:p-5 flex-1 min-h-0 overflow-y-auto space-y-5 custom-scroll text-xs">
             <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="flex items-start gap-3">
                 <div className="w-9 h-9 rounded-lg bg-slate-900 dark:bg-slate-700 text-amber-400 flex items-center justify-center shrink-0">
@@ -1527,7 +1556,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
           /* =========================================================
              ÖZEL YETKİ ALANI & İZİN BUTONLARI (OPERASYON / PERSONEL)
              ========================================================= */
-          <div className="p-5 overflow-y-auto space-y-5 custom-scroll text-xs">
+          <div className="p-4 sm:p-5 flex-1 min-h-0 overflow-y-auto space-y-5 custom-scroll text-xs">
             {/* Bilgilendirme Bannerı */}
             <div className="bg-gradient-to-r from-emerald-500/10 via-blue-500/10 to-indigo-500/10 border border-emerald-300 dark:border-emerald-800 p-4 rounded-2xl shadow-sm">
               <div className="flex items-start gap-3">
@@ -1576,7 +1605,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                               </span>
                             </div>
                             <p className="text-[10px] text-slate-400">
-                              Saha: {getWarehouseNameById(u.depoId)} • Şifre: {u.password}
+                              Saha: {getWarehouseNameById(u.depoId)} • Şifre: {isPasswordHashed(u.password) ? '•••••••• (SHA-256)' : '•••••••• (Eski Format)'}
                             </p>
                           </div>
                         </div>
@@ -1640,7 +1669,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                         <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400 mb-1.5">
                           Diğer Saha Yetkileri (İzin Butonları ile Tek Tıkla Aç / Kapat):
                         </p>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-1.5">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 md:grid-cols-4 gap-1.5">
                           {PERMISSIONS_LIST.filter((p) => p.key !== 'canMakeReady').map((p) => {
                             const isPermitted = u.permissions?.[p.key] ?? false;
                             return (
@@ -1690,7 +1719,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
           /* =========================================================
              KULLANICI LİSTESİ & EKLEME FORMU
              ========================================================= */
-          <div className="p-5 overflow-y-auto space-y-6 custom-scroll text-xs">
+          <div className="p-4 sm:p-5 flex-1 min-h-0 overflow-y-auto space-y-6 custom-scroll text-xs">
             {/* User Form */}
             <form
               onSubmit={handleSubmit}
@@ -1736,22 +1765,38 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                     value={form.username}
                     onChange={(e) => setForm({ ...form, username: e.target.value })}
                     required
-                    className="w-full border border-slate-300 dark:border-slate-700 rounded-xl p-2 font-semibold bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-blue-500"
+                    disabled={!!editingUser}
+                    className={`w-full border border-slate-300 dark:border-slate-700 rounded-xl p-2 font-semibold outline-none focus:ring-2 focus:ring-blue-500 ${
+                      editingUser
+                        ? 'bg-slate-100 dark:bg-slate-800/60 text-slate-500 dark:text-slate-400 cursor-not-allowed'
+                        : 'bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100'
+                    }`}
                   />
                 </div>
 
                 <div>
                   <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Giriş Şifresi *
+                    {editingUser ? 'Yeni Şifre (Opsiyonel)' : 'Giriş Şifresi *'}
                   </label>
-                  <input
-                    type="text"
-                    placeholder="Giriş Şifresi"
-                    value={form.password}
-                    onChange={(e) => setForm({ ...form, password: e.target.value })}
-                    required
-                    className="w-full border border-slate-300 dark:border-slate-700 rounded-xl p-2 font-semibold bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-blue-500"
-                  />
+                  <div className="relative">
+                    <input
+                      type={showFormPassword ? 'text' : 'password'}
+                      placeholder={editingUser ? 'Boş bırakılırsa korunur' : 'Giriş Şifresi'}
+                      value={form.password}
+                      onChange={(e) => setForm({ ...form, password: e.target.value })}
+                      required={!editingUser}
+                      autoComplete="new-password"
+                      className="w-full border border-slate-300 dark:border-slate-700 rounded-xl pl-2.5 pr-8 py-2 font-semibold bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowFormPassword((prev) => !prev)}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                      title={showFormPassword ? 'Şifreyi Gizle' : 'Şifreyi Göster'}
+                    >
+                      {showFormPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
                 </div>
 
                 <div>
@@ -1806,7 +1851,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                   </div>
 
                   {form.role !== 'admin' && form.role !== 'guest' && (
-                    <div className="flex items-center gap-1.5 text-[10px]">
+                    <div className="flex flex-wrap items-center gap-1.5 text-[10px]">
                       <button
                         type="button"
                         onClick={handleSelectAll}
@@ -2068,7 +2113,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
 
                         <div className="flex items-center gap-2 self-end sm:self-auto">
                           <span className="text-slate-400 font-mono text-[10px] mr-1">
-                            Şifre: {u.password}
+                            Şifre: {isPasswordHashed(u.password) ? '•••••••• (SHA-256)' : '•••••••• (Eski)'}
                           </span>
                           <button
                             onClick={() => handleStartEdit(u)}
@@ -2079,14 +2124,23 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                           </button>
                           <button
                             onClick={() => {
+                              if (u.role === 'admin' || u.username.toLowerCase() === 'admin') {
+                                onNotify?.('Yönetici (Admin) hesapları güvenlik nedeniyle silinemez.', 'warning');
+                                return;
+                              }
                               if (currentUser?.username === u.username) {
                                 onNotify?.('Şu an oturum açmış olduğunuz kendi kullanıcınızı silemezsiniz.', 'warning');
                                 return;
                               }
                               onDeleteUser(u);
                             }}
-                            className="p-1.5 bg-red-100 dark:bg-red-950/60 hover:bg-red-200 dark:hover:bg-red-900/70 text-red-700 dark:text-red-300 rounded-lg font-bold text-[10px] transition cursor-pointer"
-                            title="Kullanıcıyı Sil"
+                            disabled={u.role === 'admin' || u.username.toLowerCase() === 'admin'}
+                            className={`p-1.5 rounded-lg font-bold text-[10px] transition ${
+                              u.role === 'admin' || u.username.toLowerCase() === 'admin'
+                                ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
+                                : 'bg-red-100 dark:bg-red-950/60 hover:bg-red-200 dark:hover:bg-red-900/70 text-red-700 dark:text-red-300 cursor-pointer'
+                            }`}
+                            title={u.role === 'admin' || u.username.toLowerCase() === 'admin' ? 'Admin hesabı korumalıdır' : 'Kullanıcıyı Sil'}
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -2105,7 +2159,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                               (Yetkileri değiştirmek için kutulara tıklayabilirsiniz)
                             </span>
                           </p>
-                          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                          <div className="grid grid-cols-1 sm:grid-cols-3 md:grid-cols-4 gap-2">
                             {PERMISSIONS_LIST.map((p) => {
                               const isPermitted =
                                 u.role === 'admin'
@@ -2169,10 +2223,11 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
         )}
 
         {/* Footer */}
-        <div className="p-3 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-200 dark:border-slate-800 flex justify-end">
+        <div className="p-3 pb-[max(0.875rem,env(safe-area-inset-bottom))] sm:py-3 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-200 dark:border-slate-800 flex justify-end shrink-0">
           <button
+            type="button"
             onClick={onClose}
-            className="px-5 py-2 bg-slate-800 hover:bg-slate-900 dark:bg-slate-700 dark:hover:bg-slate-600 text-white font-bold rounded-xl text-xs cursor-pointer transition"
+            className="px-5 py-2 min-h-[42px] bg-slate-800 hover:bg-slate-900 dark:bg-slate-700 dark:hover:bg-slate-600 text-white font-bold rounded-xl text-xs cursor-pointer transition"
           >
             Kapat
           </button>
@@ -2190,6 +2245,8 @@ interface DetailViewModalProps {
   rampName?: string;
   warehouseName?: string;
   slaSettings?: SlaSettings;
+  currentUser?: User | null;
+  auditLogs?: AuditLog[];
   onClose: () => void;
   onOpenPhotoGallery: (v: Vehicle) => void;
   onShareWhatsApp?: (v: Vehicle) => void;
@@ -2200,183 +2257,363 @@ export const DetailViewModal: React.FC<DetailViewModalProps> = ({
   rampName,
   warehouseName,
   slaSettings,
+  currentUser,
+  auditLogs = [],
   onClose,
   onOpenPhotoGallery,
   onShareWhatsApp
 }) => {
+  const [activeDetailTab, setActiveDetailTab] = useState<'general' | 'audit'>('general');
+
+  useEffect(() => {
+    setActiveDetailTab('general');
+  }, [vehicle?.id]);
+
   if (!vehicle) return null;
 
+  const isAdmin = currentUser?.role === 'admin';
+  const normalizedVehiclePlate = (vehicle.dorsePlaka || '').replace(/\s+/g, '').toUpperCase();
+  const vehicleAuditLogs = isAdmin
+    ? auditLogs
+        .filter((log) => {
+          if (log.targetId && log.targetId === String(vehicle.id)) return true;
+          if (
+            normalizedVehiclePlate &&
+            log.targetType === 'vehicle' &&
+            log.targetLabel &&
+            log.targetLabel.replace(/\s+/g, '').toUpperCase() === normalizedVehiclePlate
+          ) {
+            return true;
+          }
+          return false;
+        })
+        .sort((a, b) => b.timestamp - a.timestamp)
+    : [];
+
+  const effectiveTab = isAdmin ? activeDetailTab : 'general';
+
   return (
-    <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 z-50 animate-in fade-in duration-150">
-      <div className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-2xl shadow-2xl max-w-4xl w-full overflow-hidden max-h-[92vh] flex flex-col border border-slate-200 dark:border-slate-800 transition-colors">
+    <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 z-50 animate-in fade-in duration-150">
+      <div className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-none sm:rounded-2xl shadow-2xl max-w-4xl w-full overflow-hidden h-[var(--vvh,100dvh)] sm:h-auto sm:max-h-[92dvh] flex flex-col border-0 sm:border border-slate-200 dark:border-slate-800 transition-colors">
         {/* Modal Başlık */}
-        <div className="px-4 sm:px-5 py-3 bg-slate-900 text-white flex items-center justify-between shrink-0 border-b border-slate-800">
-          <div className="flex items-center gap-2.5">
+        <div className="px-4 sm:px-5 py-3 pt-[max(0.75rem,env(safe-area-inset-top))] sm:py-3 bg-slate-900 text-white flex items-center justify-between shrink-0 border-b border-slate-800">
+          <div className="flex items-center gap-2.5 min-w-0 pr-2">
             <div className="w-8 h-8 rounded-xl bg-blue-600/20 text-blue-400 border border-blue-500/30 flex items-center justify-center shrink-0">
               <Info className="w-4 h-4" />
             </div>
-            <div>
-              <h3 className="font-bold text-sm text-white flex items-center gap-2">
+            <div className="min-w-0">
+              <h3 className="font-bold text-sm text-white flex items-center gap-2 flex-wrap">
                 <span>Araç Detayı</span>
                 <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-400/30">
                   {vehicle.dorsePlaka}
                 </span>
               </h3>
-              <p className="text-[10px] text-slate-400">
+              <p className="text-[10px] text-slate-400 truncate">
                 Müşteri: <b>{vehicle.musteri}</b> {vehicle.cekiciPlaka ? `| Çekici: ${vehicle.cekiciPlaka}` : ''}
               </p>
             </div>
           </div>
           <button
+            type="button"
             onClick={onClose}
-            className="w-8 h-8 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 flex items-center justify-center transition cursor-pointer"
+            className="min-w-[40px] min-h-[40px] rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 flex items-center justify-center transition cursor-pointer shrink-0"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Modal İçerik (Kaydırılabilir Alan) */}
-        <div className="p-3.5 sm:p-5 overflow-y-auto space-y-3.5 text-xs custom-scroll">
-          {/* Araç Temel Bilgi Kartı */}
-          <div className="bg-slate-50 dark:bg-slate-800/60 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700/60 shadow-2xs">
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2.5">
-              <div>
-                <span className="text-slate-400 dark:text-slate-400 font-semibold block text-[10px]">Müşteri Firması</span>
-                <span className="font-bold text-slate-800 dark:text-slate-100 truncate block">{vehicle.musteri}</span>
-              </div>
-              <div>
-                <span className="text-slate-400 dark:text-slate-400 font-semibold block text-[10px]">Dorse Plakası</span>
-                <span className="font-bold text-blue-700 dark:text-blue-400 font-mono block">{vehicle.dorsePlaka}</span>
-              </div>
-              <div>
-                <span className="text-slate-400 dark:text-slate-400 font-semibold block text-[10px]">Çekici Plakası</span>
-                <span className="font-semibold text-slate-700 dark:text-slate-300 font-mono block">{vehicle.cekiciPlaka || '-'}</span>
-              </div>
-              <div>
-                <span className="text-slate-400 dark:text-slate-400 font-semibold block text-[10px]">Konteynır No</span>
-                <span className="font-semibold text-slate-700 dark:text-slate-300 font-mono block">{vehicle.konteynirNo || 'Yok'}</span>
-              </div>
-              <div>
-                <span className="text-slate-400 dark:text-slate-400 font-semibold block text-[10px]">Depo / Tesis</span>
-                <span className="font-semibold text-slate-700 dark:text-slate-200 truncate block">
-                  {warehouseName || `Depo #${vehicle.depoId || 1}`}
-                </span>
-              </div>
-              <div>
-                <span className="text-slate-400 dark:text-slate-400 font-semibold block text-[10px]">Şoför Ad Soyad</span>
-                <span className="font-semibold text-slate-700 dark:text-slate-300 block">{vehicle.soforAd}</span>
-              </div>
-              <div>
-                <span className="text-slate-400 dark:text-slate-400 font-semibold block text-[10px]">Şoför Telefonu</span>
-                <a
-                  href={`tel:${cleanPhone(vehicle.soforTel)}`}
-                  className="font-bold text-emerald-600 dark:text-emerald-400 hover:underline inline-block font-mono"
-                >
-                  {vehicle.soforTel}
-                </a>
-              </div>
-              <div>
-                <span className="text-slate-400 dark:text-slate-400 font-semibold block text-[10px]">Şoför TC No</span>
-                <span className="font-semibold text-slate-700 dark:text-slate-300 font-mono block">{vehicle.soforTc || '-'}</span>
-              </div>
-              <div>
-                <span className="text-slate-400 dark:text-slate-400 font-semibold block text-[10px]">Depo & İşlem</span>
-                <span className="font-semibold text-slate-700 dark:text-slate-300 block">
-                  {vehicle.depoTuru} / {vehicle.islemTuru}
-                </span>
-              </div>
-              <div>
-                <span className="text-slate-400 dark:text-slate-400 font-semibold block text-[10px]">Nakliye Firması</span>
-                <span className="font-semibold text-slate-700 dark:text-slate-300 truncate block">{vehicle.nakliyeFirmasi || '-'}</span>
-              </div>
-            </div>
+        {/* Yalnızca Admin İçin Sekme Çubuğu */}
+        {isAdmin && (
+          <div className="px-4 sm:px-5 py-2 bg-slate-100 dark:bg-slate-950/70 border-b border-slate-200 dark:border-slate-800 flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => setActiveDetailTab('general')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${
+                effectiveTab === 'general'
+                  ? 'bg-blue-600 text-white shadow-xs'
+                  : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700'
+              }`}
+            >
+              <Info className="w-3.5 h-3.5" />
+              <span>Genel Bilgi & Süreç</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveDetailTab('audit')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${
+                effectiveTab === 'audit'
+                  ? 'bg-slate-900 dark:bg-indigo-600 text-white shadow-xs'
+                  : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700'
+              }`}
+            >
+              <History className="w-3.5 h-3.5" />
+              <span>İşlem Geçmişi</span>
+              <span
+                className={`px-1.5 py-0.5 rounded text-[10px] font-black tabular-nums ${
+                  effectiveTab === 'audit'
+                    ? 'bg-white/20 text-white'
+                    : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200'
+                }`}
+              >
+                {vehicleAuditLogs.length}
+              </span>
+            </button>
           </div>
+        )}
 
-          {/* Güvenlik Notları (Varsa) */}
-          {vehicle.guvenlikNotlari && vehicle.guvenlikNotlari.length > 0 && (
-            <div className="space-y-1 p-3 bg-amber-50/70 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 rounded-xl">
-              <h4 className="font-bold text-[11px] text-amber-900 dark:text-amber-200 flex items-center gap-1">
-                <ShieldAlert className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" /> Güvenlik & Operasyon Notları
-              </h4>
-              <div className="max-h-24 overflow-y-auto space-y-1 custom-scroll">
-                {vehicle.guvenlikNotlari.map((n, idx) => (
-                  <div key={idx} className="p-1.5 bg-white dark:bg-slate-800 rounded-lg border border-amber-200/80 dark:border-slate-700 text-[10px] text-slate-800 dark:text-slate-100 flex justify-between gap-2">
-                    <span><b>{n.time}:</b> {n.note}</span>
-                    <span className="text-slate-400 dark:text-slate-400 shrink-0 font-medium">{n.author}</span>
+        {/* Modal İçerik (Kaydırılabilir Alan) */}
+        <div className="p-3.5 sm:p-5 flex-1 min-h-0 overflow-y-auto space-y-3.5 text-xs custom-scroll">
+          {effectiveTab === 'general' ? (
+            <>
+              {/* Araç Temel Bilgi Kartı */}
+              <div className="bg-slate-50 dark:bg-slate-800/60 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700/60 shadow-2xs">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2.5">
+                  <div>
+                    <span className="text-slate-400 dark:text-slate-400 font-semibold block text-[10px]">Müşteri Firması</span>
+                    <span className="font-bold text-slate-800 dark:text-slate-100 truncate block">{vehicle.musteri}</span>
                   </div>
-                ))}
+                  <div>
+                    <span className="text-slate-400 dark:text-slate-400 font-semibold block text-[10px]">Dorse Plakası</span>
+                    <span className="font-bold text-blue-700 dark:text-blue-400 font-mono block">{vehicle.dorsePlaka}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 dark:text-slate-400 font-semibold block text-[10px]">Çekici Plakası</span>
+                    <span className="font-semibold text-slate-700 dark:text-slate-300 font-mono block">{vehicle.cekiciPlaka || '-'}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 dark:text-slate-400 font-semibold block text-[10px]">Konteynır No</span>
+                    <span className="font-semibold text-slate-700 dark:text-slate-300 font-mono block">{vehicle.konteynirNo || 'Yok'}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 dark:text-slate-400 font-semibold block text-[10px]">Depo / Tesis</span>
+                    <span className="font-semibold text-slate-700 dark:text-slate-200 truncate block">
+                      {warehouseName || `Depo #${vehicle.depoId || 1}`}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 dark:text-slate-400 font-semibold block text-[10px]">Şoför Ad Soyad</span>
+                    <span className="font-semibold text-slate-700 dark:text-slate-300 block">{vehicle.soforAd}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 dark:text-slate-400 font-semibold block text-[10px]">Şoför Telefonu</span>
+                    <a
+                      href={`tel:${cleanPhone(vehicle.soforTel)}`}
+                      className="font-bold text-emerald-600 dark:text-emerald-400 hover:underline inline-block font-mono"
+                    >
+                      {vehicle.soforTel}
+                    </a>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 dark:text-slate-400 font-semibold block text-[10px]">Şoför TC No</span>
+                    <span className="font-semibold text-slate-700 dark:text-slate-300 font-mono block">{vehicle.soforTc || '-'}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 dark:text-slate-400 font-semibold block text-[10px]">Depo & İşlem</span>
+                    <span className="font-semibold text-slate-700 dark:text-slate-300 block">
+                      {vehicle.depoTuru} / {vehicle.islemTuru}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 dark:text-slate-400 font-semibold block text-[10px]">Nakliye Firması</span>
+                    <span className="font-semibold text-slate-700 dark:text-slate-300 truncate block">{vehicle.nakliyeFirmasi || '-'}</span>
+                  </div>
+                </div>
               </div>
-            </div>
-          )}
 
-          {/* Açıklama (Varsa) */}
-          {vehicle.aciklama && (
-            <div className="p-2.5 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900/60 text-blue-950 dark:text-blue-200 rounded-xl text-[11px]">
-              <b>Açıklama:</b> {vehicle.aciklama}
-            </div>
-          )}
+              {/* Güvenlik Notları (Varsa) */}
+              {vehicle.guvenlikNotlari && vehicle.guvenlikNotlari.length > 0 && (
+                <div className="space-y-1 p-3 bg-amber-50/70 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 rounded-xl">
+                  <h4 className="font-bold text-[11px] text-amber-900 dark:text-amber-200 flex items-center gap-1">
+                    <ShieldAlert className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" /> Güvenlik & Operasyon Notları
+                  </h4>
+                  <div className="max-h-24 overflow-y-auto space-y-1 custom-scroll">
+                    {vehicle.guvenlikNotlari.map((n, idx) => (
+                      <div key={idx} className="p-1.5 bg-white dark:bg-slate-800 rounded-lg border border-amber-200/80 dark:border-slate-700 text-[10px] text-slate-800 dark:text-slate-100 flex justify-between gap-2">
+                        <span><b>{n.time}:</b> {n.note}</span>
+                        <span className="text-slate-400 dark:text-slate-400 shrink-0 font-medium">{n.author}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
-          {/* Fotoğraflar (Varsa) */}
-          {vehicle.fotograflar && vehicle.fotograflar.length > 0 && (
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <h4 className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5 text-[11px]">
-                  <Camera className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" /> Kayıtlı Fotoğraflar ({vehicle.fotograflar.length})
-                </h4>
-                {onShareWhatsApp && (
-                  <button
-                    type="button"
-                    onClick={() => onShareWhatsApp(vehicle)}
-                    className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[10px] font-bold flex items-center gap-1.5 transition cursor-pointer shadow-xs active:scale-95"
-                    title="Fotoğrafları araç bilgileri açıklamasıyla WhatsApp'ta paylaş"
-                  >
-                    <MessageSquare className="w-3 h-3" />
-                    <span>Fotoğrafı Açıklamasıyla Paylaş</span>
-                  </button>
-                )}
-              </div>
-              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
-                {vehicle.fotograflar.map((img, idx) => (
-                  <div key={idx} className="relative group">
-                    <img
-                      src={img}
-                      alt={`Fotoğraf ${idx + 1}`}
-                      onClick={() => onOpenPhotoGallery(vehicle)}
-                      className="w-full h-20 object-cover rounded-lg border border-slate-200 dark:border-slate-700 hover:scale-102 transition cursor-pointer shadow-2xs"
-                    />
+              {/* Açıklama (Varsa) */}
+              {vehicle.aciklama && (
+                <div className="p-2.5 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900/60 text-blue-950 dark:text-blue-200 rounded-xl text-[11px]">
+                  <b>Açıklama:</b> {vehicle.aciklama}
+                </div>
+              )}
+
+              {/* Fotoğraflar (Varsa) */}
+              {vehicle.fotograflar && vehicle.fotograflar.length > 0 && (
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <h4 className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5 text-[11px]">
+                      <Camera className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" /> Kayıtlı Fotoğraflar ({vehicle.fotograflar.length})
+                    </h4>
                     {onShareWhatsApp && (
                       <button
                         type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onShareWhatsApp(vehicle);
-                        }}
-                        title="Bu fotoğrafı açıklamasıyla WhatsApp'ta paylaş"
-                        className="absolute bottom-1 right-1 px-1.5 py-0.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded opacity-0 group-hover:opacity-100 transition shadow cursor-pointer text-[9px] flex items-center gap-0.5"
+                        onClick={() => onShareWhatsApp(vehicle)}
+                        className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[10px] font-bold flex items-center gap-1.5 transition cursor-pointer shadow-xs active:scale-95"
+                        title="Fotoğrafları araç bilgileri açıklamasıyla WhatsApp'ta paylaş"
                       >
-                        <MessageSquare className="w-2.5 h-2.5" />
-                        <span>Paylaş</span>
+                        <MessageSquare className="w-3 h-3" />
+                        <span>Fotoğrafı Açıklamasıyla Paylaş</span>
                       </button>
                     )}
                   </div>
-                ))}
+                  <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
+                    {vehicle.fotograflar.map((img, idx) => (
+                      <div key={idx} className="relative group">
+                        <img
+                          src={img}
+                          alt={`Fotoğraf ${idx + 1}`}
+                          onClick={() => onOpenPhotoGallery(vehicle)}
+                          className="w-full h-20 object-cover rounded-lg border border-slate-200 dark:border-slate-700 hover:scale-102 transition cursor-pointer shadow-2xs"
+                        />
+                        {onShareWhatsApp && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onShareWhatsApp(vehicle);
+                            }}
+                            title="Bu fotoğrafı açıklamasıyla WhatsApp'ta paylaş"
+                            className="absolute bottom-1 right-1 px-1.5 py-0.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded opacity-0 group-hover:opacity-100 transition shadow cursor-pointer text-[9px] flex items-center gap-0.5"
+                          >
+                            <MessageSquare className="w-2.5 h-2.5" />
+                            <span>Paylaş</span>
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* =========================================================
+                 ARAÇ DETAYI: SÜREÇ VE YAŞAM DÖNGÜSÜ ZAMAN ÇİZELGESİ
+                 (Depo Kayıt, Evrak Hazırlık, Rampa Giriş ve Çıkış Tarih & Süreleri)
+                 ========================================================= */}
+              <VehicleLifecycleTimeline vehicle={vehicle} rampName={rampName} slaSettings={slaSettings} />
+            </>
+          ) : (
+            <div className="space-y-3">
+              <div className="p-3 bg-slate-50 dark:bg-slate-800/70 rounded-xl border border-slate-200 dark:border-slate-700 flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2 text-slate-700 dark:text-slate-200">
+                  <Shield className="w-4 h-4 text-indigo-500 shrink-0" />
+                  <span className="font-bold">Yalnızca Admin Görünümü — Değiştirilemez Araç Denetim İzi</span>
+                </div>
+                <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400">
+                  Toplam {vehicleAuditLogs.length} kayıt
+                </span>
               </div>
+
+              {vehicleAuditLogs.length === 0 ? (
+                <div className="p-8 text-center bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400 space-y-1.5">
+                  <History className="w-8 h-8 mx-auto text-slate-400 dark:text-slate-500" />
+                  <p className="font-bold text-slate-700 dark:text-slate-300">Bu araç için henüz denetim kaydı yok</p>
+                  <p className="text-[11px]">
+                    Bu araç üzerinde yapılan durum değişikliği, rampa atama, düzenleme ve çıkış işlemleri burada kronolojik olarak izlenir.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-2.5">
+                  {vehicleAuditLogs.map((log) => (
+                    <div
+                      key={log.id}
+                      className={`p-3 rounded-xl border transition-colors ${
+                        log.severity === 'critical'
+                          ? 'bg-red-50/60 dark:bg-red-950/20 border-red-200 dark:border-red-900/60'
+                          : log.severity === 'warning'
+                          ? 'bg-amber-50/60 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900/60'
+                          : 'bg-white dark:bg-slate-800/60 border-slate-200 dark:border-slate-700'
+                      }`}
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="font-bold text-slate-900 dark:text-white text-xs">
+                            {getActionLabel(log.action)}
+                          </span>
+                          <span className="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-[10px] font-semibold">
+                            {AUDIT_CATEGORY_LABELS[log.category] || log.category}
+                          </span>
+                          {log.severity !== 'info' && (
+                            <span
+                              className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                log.severity === 'critical'
+                                  ? 'bg-red-600 text-white'
+                                  : 'bg-amber-500 text-slate-950'
+                              }`}
+                            >
+                              {AUDIT_SEVERITY_LABELS[log.severity]}
+                            </span>
+                          )}
+                        </div>
+                        <span className="font-mono tabular-nums text-[11px] text-slate-500 dark:text-slate-400">
+                          {log.dateStr}
+                        </span>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-600 dark:text-slate-300 mb-1.5">
+                        <span className="font-bold text-blue-700 dark:text-blue-400">
+                          {log.actorUsername}
+                        </span>
+                        <span className="text-slate-400">•</span>
+                        <span className="font-medium">
+                          {AUDIT_ROLE_LABELS[log.actorRole] || log.actorRole}
+                        </span>
+                        {log.depoName && (
+                          <>
+                            <span className="text-slate-400">•</span>
+                            <span className="text-slate-500 dark:text-slate-400">{log.depoName}</span>
+                          </>
+                        )}
+                      </div>
+
+                      <p className="text-xs text-slate-800 dark:text-slate-200 leading-relaxed">
+                        {log.summary}
+                      </p>
+
+                      {Array.isArray(log.changes) && log.changes.length > 0 && (
+                        <div className="mt-2 pt-2 border-t border-slate-200/80 dark:border-slate-700/80 space-y-1">
+                          {log.changes.map((c, idx) => (
+                            <div
+                              key={`${log.id}-${c.field}-${idx}`}
+                              className="grid grid-cols-1 sm:grid-cols-[140px_1fr] gap-1 sm:gap-2 text-[11px] bg-slate-50 dark:bg-slate-900/60 p-1.5 rounded-lg border border-slate-200/60 dark:border-slate-700/60"
+                            >
+                              <span className="font-bold text-slate-600 dark:text-slate-300 truncate">
+                                {c.label}
+                              </span>
+                              <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+                                <span className="px-1.5 py-0.5 rounded bg-red-100/80 dark:bg-red-950/60 text-red-700 dark:text-red-300 line-through break-all">
+                                  {c.before}
+                                </span>
+                                <ArrowRight className="w-3 h-3 text-slate-400 shrink-0" />
+                                <span className="px-1.5 py-0.5 rounded bg-emerald-100/80 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 font-semibold break-all">
+                                  {c.after}
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
-
-          {/* =========================================================
-             ARAÇ DETAYI: SÜREÇ VE YAŞAM DÖNGÜSÜ ZAMAN ÇİZELGESİ
-             (Depo Kayıt, Evrak Hazırlık, Rampa Giriş ve Çıkış Tarih & Süreleri)
-             ========================================================= */}
-          <VehicleLifecycleTimeline vehicle={vehicle} rampName={rampName} slaSettings={slaSettings} />
         </div>
 
         {/* Modal Alt Kapat Çubuğu */}
-        <div className="px-4 py-2.5 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between shrink-0">
+        <div className="px-4 py-2.5 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:py-2.5 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2 shrink-0">
           {onShareWhatsApp ? (
             <button
+              type="button"
               onClick={() => onShareWhatsApp(vehicle)}
-              className="px-3.5 sm:px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs cursor-pointer transition shadow-xs flex items-center gap-1.5 active:scale-95"
+              className="px-3.5 sm:px-4 py-2 min-h-[42px] bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs cursor-pointer transition shadow-xs flex items-center gap-1.5 active:scale-95"
               title="Araç bilgilerini ve fotoğraflarını WhatsApp grubuna aktar"
             >
               <MessageSquare className="w-3.5 h-3.5" />
@@ -2386,8 +2623,9 @@ export const DetailViewModal: React.FC<DetailViewModalProps> = ({
             <div />
           )}
           <button
+            type="button"
             onClick={onClose}
-            className="px-5 py-2 bg-slate-800 hover:bg-slate-900 dark:bg-slate-700 dark:hover:bg-slate-600 text-white font-bold rounded-xl text-xs cursor-pointer transition shadow-xs"
+            className="px-5 py-2 min-h-[42px] bg-slate-800 hover:bg-slate-900 dark:bg-slate-700 dark:hover:bg-slate-600 text-white font-bold rounded-xl text-xs cursor-pointer transition shadow-xs"
           >
             Kapat
           </button>
@@ -2462,23 +2700,27 @@ export const RampAssignModal: React.FC<RampAssignModalProps> = ({
     hasPermission(currentUser, 'canAssignRamp');
 
   return (
-    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-      <div className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden max-h-[85vh] flex flex-col border border-slate-200 dark:border-slate-800 transition-colors">
-        <div className="p-4 bg-slate-900 text-white flex items-center justify-between">
-          <div>
+    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 z-50">
+      <div className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-t-3xl sm:rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden max-h-[calc(var(--vvh,100dvh)-env(safe-area-inset-top,0px)-0.5rem)] sm:max-h-[85dvh] flex flex-col border-0 sm:border border-slate-200 dark:border-slate-800 transition-colors">
+        <div className="p-4 bg-slate-900 text-white flex items-center justify-between shrink-0">
+          <div className="min-w-0 pr-2">
             <h3 className="font-bold text-sm flex items-center gap-2">
-              <WarehouseIcon className="w-4 h-4 text-blue-400" /> {ramp.ad} - Araç Atama / Çağırma
+              <WarehouseIcon className="w-4 h-4 text-blue-400 shrink-0" /> <span className="truncate">{ramp.ad} - Araç Atama / Çağırma</span>
             </h3>
             <p className="text-[10px] text-slate-400">
               Evrakı hazır aracı veya Serbest Depo araçlarını doğrudan atayabilir veya güvenlik için çağırabilirsiniz
             </p>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-white cursor-pointer">
+          <button
+            type="button"
+            onClick={onClose}
+            className="min-w-[40px] min-h-[40px] rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 flex items-center justify-center cursor-pointer shrink-0"
+          >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        <div className="p-4 bg-slate-50 dark:bg-slate-800/70 border-b border-slate-200 dark:border-slate-800">
+        <div className="p-4 bg-slate-50 dark:bg-slate-800/70 border-b border-slate-200 dark:border-slate-800 shrink-0">
           <input
             type="text"
             value={search}
@@ -2488,17 +2730,17 @@ export const RampAssignModal: React.FC<RampAssignModalProps> = ({
           />
         </div>
 
-        <div className="p-4 overflow-y-auto custom-scroll flex-1 space-y-2">
+        <div className="p-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:pb-4 overflow-y-auto custom-scroll flex-1 min-h-0 space-y-2">
           {filtered.map((v) => (
             <div
               key={v.id}
-              className={`p-3 border rounded-xl transition flex items-center justify-between shadow-sm ${
+              className={`p-3 border rounded-xl transition flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 shadow-sm ${
                 v.isAcik
                   ? 'border-red-500 bg-red-50/60 dark:bg-red-950/30'
                   : 'bg-white dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 hover:border-blue-500 hover:bg-blue-50/50 dark:hover:bg-blue-950/30'
               }`}
             >
-              <div>
+              <div className="min-w-0 flex-1 w-full">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-bold text-xs text-slate-800 dark:text-slate-100">{v.dorsePlaka}</span>
                   <span className="text-[10px] px-1.5 py-0.5 bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 font-bold rounded">
@@ -2515,17 +2757,18 @@ export const RampAssignModal: React.FC<RampAssignModalProps> = ({
                     </span>
                   )}
                 </div>
-                <p className="text-xs font-semibold text-slate-600 dark:text-slate-300 mt-0.5">{v.musteri}</p>
-                <p className="text-[10px] text-slate-400">
+                <p className="text-xs font-semibold text-slate-600 dark:text-slate-300 mt-0.5 truncate">{v.musteri}</p>
+                <p className="text-[10px] text-slate-400 truncate">
                   Şoför: {v.soforAd} ({v.soforTel})
                 </p>
               </div>
 
-              <div className="flex gap-1.5 shrink-0">
+              <div className="flex gap-2 w-full sm:w-auto shrink-0">
                 {canCall && (
                   <button
+                    type="button"
                     onClick={() => onCall(v, ramp)}
-                    className="px-2.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-slate-900 font-extrabold text-[10px] rounded-lg transition shadow-sm flex items-center gap-1 cursor-pointer"
+                    className="flex-1 sm:flex-initial px-3 py-1.5 min-h-[38px] bg-amber-500 hover:bg-amber-600 text-slate-900 font-extrabold text-[11px] rounded-xl transition shadow-sm flex items-center justify-center gap-1 cursor-pointer"
                     title="Güvenlik ve Sahaya Bildirim Düşer"
                   >
                     Çağır
@@ -2533,8 +2776,9 @@ export const RampAssignModal: React.FC<RampAssignModalProps> = ({
                 )}
                 {canAssign && (
                   <button
+                    type="button"
                     onClick={() => onAssign(v, ramp)}
-                    className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-[10px] rounded-lg transition shadow-md shadow-blue-500/20 cursor-pointer"
+                    className="flex-1 sm:flex-initial px-3.5 py-1.5 min-h-[38px] bg-blue-600 hover:bg-blue-700 text-white font-bold text-[11px] rounded-xl transition shadow-md shadow-blue-500/20 flex items-center justify-center cursor-pointer"
                   >
                     Ata
                   </button>
@@ -2707,21 +2951,25 @@ export const NewVehicleModal: React.FC<NewVehicleModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-      <div className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-2xl shadow-2xl max-w-2xl w-full overflow-hidden max-h-[90vh] flex flex-col border border-slate-200 dark:border-slate-800 transition-colors">
-        <div className="p-5 bg-slate-900 text-white flex items-center justify-between">
-          <div>
+    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 z-50">
+      <div className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-none sm:rounded-2xl shadow-2xl max-w-2xl w-full overflow-hidden h-[var(--vvh,100dvh)] sm:h-auto sm:max-h-[90dvh] flex flex-col border-0 sm:border border-slate-200 dark:border-slate-800 transition-colors">
+        <div className="px-4 py-3.5 pt-[max(0.875rem,env(safe-area-inset-top))] sm:p-5 bg-slate-900 text-white flex items-center justify-between shrink-0">
+          <div className="min-w-0 pr-2">
             <h3 className="font-bold text-sm flex items-center gap-2">
-              <Truck className="w-4 h-4 text-blue-400" /> Güvenlik Araç Kayıt Ekranı
+              <Truck className="w-4 h-4 text-blue-400 shrink-0" /> Güvenlik Araç Kayıt Ekranı
             </h3>
-            <p className="text-[10px] text-slate-400">Aracın bilgilerini ve fotoğraflarını kaydederek sahaya alınız</p>
+            <p className="text-[10px] text-slate-400 truncate">Aracın bilgilerini ve fotoğraflarını kaydederek sahaya alınız</p>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-white cursor-pointer">
+          <button
+            type="button"
+            onClick={onClose}
+            className="min-w-[40px] min-h-[40px] rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 flex items-center justify-center cursor-pointer shrink-0"
+          >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-4 custom-scroll text-xs">
+        <form onSubmit={handleSubmit} className="p-4 sm:p-6 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:pb-6 flex-1 min-h-0 overflow-y-auto space-y-4 custom-scroll text-xs">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block font-semibold text-slate-600 dark:text-slate-300 mb-1">Kayıt Yapılan Depo/Saha *</label>
@@ -2910,7 +3158,7 @@ export const NewVehicleModal: React.FC<NewVehicleModalProps> = ({
               Fotoğraflar (Çekici, Dorse veya Mühür)
             </label>
             <div className="flex flex-wrap items-center gap-2">
-              <label className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl cursor-pointer transition flex items-center gap-2 shadow-md shadow-blue-500/20">
+              <label className="px-4 py-2.5 min-h-[44px] flex-1 sm:flex-initial justify-center bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl cursor-pointer transition flex items-center gap-2 shadow-md shadow-blue-500/20">
                 <Camera className="w-4 h-4" /> Kamera Aç / Çek
                 <input
                   type="file"
@@ -2921,7 +3169,7 @@ export const NewVehicleModal: React.FC<NewVehicleModalProps> = ({
                 />
               </label>
 
-              <label className="px-4 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold rounded-xl cursor-pointer transition flex items-center gap-2 border border-slate-200 dark:border-slate-700">
+              <label className="px-4 py-2.5 min-h-[44px] flex-1 sm:flex-initial justify-center bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold rounded-xl cursor-pointer transition flex items-center gap-2 border border-slate-200 dark:border-slate-700">
                 <FolderOpen className="w-4 h-4" /> Galeriden Seç
                 <input type="file" accept="image/*" multiple onChange={handleFileUpload} className="hidden" />
               </label>
@@ -2938,9 +3186,9 @@ export const NewVehicleModal: React.FC<NewVehicleModalProps> = ({
                     <button
                       type="button"
                       onClick={() => handleRemovePhoto(idx)}
-                      className="absolute top-1 right-1 bg-red-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] cursor-pointer"
+                      className="absolute top-1 right-1 bg-red-600 text-white rounded-full w-6 h-6 flex items-center justify-center text-[10px] cursor-pointer shadow"
                     >
-                      <X className="w-3 h-3" />
+                      <X className="w-3.5 h-3.5" />
                     </button>
                   </div>
                 ))}
@@ -2952,13 +3200,13 @@ export const NewVehicleModal: React.FC<NewVehicleModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl font-semibold cursor-pointer"
+              className="px-4 py-2 min-h-[44px] text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl font-semibold cursor-pointer"
             >
               İptal
             </button>
             <button
               type="submit"
-              className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl shadow-md shadow-blue-500/20 cursor-pointer"
+              className="px-6 py-2 min-h-[44px] bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl shadow-md shadow-blue-500/20 cursor-pointer"
             >
               Kaydet ve Beklemeye Al
             </button>
@@ -2992,26 +3240,30 @@ export const ExpectedVehicleArrivalModal: React.FC<ExpectedVehicleArrivalModalPr
   if (!isOpen || !expectedVehicle) return null;
 
   return (
-    <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 z-50 animate-in fade-in duration-150">
-      <div className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-2xl shadow-2xl max-w-md w-full overflow-hidden flex flex-col border border-slate-200 dark:border-slate-800 transition-colors">
+    <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 z-50 animate-in fade-in duration-150">
+      <div className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-t-3xl sm:rounded-2xl shadow-2xl max-w-md w-full max-h-[calc(var(--vvh,100dvh)-env(safe-area-inset-top,0px)-0.5rem)] sm:max-h-[90dvh] overflow-hidden flex flex-col border-0 sm:border border-slate-200 dark:border-slate-800 transition-colors">
         {/* Başlık */}
-        <div className="p-4 bg-emerald-700 text-white flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center">
+        <div className="p-4 bg-emerald-700 text-white flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-2.5 min-w-0 pr-2">
+            <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
               <LogIn className="w-4 h-4 text-white" />
             </div>
-            <div>
+            <div className="min-w-0">
               <h3 className="font-black text-sm">Sahaya Araç Kabul Onayı</h3>
-              <p className="text-[10px] text-emerald-100">Kayıtlı bilgilerle aracı doğrudan sahaya kabul edebilirsiniz</p>
+              <p className="text-[10px] text-emerald-100 truncate">Kayıtlı bilgilerle aracı doğrudan sahaya kabul edebilirsiniz</p>
             </div>
           </div>
-          <button onClick={onClose} className="text-white/80 hover:text-white cursor-pointer">
+          <button
+            type="button"
+            onClick={onClose}
+            className="min-w-[40px] min-h-[40px] rounded-xl text-white/80 hover:text-white hover:bg-white/15 flex items-center justify-center cursor-pointer shrink-0"
+          >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Gövde: Önceden girilmiş tüm bilgilerin özeti */}
-        <div className="p-4 sm:p-5 space-y-3.5 text-xs">
+        <div className="p-4 sm:p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:pb-5 space-y-3.5 text-xs overflow-y-auto flex-1 min-h-0 custom-scroll">
           <div className="bg-slate-50 dark:bg-slate-800/80 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700/60 space-y-2.5">
             {/* Plaka & Tesis */}
             <div className="flex items-center justify-between gap-2 border-b border-slate-200/60 dark:border-slate-700/60 pb-2">
@@ -3093,7 +3345,7 @@ export const ExpectedVehicleArrivalModal: React.FC<ExpectedVehicleArrivalModalPr
                 onDirectAdmit(expectedVehicle);
                 onClose();
               }}
-              className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-xl text-xs flex items-center justify-center gap-2 shadow-md shadow-emerald-600/20 cursor-pointer transition active:scale-98"
+              className="w-full py-2.5 px-4 min-h-[44px] bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-xl text-xs flex items-center justify-center gap-2 shadow-md shadow-emerald-600/20 cursor-pointer transition active:scale-98"
             >
               <Check className="w-4 h-4" /> Tek Tıkla Sahaya Al (Hızlı Giriş)
             </button>
@@ -3104,7 +3356,7 @@ export const ExpectedVehicleArrivalModal: React.FC<ExpectedVehicleArrivalModalPr
                 onOpenEditForm(expectedVehicle);
                 onClose();
               }}
-              className="w-full py-2 px-4 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold rounded-xl text-xs flex items-center justify-center gap-2 border border-slate-200 dark:border-slate-700 cursor-pointer transition active:scale-98"
+              className="w-full py-2 px-4 min-h-[42px] bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold rounded-xl text-xs flex items-center justify-center gap-2 border border-slate-200 dark:border-slate-700 cursor-pointer transition active:scale-98"
             >
               <Camera className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" /> Fotoğraf Çek / Bilgileri Düzenle
             </button>
@@ -3112,7 +3364,7 @@ export const ExpectedVehicleArrivalModal: React.FC<ExpectedVehicleArrivalModalPr
             <button
               type="button"
               onClick={onClose}
-              className="w-full py-1.5 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 text-xs font-semibold cursor-pointer text-center"
+              className="w-full py-2 min-h-[38px] text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 text-xs font-semibold cursor-pointer text-center"
             >
               Vazgeç
             </button>
@@ -3165,8 +3417,8 @@ export const PhotoGalleryModal: React.FC<PhotoGalleryModalProps> = ({ vehicle, o
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 z-50 overflow-y-auto">
-      <div className="bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl max-w-3xl w-full p-4 sm:p-5 text-white flex flex-col justify-between relative max-h-[95vh] overflow-hidden">
+    <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-0 sm:p-4 z-50">
+      <div className="bg-slate-900 border-0 sm:border border-slate-800 rounded-none sm:rounded-3xl shadow-2xl max-w-3xl w-full p-3.5 pt-[max(0.875rem,env(safe-area-inset-top))] pb-[max(0.875rem,env(safe-area-inset-bottom))] sm:p-5 text-white flex flex-col justify-between relative h-[var(--vvh,100dvh)] sm:h-auto sm:max-h-[95dvh] overflow-hidden">
         {/* Üst Başlık Alanı (Her zaman görünür, sakın kaldırma) */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 pb-3 border-b border-slate-800 shrink-0">
           <div>
@@ -3196,7 +3448,7 @@ export const PhotoGalleryModal: React.FC<PhotoGalleryModalProps> = ({ vehicle, o
               <button
                 type="button"
                 onClick={() => onShareWhatsApp(vehicle)}
-                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer shadow-sm active:scale-95"
+                className="px-3 py-1.5 min-h-[36px] bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer shadow-sm active:scale-95"
                 title="Fotoğrafı araç bilgisi açıklamasıyla WhatsApp'ta paylaş"
               >
                 <MessageSquare className="w-3.5 h-3.5" />
@@ -3207,14 +3459,18 @@ export const PhotoGalleryModal: React.FC<PhotoGalleryModalProps> = ({ vehicle, o
             <span className="text-xs font-mono bg-slate-800 px-3 py-1 rounded-full text-slate-300">
               {photos.length > 0 ? activeIdx + 1 : 0} / {photos.length}
             </span>
-            <button onClick={onClose} className="text-slate-400 hover:text-white text-xl cursor-pointer p-1">
+            <button
+              type="button"
+              onClick={onClose}
+              className="min-w-[40px] min-h-[40px] rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 flex items-center justify-center cursor-pointer"
+            >
               <X className="w-5 h-5" />
             </button>
           </div>
         </div>
 
         {/* Fotoğraf Görüntüleme & Yakınlaştırma (- / +) Alanı */}
-        <div className="my-3 flex-1 flex items-center justify-center relative min-h-[300px] overflow-hidden rounded-2xl bg-black/40 border border-slate-800/80">
+        <div className="my-3 flex-1 flex items-center justify-center relative min-h-[220px] sm:min-h-[300px] overflow-hidden rounded-2xl bg-black/40 border border-slate-800/80">
           {photos.length > 0 ? (
             <div className="w-full h-full flex items-center justify-center relative overflow-hidden p-2">
               <img
@@ -3468,18 +3724,22 @@ export const EditVehicleModal: React.FC<EditVehicleModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-      <div className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-2xl shadow-2xl max-w-3xl w-full overflow-hidden max-h-[90vh] flex flex-col border border-slate-200 dark:border-slate-800 transition-colors">
-        <div className="p-5 bg-slate-900 text-white flex items-center justify-between">
+    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 z-50">
+      <div className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-none sm:rounded-2xl shadow-2xl max-w-3xl w-full overflow-hidden h-[var(--vvh,100dvh)] sm:h-auto sm:max-h-[90dvh] flex flex-col border-0 sm:border border-slate-200 dark:border-slate-800 transition-colors">
+        <div className="px-4 py-3.5 pt-[max(0.875rem,env(safe-area-inset-top))] sm:p-5 bg-slate-900 text-white flex items-center justify-between shrink-0">
           <h3 className="font-bold text-sm flex items-center gap-2">
             <Edit className="w-4 h-4 text-blue-400" /> Araç Detayı & Bilgileri Güncelle
           </h3>
-          <button onClick={onClose} className="text-slate-400 hover:text-white cursor-pointer">
+          <button
+            type="button"
+            onClick={onClose}
+            className="min-w-[40px] min-h-[40px] rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 flex items-center justify-center cursor-pointer"
+          >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-4 custom-scroll text-xs">
+        <form onSubmit={handleSubmit} className="p-4 sm:p-6 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:pb-6 flex-1 min-h-0 overflow-y-auto space-y-4 custom-scroll text-xs">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="block font-semibold text-slate-600 dark:text-slate-300 mb-1">Depo / Saha *</label>
@@ -3747,29 +4007,29 @@ export const EditVehicleModal: React.FC<EditVehicleModalProps> = ({
             )}
           </div>
 
-          <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3">
+          <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3">
             {onDelete && canEditVehicle ? (
               <button
                 type="button"
                 onClick={() => onDelete(vehicle)}
-                className="px-4 py-2 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/50 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 rounded-xl font-semibold transition cursor-pointer flex items-center gap-1.5"
+                className="px-4 py-2 min-h-[44px] bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/50 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 rounded-xl font-semibold transition cursor-pointer flex items-center gap-1.5"
               >
                 <Trash2 className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" /> Aracı Sil
               </button>
             ) : <div />}
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 ml-auto">
               <button
                 type="button"
                 onClick={onClose}
-                className="px-4 py-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl font-semibold cursor-pointer"
+                className="px-4 py-2 min-h-[44px] text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl font-semibold cursor-pointer"
               >
                 İptal
               </button>
               <button
                 type="submit"
                 disabled={!canEditVehicle}
-                className="px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold rounded-xl shadow-md shadow-blue-500/20 cursor-pointer"
+                className="px-6 py-2 min-h-[44px] bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold rounded-xl shadow-md shadow-blue-500/20 cursor-pointer"
               >
                 Değişiklikleri Kaydet
               </button>
@@ -3816,13 +4076,17 @@ export const PasswordModal: React.FC<PasswordModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-      <div className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-2xl shadow-2xl max-w-md w-full p-6 space-y-4 border border-slate-200 dark:border-slate-800 transition-colors">
+    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 z-50">
+      <div className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-t-3xl sm:rounded-2xl shadow-2xl max-w-md w-full max-h-[calc(var(--vvh,100dvh)-env(safe-area-inset-top,0px)-0.5rem)] overflow-y-auto p-5 sm:p-6 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:pb-6 space-y-4 border-0 sm:border border-slate-200 dark:border-slate-800 transition-colors">
         <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-3">
           <h3 className="font-bold text-slate-800 dark:text-slate-100 text-sm flex items-center gap-1.5">
             <Key className="w-4 h-4 text-blue-600 dark:text-blue-400" /> Kullanıcı Şifresi Değiştir (Yönetici)
           </h3>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer">
+          <button
+            type="button"
+            onClick={onClose}
+            className="min-w-[40px] min-h-[40px] rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 flex items-center justify-center cursor-pointer"
+          >
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -3859,13 +4123,13 @@ export const PasswordModal: React.FC<PasswordModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl font-semibold cursor-pointer"
+              className="px-4 py-2 min-h-[42px] text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl font-semibold cursor-pointer"
             >
               İptal
             </button>
             <button
               type="submit"
-              className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl cursor-pointer"
+              className="px-5 py-2 min-h-[42px] bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl cursor-pointer"
             >
               Güncelle
             </button>
@@ -3904,11 +4168,11 @@ export const ReleaseRampVehicleModal: React.FC<ReleaseRampVehicleModalProps> = (
     currentUser?.role === 'admin' || hasPermission(currentUser, 'canAuthorizeExit');
 
   return (
-    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-      <div className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-2xl shadow-2xl max-w-md w-full p-5 space-y-4 border border-slate-100 dark:border-slate-800 transition-colors">
+    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 z-50">
+      <div className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-t-3xl sm:rounded-2xl shadow-2xl max-w-md w-full max-h-[calc(var(--vvh,100dvh)-env(safe-area-inset-top,0px)-0.5rem)] overflow-y-auto p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:pb-5 space-y-4 border-0 sm:border border-slate-100 dark:border-slate-800 transition-colors">
         <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-3">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-xl bg-red-100 dark:bg-red-950/60 text-red-600 dark:text-red-400 flex items-center justify-center font-bold">
+            <div className="w-8 h-8 rounded-xl bg-red-100 dark:bg-red-950/60 text-red-600 dark:text-red-400 flex items-center justify-center font-bold shrink-0">
               <LogOut className="w-4 h-4" />
             </div>
             <div>
@@ -3916,7 +4180,11 @@ export const ReleaseRampVehicleModal: React.FC<ReleaseRampVehicleModalProps> = (
               <p className="text-[11px] text-blue-600 dark:text-blue-400 font-semibold">{rampName}</p>
             </div>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer p-1 rounded-lg">
+          <button
+            type="button"
+            onClick={onClose}
+            className="min-w-[40px] min-h-[40px] rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 flex items-center justify-center cursor-pointer"
+          >
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -3967,7 +4235,7 @@ export const ReleaseRampVehicleModal: React.FC<ReleaseRampVehicleModalProps> = (
             <button
               type="button"
               onClick={() => onReleaseAndExit(vehicle)}
-              className="w-full py-2.5 px-4 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl text-xs flex items-center gap-2.5 shadow-md shadow-red-500/20 cursor-pointer transition active:scale-[0.99]"
+              className="w-full py-2.5 px-4 min-h-[44px] bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl text-xs flex items-center gap-2.5 shadow-md shadow-red-500/20 cursor-pointer transition active:scale-[0.99]"
             >
               <LogOut className="w-4 h-4 shrink-0" />
               <div className="text-left">
@@ -3985,7 +4253,7 @@ export const ReleaseRampVehicleModal: React.FC<ReleaseRampVehicleModalProps> = (
             <button
               type="button"
               onClick={() => onReleaseOnly(vehicle)}
-              className="w-full py-2.5 px-4 bg-amber-500 hover:bg-amber-600 text-slate-900 font-bold rounded-xl text-xs flex items-center gap-2.5 shadow-md shadow-amber-500/20 cursor-pointer transition active:scale-[0.99]"
+              className="w-full py-2.5 px-4 min-h-[44px] bg-amber-500 hover:bg-amber-600 text-slate-900 font-bold rounded-xl text-xs flex items-center gap-2.5 shadow-md shadow-amber-500/20 cursor-pointer transition active:scale-[0.99]"
             >
               <WarehouseIcon className="w-4 h-4 shrink-0" />
               <div className="text-left">
@@ -4002,7 +4270,7 @@ export const ReleaseRampVehicleModal: React.FC<ReleaseRampVehicleModalProps> = (
           <button
             type="button"
             onClick={onClose}
-            className="w-full py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold rounded-xl text-xs cursor-pointer transition"
+            className="w-full py-2 min-h-[40px] bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold rounded-xl text-xs cursor-pointer transition"
           >
             Vazgeç
           </button>
@@ -4039,14 +4307,18 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[70]">
-      <div className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-2xl shadow-2xl max-w-sm w-full p-5 space-y-3 border border-slate-100 dark:border-slate-800 transition-colors">
+    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 z-[70]">
+      <div className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-t-3xl sm:rounded-2xl shadow-2xl max-w-sm w-full max-h-[calc(var(--vvh,100dvh)-env(safe-area-inset-top,0px)-0.5rem)] overflow-y-auto p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:pb-5 space-y-3 border-0 sm:border border-slate-100 dark:border-slate-800 transition-colors">
         <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-2.5">
           <h3 className="font-bold text-slate-800 dark:text-slate-100 text-sm flex items-center gap-1.5">
             <AlertTriangle className={`w-4 h-4 ${variant === 'danger' ? 'text-red-600' : 'text-amber-500'}`} />
             {title}
           </h3>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 cursor-pointer">
+          <button
+            type="button"
+            onClick={onClose}
+            className="min-w-[40px] min-h-[40px] rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 flex items-center justify-center cursor-pointer"
+          >
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -4055,7 +4327,7 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="px-3.5 py-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl font-semibold text-xs cursor-pointer transition"
+            className="px-3.5 py-2 min-h-[40px] text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl font-semibold text-xs cursor-pointer transition"
           >
             {cancelText}
           </button>
@@ -4065,7 +4337,7 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
               onConfirm();
               onClose();
             }}
-            className={`px-4 py-2 font-bold text-xs rounded-xl shadow cursor-pointer transition ${
+            className={`px-4 py-2 min-h-[40px] font-bold text-xs rounded-xl shadow cursor-pointer transition ${
               variant === 'danger'
                 ? 'bg-red-600 hover:bg-red-700 text-white shadow-red-500/20'
                 : variant === 'warning'
@@ -4132,29 +4404,30 @@ export const WarehouseManagementModal: React.FC<WarehouseManagementModalProps> =
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 z-50">
-      <div className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-2xl shadow-2xl max-w-xl w-full overflow-hidden max-h-[92vh] flex flex-col border border-slate-200 dark:border-slate-800 animate-in fade-in zoom-in-95 duration-200 transition-colors">
+    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 z-50">
+      <div className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-none sm:rounded-2xl shadow-2xl max-w-xl w-full overflow-hidden h-[var(--vvh,100dvh)] sm:h-auto sm:max-h-[92dvh] flex flex-col border-0 sm:border border-slate-200 dark:border-slate-800 animate-in fade-in zoom-in-95 duration-200 transition-colors">
         {/* Header */}
-        <div className="p-4 sm:p-5 bg-slate-900 text-white flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-md shadow-blue-500/30">
+        <div className="px-4 py-3.5 pt-[max(0.875rem,env(safe-area-inset-top))] sm:p-5 bg-slate-900 text-white flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-2.5 min-w-0 pr-2">
+            <div className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-md shadow-blue-500/30 shrink-0">
               <Building className="w-5 h-5" />
             </div>
-            <div>
+            <div className="min-w-0">
               <h3 className="font-bold text-sm sm:text-base">Depo & Saha Yönetimi</h3>
-              <p className="text-[11px] text-slate-300">Depoları aktif/pasif yapma ve tesis yönetimi</p>
+              <p className="text-[11px] text-slate-300 truncate">Depoları aktif/pasif yapma ve tesis yönetimi</p>
             </div>
           </div>
           <button
+            type="button"
             onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg cursor-pointer transition"
+            className="min-w-[40px] min-h-[40px] text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl flex items-center justify-center cursor-pointer transition shrink-0"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Content */}
-        <div className="p-4 sm:p-6 overflow-y-auto space-y-4 text-xs custom-scroll bg-white dark:bg-slate-900">
+        <div className="p-4 sm:p-6 flex-1 min-h-0 overflow-y-auto space-y-4 text-xs custom-scroll bg-white dark:bg-slate-900">
           {/* Bilgi ve İstatistik Kutusu */}
           <div className="bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800/60 rounded-xl p-3.5 space-y-2">
             <div className="flex items-center justify-between flex-wrap gap-2">
@@ -4181,18 +4454,18 @@ export const WarehouseManagementModal: React.FC<WarehouseManagementModalProps> =
           {/* Yeni Depo Ekleme Formu */}
           <form onSubmit={handleAddSubmit} className="bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl p-3 sm:p-4 space-y-2">
             <label className="font-bold text-slate-700 dark:text-slate-200 block text-xs">Yeni Depo / Tesis Ekle</label>
-            <div className="flex gap-2">
+            <div className="flex flex-col sm:flex-row gap-2">
               <input
                 type="text"
                 value={newWarehouseName}
                 onChange={(e) => setNewWarehouseName(e.target.value)}
                 placeholder="Örn: Depo 4 - Soğuk Hava Sahası..."
-                className="flex-1 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-900 outline-none focus:ring-2 focus:ring-blue-500 text-xs text-slate-800 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 font-medium"
+                className="flex-1 min-w-0 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-900 outline-none focus:ring-2 focus:ring-blue-500 text-xs text-slate-800 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 font-medium"
               />
               <button
                 type="submit"
                 disabled={!newWarehouseName.trim()}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold rounded-xl shadow transition flex items-center gap-1.5 cursor-pointer shrink-0"
+                className="px-4 py-2 min-h-[42px] bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold rounded-xl shadow transition flex items-center justify-center gap-1.5 cursor-pointer shrink-0"
               >
                 <Plus className="w-4 h-4" /> Ekle
               </button>
@@ -4230,12 +4503,12 @@ export const WarehouseManagementModal: React.FC<WarehouseManagementModalProps> =
                       </div>
 
                       {isEditing ? (
-                        <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                        <div className="flex flex-wrap items-center gap-1.5 flex-1 min-w-0">
                           <input
                             type="text"
                             value={editingName}
                             onChange={(e) => setEditingName(e.target.value)}
-                            className="flex-1 px-2.5 py-1.5 border border-blue-400 dark:border-blue-500 rounded-lg bg-white dark:bg-slate-900 outline-none text-xs font-bold text-slate-800 dark:text-slate-100"
+                            className="flex-1 min-w-[140px] px-2.5 py-1.5 border border-blue-400 dark:border-blue-500 rounded-lg bg-white dark:bg-slate-900 outline-none text-xs font-bold text-slate-800 dark:text-slate-100"
                             autoFocus
                           />
                           <button
@@ -4330,11 +4603,11 @@ export const WarehouseManagementModal: React.FC<WarehouseManagementModalProps> =
         </div>
 
         {/* Footer */}
-        <div className="p-3 sm:p-4 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-200 dark:border-slate-800 flex justify-end shrink-0">
+        <div className="p-3 pb-[max(0.875rem,env(safe-area-inset-bottom))] sm:p-4 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-200 dark:border-slate-800 flex justify-end shrink-0">
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 bg-slate-800 dark:bg-slate-700 hover:bg-slate-900 dark:hover:bg-slate-600 text-white font-semibold text-xs rounded-xl shadow transition cursor-pointer"
+            className="px-4 py-2 min-h-[42px] bg-slate-800 dark:bg-slate-700 hover:bg-slate-900 dark:hover:bg-slate-600 text-white font-semibold text-xs rounded-xl shadow transition cursor-pointer"
           >
             Tamamlandı / Kapat
           </button>
@@ -4389,24 +4662,28 @@ export const SlaSettingsModal: React.FC<SlaSettingsModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-      <div className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-2xl shadow-2xl max-w-md w-full overflow-hidden border border-slate-200 dark:border-slate-800 transition-colors">
-        <div className="p-4 sm:p-5 bg-slate-900 text-white flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-400/30 flex items-center justify-center">
+    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 z-50">
+      <div className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-t-3xl sm:rounded-2xl shadow-2xl max-w-md w-full max-h-[calc(var(--vvh,100dvh)-env(safe-area-inset-top,0px)-0.5rem)] sm:max-h-[90dvh] overflow-hidden flex flex-col border-0 sm:border border-slate-200 dark:border-slate-800 transition-colors">
+        <div className="p-4 sm:p-5 bg-slate-900 text-white flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-2.5 min-w-0 pr-2">
+            <div className="w-9 h-9 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-400/30 flex items-center justify-center shrink-0">
               <SlidersHorizontal className="w-5 h-5" />
             </div>
-            <div>
+            <div className="min-w-0">
               <h3 className="font-bold text-sm">SLA Hedef Süre Ayarları</h3>
-              <p className="text-[10px] text-slate-300">İşlem türüne göre rampa gecikme limitleri</p>
+              <p className="text-[10px] text-slate-300 truncate">İşlem türüne göre rampa gecikme limitleri</p>
             </div>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-white cursor-pointer">
+          <button
+            type="button"
+            onClick={onClose}
+            className="min-w-[40px] min-h-[40px] rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 flex items-center justify-center cursor-pointer shrink-0"
+          >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-5 space-y-4 text-xs">
+        <form onSubmit={handleSubmit} className="p-4 sm:p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:pb-5 space-y-4 text-xs overflow-y-auto flex-1 min-h-0 custom-scroll">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block font-bold text-slate-700 dark:text-slate-200 mb-1">
@@ -4469,25 +4746,25 @@ export const SlaSettingsModal: React.FC<SlaSettingsModalProps> = ({
             Bu limitler aşılınca rampa kartları, araç detay zaman çizelgesi ve dashboard kırmızı gecikme uyarısı verir. Uyarı eşiği oranına ulaşıldığında ise sarı uyarı durumuna geçer.
           </div>
 
-          <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800">
+          <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
             <button
               type="button"
               onClick={() => setForm(DEFAULT_SLA_SETTINGS)}
-              className="px-3 py-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl font-semibold cursor-pointer"
+              className="px-3 py-2 min-h-[42px] text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl font-semibold cursor-pointer"
             >
               Varsayılana Dön
             </button>
-            <div className="flex gap-2">
+            <div className="flex gap-2 ml-auto">
               <button
                 type="button"
                 onClick={onClose}
-                className="px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 rounded-xl font-semibold cursor-pointer"
+                className="px-4 py-2 min-h-[42px] bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 rounded-xl font-semibold cursor-pointer"
               >
                 İptal
               </button>
               <button
                 type="submit"
-                className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow cursor-pointer"
+                className="px-5 py-2 min-h-[42px] bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow cursor-pointer"
               >
                 Kaydet & Uygula
               </button>
@@ -4563,24 +4840,28 @@ export const RampConfigModal: React.FC<RampConfigModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 z-50">
-      <div className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-2xl shadow-2xl max-w-2xl w-full overflow-hidden max-h-[90vh] flex flex-col border border-slate-200 dark:border-slate-800 transition-colors">
-        <div className="p-4 sm:p-5 bg-slate-900 text-white flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-blue-600/20 text-blue-400 border border-blue-500/30 flex items-center justify-center">
+    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 z-50">
+      <div className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-none sm:rounded-2xl shadow-2xl max-w-2xl w-full overflow-hidden h-[var(--vvh,100dvh)] sm:h-auto sm:max-h-[90dvh] flex flex-col border-0 sm:border border-slate-200 dark:border-slate-800 transition-colors">
+        <div className="px-4 py-3.5 pt-[max(0.875rem,env(safe-area-inset-top))] sm:p-5 bg-slate-900 text-white flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-2.5 min-w-0 pr-2">
+            <div className="w-9 h-9 rounded-xl bg-blue-600/20 text-blue-400 border border-blue-500/30 flex items-center justify-center shrink-0">
               <WarehouseIcon className="w-5 h-5" />
             </div>
-            <div>
+            <div className="min-w-0">
               <h3 className="font-bold text-sm sm:text-base">Depo Bazlı Rampa Yönetimi</h3>
-              <p className="text-[11px] text-slate-300">Her depo için bağımsız rampa havuzu oluşturun ve düzenleyin</p>
+              <p className="text-[11px] text-slate-300 truncate">Her depo için bağımsız rampa havuzu oluşturun ve düzenleyin</p>
             </div>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-white cursor-pointer p-1">
+          <button
+            type="button"
+            onClick={onClose}
+            className="min-w-[40px] min-h-[40px] rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 flex items-center justify-center cursor-pointer shrink-0"
+          >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        <div className="p-4 sm:p-5 overflow-y-auto space-y-4 text-xs custom-scroll">
+        <div className="p-4 sm:p-5 flex-1 min-h-0 overflow-y-auto space-y-4 text-xs custom-scroll">
           <div>
             <label className="block font-bold text-slate-700 dark:text-slate-200 mb-1">İşlem Yapılacak Depo / Tesis</label>
             <select
@@ -4740,11 +5021,11 @@ export const RampConfigModal: React.FC<RampConfigModalProps> = ({
           </div>
         </div>
 
-        <div className="p-3 sm:p-4 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-200 dark:border-slate-800 flex justify-end shrink-0">
+        <div className="p-3 pb-[max(0.875rem,env(safe-area-inset-bottom))] sm:p-4 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-200 dark:border-slate-800 flex justify-end shrink-0">
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 bg-slate-800 hover:bg-slate-900 dark:bg-slate-700 text-white font-semibold text-xs rounded-xl cursor-pointer"
+            className="px-4 py-2 min-h-[42px] bg-slate-800 hover:bg-slate-900 dark:bg-slate-700 text-white font-semibold text-xs rounded-xl cursor-pointer"
           >
             Kapat
           </button>

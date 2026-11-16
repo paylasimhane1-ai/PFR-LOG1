@@ -125,26 +125,27 @@ export const CustomerManagementModal: React.FC<CustomerManagementModalProps> = (
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
-      <div className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-2xl w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden animate-in fade-in zoom-in-95 duration-150 transition-colors">
+    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4">
+      <div className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-none sm:rounded-2xl w-full max-w-2xl h-[var(--vvh,100dvh)] sm:h-auto sm:max-h-[90dvh] flex flex-col shadow-2xl border-0 sm:border sm:border-slate-200 dark:sm:border-slate-800 overflow-hidden animate-in fade-in zoom-in-95 duration-150 transition-colors">
         {/* Header */}
-        <div className="p-4 bg-slate-900 text-white flex justify-between items-center shrink-0">
-          <div className="flex items-center gap-2.5">
-            <div className="p-2 bg-blue-600 rounded-xl">
+        <div className="px-4 pb-3.5 pt-[max(0.875rem,env(safe-area-inset-top))] sm:py-4 bg-slate-900 text-white flex justify-between items-center shrink-0 gap-2">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="p-2 bg-blue-600 rounded-xl shrink-0">
               <Building className="w-5 h-5 text-white" />
             </div>
-            <div>
-              <h2 className="text-base sm:text-lg font-bold leading-tight flex items-center gap-2">
+            <div className="min-w-0">
+              <h2 className="text-sm sm:text-lg font-bold leading-tight truncate">
                 Müşteri Firma Tanımlama ve Yönetimi
               </h2>
-              <p className="text-xs text-slate-300">
+              <p className="text-[11px] sm:text-xs text-slate-300 truncate">
                 Sistemde kayıtlı firmaları yönetin, arayın ve yeni firma ekleyin
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-white rounded-xl hover:bg-slate-800 transition cursor-pointer"
+            className="min-w-[40px] min-h-[40px] flex items-center justify-center text-slate-400 hover:text-white rounded-xl hover:bg-slate-800 transition cursor-pointer shrink-0"
+            aria-label="Kapat"
           >
             <X className="w-5 h-5" />
           </button>
@@ -171,25 +172,25 @@ export const CustomerManagementModal: React.FC<CustomerManagementModalProps> = (
             )}
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {customers.length > 0 && (
               <button
                 type="button"
                 onClick={onResetCustomers}
                 title="Tüm demo/örnek kayıtları Firestore ve sistemden tamamen temizle"
-                className="px-2.5 sm:px-3 py-2 bg-red-50 hover:bg-red-100 dark:bg-red-950/40 dark:hover:bg-red-900/50 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shrink-0 active:scale-98"
+                className="min-h-[40px] px-2.5 sm:px-3 py-2 bg-red-50 hover:bg-red-100 dark:bg-red-950/40 dark:hover:bg-red-900/50 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shrink-0 active:scale-98"
               >
                 <Trash2 className="w-3.5 h-3.5 text-red-600 dark:text-red-400" />
                 <span className="hidden sm:inline">Örnekleri Sıfırla</span>
                 <span className="sm:hidden">Sıfırla</span>
               </button>
             )}
-            <span className="text-xs font-bold text-slate-500 dark:text-slate-300 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-2.5 py-1.5 rounded-xl shrink-0">
+            <span className="min-h-[40px] flex items-center text-xs font-bold text-slate-500 dark:text-slate-300 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-2.5 py-1.5 rounded-xl shrink-0">
               {filteredCustomers.length} Firma
             </span>
             <button
               onClick={handleStartAdd}
-              className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-sm cursor-pointer shrink-0 active:scale-98"
+              className="min-h-[40px] flex-1 sm:flex-initial px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm cursor-pointer shrink-0 active:scale-98"
             >
               <Plus className="w-4 h-4" /> Yeni Firma Ekle
             </button>
@@ -512,17 +513,17 @@ export const CustomerManagementModal: React.FC<CustomerManagementModalProps> = (
                   <div className="flex items-center gap-1 shrink-0">
                     <button
                       onClick={() => handleStartEdit(cust)}
-                      className="p-1.5 text-slate-400 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/40 rounded-lg transition cursor-pointer"
+                      className="min-w-[38px] min-h-[38px] flex items-center justify-center text-slate-400 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/40 rounded-lg transition cursor-pointer"
                       title="Düzenle"
                     >
-                      <Edit2 className="w-3.5 h-3.5" />
+                      <Edit2 className="w-4 h-4" />
                     </button>
                     <button
                       onClick={() => onDeleteCustomer(cust.id, cust.name)}
-                      className="p-1.5 text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 rounded-lg transition cursor-pointer"
+                      className="min-w-[38px] min-h-[38px] flex items-center justify-center text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 rounded-lg transition cursor-pointer"
                       title="Sil"
                     >
-                      <Trash2 className="w-3.5 h-3.5" />
+                      <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
                 </div>
@@ -532,11 +533,11 @@ export const CustomerManagementModal: React.FC<CustomerManagementModalProps> = (
         </div>
 
         {/* Footer */}
-        <div className="p-3.5 bg-slate-50 dark:bg-slate-800/70 border-t border-slate-200 dark:border-slate-800 flex justify-between items-center text-xs text-slate-500 dark:text-slate-400 shrink-0">
-          <span>Toplam <b className="text-slate-800 dark:text-slate-200">{customers.length}</b> kayıtlı firma bulunmaktadır.</span>
+        <div className="px-4 pt-3 pb-[max(0.875rem,env(safe-area-inset-bottom))] sm:py-3.5 bg-slate-50 dark:bg-slate-800/70 border-t border-slate-200 dark:border-slate-800 flex justify-between items-center gap-2 text-xs text-slate-500 dark:text-slate-400 shrink-0">
+          <span className="truncate">Toplam <b className="text-slate-800 dark:text-slate-200">{customers.length}</b> kayıtlı firma.</span>
           <button
             onClick={onClose}
-            className="px-4 py-1.5 bg-slate-900 dark:bg-slate-700 hover:bg-slate-800 dark:hover:bg-slate-600 text-white rounded-xl font-bold cursor-pointer transition shadow-xs"
+            className="min-h-[42px] px-5 py-2 bg-slate-900 dark:bg-slate-700 hover:bg-slate-800 dark:hover:bg-slate-600 text-white rounded-xl font-bold cursor-pointer transition shadow-xs shrink-0"
           >
             Kapat
           </button>

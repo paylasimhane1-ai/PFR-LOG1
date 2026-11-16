@@ -97,13 +97,13 @@ export const PushNotificationPromptBanner: React.FC<PushNotificationPromptBanner
   if (permission === 'denied') {
     return (
       <div className="mb-4 bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-red-500/10 border border-amber-300 rounded-2xl p-3.5 sm:p-4 shadow-sm text-slate-800 animate-in fade-in slide-in-from-top-2 duration-200">
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex items-start gap-3">
+        <div className="flex items-start justify-between gap-2.5">
+          <div className="flex items-start gap-3 min-w-0 flex-1">
             <div className="w-9 h-9 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-xs">
               <AlertTriangle className="w-5 h-5" />
             </div>
-            <div className="space-y-1">
-              <div className="flex items-center gap-2">
+            <div className="space-y-1 min-w-0 flex-1">
+              <div className="flex items-center gap-2 flex-wrap">
                 <h4 className="font-bold text-xs sm:text-sm text-slate-900">
                   Tarayıcı Bildirimleri Engellenmiş
                 </h4>
@@ -169,11 +169,11 @@ export const PushNotificationPromptBanner: React.FC<PushNotificationPromptBanner
 
       <div className="relative flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
         {/* Sol İkon ve Metin */}
-        <div className="flex items-start sm:items-center gap-3">
+        <div className="flex items-start sm:items-center gap-3 min-w-0 flex-1">
           <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-xs flex items-center justify-center shrink-0 shadow-inner">
             <BellRing className="w-5 h-5 text-white animate-bounce" />
           </div>
-          <div className="space-y-0.5">
+          <div className="space-y-0.5 min-w-0 flex-1">
             <div className="flex items-center gap-2 flex-wrap">
               <h4 className="font-black text-xs sm:text-sm text-white flex items-center gap-1.5">
                 <span>Mobil & Saha Bildirimlerini Aktif Edin</span>
@@ -189,11 +189,11 @@ export const PushNotificationPromptBanner: React.FC<PushNotificationPromptBanner
         </div>
 
         {/* Sağ Butonlar */}
-        <div className="flex items-center gap-2 w-full sm:w-auto justify-end shrink-0 pt-1 sm:pt-0">
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end shrink-0 pt-1 sm:pt-0">
           <button
             type="button"
             onClick={handleDismiss}
-            className="px-3 py-1.5 rounded-xl text-white/80 hover:text-white hover:bg-white/10 text-xs font-semibold transition cursor-pointer"
+            className="min-h-[40px] px-3 py-1.5 rounded-xl text-white/80 hover:text-white hover:bg-white/10 text-xs font-semibold transition cursor-pointer"
           >
             Daha Sonra
           </button>
@@ -202,7 +202,7 @@ export const PushNotificationPromptBanner: React.FC<PushNotificationPromptBanner
             type="button"
             onClick={handleEnableNotifications}
             disabled={isRequesting}
-            className="px-4 py-2 bg-white text-emerald-800 hover:bg-emerald-50 active:scale-95 text-xs font-black rounded-xl shadow-lg transition flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+            className="min-h-[40px] px-4 py-2 bg-white text-emerald-800 hover:bg-emerald-50 active:scale-95 text-xs font-black rounded-xl shadow-lg transition flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
           >
             {isRequesting ? (
               <>

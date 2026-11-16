@@ -200,7 +200,7 @@ export interface ChatGroup {
   pendingMemberRequests?: ChatGroupPendingMemberRequest[];
   createdBy: string;
   createdAt: number;
-  status?: 'pending' | 'approved' | 'rejected';
+  status?: 'pending' | 'approved' | 'rejected' | 'archived';
   approvedBy?: string;
   approvedAt?: number;
   rejectedReason?: string;
@@ -247,6 +247,49 @@ export interface PushNotificationSettings {
   notifyOnAdminCall: boolean;
   notifyOnVehicleEntry: boolean;
   notifyOnMention: boolean;
+}
+
+export type AuditCategory =
+  | 'vehicle'
+  | 'ramp'
+  | 'expected'
+  | 'security'
+  | 'auth'
+  | 'user'
+  | 'warehouse'
+  | 'customer'
+  | 'settings'
+  | 'chat'
+  | 'export'
+  | 'audit';
+
+export type AuditSeverity = 'info' | 'warning' | 'critical';
+
+export interface AuditChangeItem {
+  field: string;
+  label: string;
+  before: string;
+  after: string;
+}
+
+export interface AuditLog {
+  id: number;
+  timestamp: number;
+  dateStr: string;
+  isoDate: string;
+  actorUsername: string;
+  actorRole: UserRole | 'system';
+  category: AuditCategory;
+  action: string;
+  severity: AuditSeverity;
+  targetType?: string;
+  targetId?: string;
+  targetLabel?: string;
+  depoId?: number;
+  depoName?: string;
+  summary: string;
+  changes?: AuditChangeItem[];
+  metadata?: Record<string, string>;
 }
 
 export type ActiveTab = 'dashboard' | 'beklenen' | 'canli' | 'araclar' | 'rampalar' | 'raporlar';

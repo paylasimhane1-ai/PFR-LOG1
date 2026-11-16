@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { WhatsAppConfig, WhatsAppProvider } from '../types';
 import { saveWhatsAppConfig, sendTestWhatsAppMessage, DEFAULT_WHATSAPP_CONFIG } from '../utils/whatsapp';
 import { saveWhatsAppSettingsToFirestore } from '../lib/firebase';
-import { X, MessageSquare, Check, RefreshCw, AlertCircle, ExternalLink, Send, ShieldCheck, BookOpen, Smartphone, HelpCircle, ArrowRight, Edit3, RotateCcw } from 'lucide-react';
+import { X, MessageSquare, Check, RefreshCw, AlertCircle, ExternalLink, Send, ShieldCheck, BookOpen, Smartphone, ArrowRight, Edit3, RotateCcw, Eye, EyeOff, Lock } from 'lucide-react';
 
 interface WhatsAppSettingsModalProps {
   isOpen: boolean;
@@ -23,6 +23,17 @@ export const WhatsAppSettingsModal: React.FC<WhatsAppSettingsModalProps> = ({
   const [testResult, setTestResult] = useState<{ success: boolean; message: string; urlFallback?: string } | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [customTestText, setCustomTestText] = useState("ABC Lojistik A.Ş.\nBoşaltma\n34 YMS 999 / 34 TEST 01");
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [showTwilioToken, setShowTwilioToken] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      setConfig(currentConfig || DEFAULT_WHATSAPP_CONFIG);
+      setShowApiKey(false);
+      setShowTwilioToken(false);
+      setTestResult(null);
+    }
+  }, [isOpen, currentConfig]);
 
   if (!isOpen) return null;
 
@@ -59,40 +70,41 @@ export const WhatsAppSettingsModal: React.FC<WhatsAppSettingsModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 z-50 animate-in fade-in duration-150">
-      <div className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-2xl shadow-2xl max-w-2xl w-full overflow-hidden max-h-[92vh] flex flex-col border border-slate-200 dark:border-slate-800 transition-colors">
+    <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 z-50 animate-in fade-in duration-150">
+      <div className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-none sm:rounded-2xl shadow-2xl max-w-2xl w-full overflow-hidden h-[var(--vvh,100dvh)] sm:h-auto sm:max-h-[90dvh] flex flex-col border-0 sm:border sm:border-slate-200 dark:sm:border-slate-800 transition-colors">
         {/* Header */}
-        <div className="px-5 py-4 bg-emerald-700 text-white flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center">
+        <div className="px-4 sm:px-5 pb-3.5 pt-[max(0.875rem,env(safe-area-inset-top))] sm:py-4 bg-emerald-700 text-white flex items-center justify-between shrink-0 gap-2">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
               <MessageSquare className="w-5 h-5 text-white" />
             </div>
-            <div>
-              <h3 className="font-bold text-sm sm:text-base text-white flex items-center gap-2">
-                WhatsApp Grubu & Business Entegrasyonu
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-800 text-emerald-100 border border-emerald-600">
+            <div className="min-w-0">
+              <h3 className="font-bold text-sm sm:text-base text-white flex items-center gap-2 flex-wrap">
+                <span className="truncate">WhatsApp Grubu & Business Entegrasyonu</span>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-800 text-emerald-100 border border-emerald-600 shrink-0">
                   Otomatik Bildirim
                 </span>
               </h3>
-              <p className="text-[11px] text-emerald-100">
+              <p className="text-[11px] text-emerald-100 truncate">
                 Araç kayıtlarını (Müşteri, İşlem Türü, Plaka, Fotoğraflar) ve rampa yönlendirmelerini gruba iletin.
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-lg text-emerald-200 hover:text-white hover:bg-emerald-800 flex items-center justify-center transition cursor-pointer"
+            className="min-w-[40px] min-h-[40px] rounded-xl text-emerald-200 hover:text-white hover:bg-emerald-800 flex items-center justify-center transition cursor-pointer shrink-0"
+            aria-label="Kapat"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Tab Selector */}
-        <div className="flex border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 px-4 text-xs shrink-0">
+        <div className="flex overflow-x-auto custom-scroll border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 px-3 sm:px-4 text-xs shrink-0">
           <button
             type="button"
             onClick={() => setActiveTab('settings')}
-            className={`py-2.5 px-4 font-bold border-b-2 transition flex items-center gap-1.5 cursor-pointer ${
+            className={`min-h-[42px] py-2.5 px-3 sm:px-4 font-bold border-b-2 transition flex items-center gap-1.5 cursor-pointer shrink-0 whitespace-nowrap ${
               activeTab === 'settings'
                 ? 'border-emerald-600 text-emerald-700 dark:text-emerald-400 bg-white dark:bg-slate-900'
                 : 'border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
@@ -104,7 +116,7 @@ export const WhatsAppSettingsModal: React.FC<WhatsAppSettingsModalProps> = ({
           <button
             type="button"
             onClick={() => setActiveTab('guide')}
-            className={`py-2.5 px-4 font-bold border-b-2 transition flex items-center gap-1.5 cursor-pointer ${
+            className={`min-h-[42px] py-2.5 px-3 sm:px-4 font-bold border-b-2 transition flex items-center gap-1.5 cursor-pointer shrink-0 whitespace-nowrap ${
               activeTab === 'guide'
                 ? 'border-emerald-600 text-emerald-700 dark:text-emerald-400 bg-white dark:bg-slate-900'
                 : 'border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
@@ -117,7 +129,7 @@ export const WhatsAppSettingsModal: React.FC<WhatsAppSettingsModalProps> = ({
 
         {activeTab === 'guide' ? (
           /* Entegrasyon Rehberi İçeriği */
-          <div className="p-5 overflow-y-auto space-y-4 text-xs custom-scroll flex-1 text-slate-700 dark:text-slate-300">
+          <div className="p-4 sm:p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:pb-5 overflow-y-auto space-y-4 text-xs custom-scroll flex-1 text-slate-700 dark:text-slate-300">
             <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 p-4 rounded-xl text-emerald-900 dark:text-emerald-100 space-y-2">
               <h4 className="font-bold text-sm flex items-center gap-1.5 text-emerald-800 dark:text-emerald-300">
                 <Smartphone className="w-4 h-4 text-emerald-700 dark:text-emerald-400" />
@@ -210,7 +222,7 @@ export const WhatsAppSettingsModal: React.FC<WhatsAppSettingsModalProps> = ({
           </div>
         ) : (
           /* Normal Ayarlar Formu */
-          <form onSubmit={handleSave} className="p-5 overflow-y-auto space-y-4 text-xs custom-scroll flex-1">
+          <form onSubmit={handleSave} className="p-4 sm:p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:pb-5 overflow-y-auto space-y-4 text-xs custom-scroll flex-1">
             {/* Ana Etkinleştirme Anahtarı */}
             <div className="bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 p-4 rounded-xl flex items-center justify-between">
               <div className="space-y-0.5">
@@ -342,18 +354,28 @@ export const WhatsAppSettingsModal: React.FC<WhatsAppSettingsModalProps> = ({
                       className="w-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 rounded-lg p-2 text-xs focus:ring-2 focus:ring-emerald-500 outline-none font-mono"
                     />
                   </label>
-                  <label className="block">
+                  <div className="block">
                     <span className="font-semibold text-slate-700 dark:text-slate-300 block mb-1 text-[11px]">
                       Bearer Token / Güvenlik Anahtarı (İsteğe Bağlı)
                     </span>
-                    <input
-                      type="password"
-                      value={config.apiKey || ''}
-                      onChange={(e) => setConfig({ ...config, apiKey: e.target.value })}
-                      placeholder="Gizli webhook token'ı"
-                      className="w-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 rounded-lg p-2 text-xs focus:ring-2 focus:ring-emerald-500 outline-none font-mono"
-                    />
-                  </label>
+                    <div className="relative">
+                      <input
+                        type={showApiKey ? 'text' : 'password'}
+                        value={config.apiKey || ''}
+                        onChange={(e) => setConfig({ ...config, apiKey: e.target.value })}
+                        placeholder="Gizli webhook token'ı"
+                        className="w-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 rounded-lg pl-2 pr-9 py-2 text-xs focus:ring-2 focus:ring-emerald-500 outline-none font-mono"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowApiKey((prev) => !prev)}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                        title={showApiKey ? 'Anahtarı Gizle' : 'Anahtarı Göster'}
+                      >
+                        {showApiKey ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
+                  </div>
                 </div>
               )}
 
@@ -375,13 +397,23 @@ export const WhatsAppSettingsModal: React.FC<WhatsAppSettingsModalProps> = ({
                     <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1 text-[11px]">
                       API Token / Key *
                     </label>
-                    <input
-                      type="password"
-                      value={config.apiKey || ''}
-                      onChange={(e) => setConfig({ ...config, apiKey: e.target.value })}
-                      placeholder="Gizli API Token"
-                      className="w-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 rounded-lg p-2 text-xs focus:ring-2 focus:ring-emerald-500 outline-none font-mono"
-                    />
+                    <div className="relative">
+                      <input
+                        type={showApiKey ? 'text' : 'password'}
+                        value={config.apiKey || ''}
+                        onChange={(e) => setConfig({ ...config, apiKey: e.target.value })}
+                        placeholder="Gizli API Token"
+                        className="w-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 rounded-lg pl-2 pr-9 py-2 text-xs focus:ring-2 focus:ring-emerald-500 outline-none font-mono"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowApiKey((prev) => !prev)}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                        title={showApiKey ? 'Anahtarı Gizle' : 'Anahtarı Göster'}
+                      >
+                        {showApiKey ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
@@ -405,13 +437,23 @@ export const WhatsAppSettingsModal: React.FC<WhatsAppSettingsModalProps> = ({
                       <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1 text-[11px]">
                         Twilio Auth Token *
                       </label>
-                      <input
-                        type="password"
-                        value={config.twilioAuthToken || ''}
-                        onChange={(e) => setConfig({ ...config, twilioAuthToken: e.target.value })}
-                        placeholder="Auth Token"
-                        className="w-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 rounded-lg p-2 text-xs focus:ring-2 focus:ring-emerald-500 outline-none font-mono"
-                      />
+                      <div className="relative">
+                        <input
+                          type={showTwilioToken ? 'text' : 'password'}
+                          value={config.twilioAuthToken || ''}
+                          onChange={(e) => setConfig({ ...config, twilioAuthToken: e.target.value })}
+                          placeholder="Auth Token"
+                          className="w-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 rounded-lg pl-2 pr-9 py-2 text-xs focus:ring-2 focus:ring-emerald-500 outline-none font-mono"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowTwilioToken((prev) => !prev)}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                          title={showTwilioToken ? 'Token Gizle' : 'Token Göster'}
+                        >
+                          {showTwilioToken ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                        </button>
+                      </div>
                     </div>
                   </div>
                   <div>
@@ -428,6 +470,13 @@ export const WhatsAppSettingsModal: React.FC<WhatsAppSettingsModalProps> = ({
                   </div>
                 </div>
               )}
+
+              <div className="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 flex items-center gap-2 text-[11px] text-slate-600 dark:text-slate-300">
+                <Lock className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                <span>
+                  API token, Webhook URL ve Twilio kimlik bilgileri cihaz önbelleğine yazılmaz; bulutta izole tutulur ve yalnızca Admin oturumlarında yüklenir.
+                </span>
+              </div>
             </div>
 
             {/* Test Sonuç Kutusu */}
@@ -509,12 +558,12 @@ Boşaltma
             </div>
 
             {/* Alt Butonlar */}
-            <div className="pt-2 border-t border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2.5">
+            <div className="pt-3 border-t border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2.5">
               <button
                 type="button"
                 onClick={handleTest}
                 disabled={isTesting}
-                className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold rounded-xl text-xs flex items-center gap-1.5 transition cursor-pointer disabled:opacity-50"
+                className="min-h-[42px] px-3.5 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold rounded-xl text-xs flex items-center gap-1.5 transition cursor-pointer disabled:opacity-50"
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${isTesting ? 'animate-spin' : ''}`} />
                 <span>{isTesting ? 'Test Ediliyor...' : 'Bağlantıyı Test Et'}</span>
@@ -524,13 +573,13 @@ Boşaltma
                 <button
                   type="button"
                   onClick={onClose}
-                  className="px-4 py-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl text-xs font-semibold transition cursor-pointer"
+                  className="min-h-[42px] px-4 py-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl text-xs font-semibold transition cursor-pointer"
                 >
                   Vazgeç
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-md transition flex items-center gap-1.5 cursor-pointer"
+                  className="min-h-[42px] px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-md transition flex items-center gap-1.5 cursor-pointer"
                 >
                   {saveSuccess ? (
                     <>

@@ -473,10 +473,10 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
       {/* Üst Filtre ve Dışa Aktarma Başlığı */}
       <div className="bg-white dark:bg-slate-900 p-3 sm:p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-3 sm:space-y-4 transition-colors">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2.5 md:gap-3">
-          <div>
+          <div className="min-w-0">
             <h3 className="font-bold text-slate-800 dark:text-slate-100 text-sm sm:text-base flex items-center gap-2">
-              <BarChart3 className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-              Saha Analitik & Hareket Raporları
+              <BarChart3 className="w-5 h-5 text-blue-600 dark:text-blue-400 shrink-0" />
+              <span className="truncate">Saha Analitik & Hareket Raporları</span>
             </h3>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 tabular-nums">
               Dönem: <b className="text-blue-600 dark:text-blue-400">{periodLabel}</b> • {sortedReports.length} araç işlemi listeleniyor
@@ -558,7 +558,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
             type="button"
             onClick={() => setMobileFiltersOpen((prev) => !prev)}
             aria-expanded={mobileFiltersOpen}
-            className={`shrink-0 px-3 py-2 rounded-xl border text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${
+            className={`shrink-0 min-h-[40px] px-3 py-2 rounded-xl border text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${
               mobileFiltersOpen || activeFilterCount > 0
                 ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800'
                 : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
@@ -654,21 +654,21 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
 
           {/* Tarih Seçiciler ve Masaüstü Arama Inputu */}
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-2.5 text-xs">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Tarih Aralığı:</span>
-              <div className="flex items-center gap-1.5">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 w-full md:w-auto">
+              <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 shrink-0">Tarih Aralığı:</span>
+              <div className="grid grid-cols-2 sm:flex items-center gap-1.5 w-full sm:w-auto">
                 <input
                   type="date"
                   value={filters.startDate}
                   onChange={(e) => handleCustomDateChange('startDate', e.target.value)}
-                  className="border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-1.5 text-xs outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-100"
+                  className="w-full sm:w-auto min-w-0 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-1.5 text-xs outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-100"
                 />
-                <span className="text-slate-400">-</span>
+                <span className="hidden sm:inline text-slate-400">-</span>
                 <input
                   type="date"
                   value={filters.endDate}
                   onChange={(e) => handleCustomDateChange('endDate', e.target.value)}
-                  className="border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-1.5 text-xs outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-100"
+                  className="w-full sm:w-auto min-w-0 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-1.5 text-xs outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-100"
                 />
               </div>
             </div>
@@ -690,84 +690,84 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
       {/* ========================================================
           GÖRSEL RAPOR & PERFORMANS KARTLARI (BUGÜN / SEÇİLEN DÖNEM)
           ======================================================== */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-2.5 sm:gap-3">
         {/* Kart 1: Toplam İşlem */}
-        <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between transition-colors">
-          <div>
+        <div className="bg-white dark:bg-slate-900 p-3 sm:p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between gap-2 min-w-0 overflow-hidden transition-colors">
+          <div className="min-w-0 flex-1">
             <div className="text-[11px] text-slate-400 font-semibold truncate">
               {isTodayMode ? 'Bugün Toplam İşlem' : 'Seçilen Dönem Toplam İşlem'}
             </div>
-            <div className="text-xl font-extrabold text-slate-800 dark:text-white mt-0.5">{filtered.length} Araç</div>
-            <div className="text-[10px] text-slate-400 mt-0.5">
+            <div className="text-lg sm:text-xl font-extrabold text-slate-800 dark:text-white mt-0.5 tabular-nums truncate">{filtered.length} Araç</div>
+            <div className="text-[10px] text-slate-400 mt-0.5 truncate">
               {isTodayMode ? 'Bugün işlem görenler' : `${periodLabel} işlemleri`}
             </div>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold">
-            <Truck className="w-5 h-5" />
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold shrink-0">
+            <Truck className="w-4 h-4 sm:w-5 sm:h-5" />
           </div>
         </div>
 
         {/* Kart 2: Giriş Yapanlar */}
-        <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between transition-colors">
-          <div>
+        <div className="bg-white dark:bg-slate-900 p-3 sm:p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between gap-2 min-w-0 overflow-hidden transition-colors">
+          <div className="min-w-0 flex-1">
             <div className="text-[11px] text-slate-400 font-semibold truncate">
               {isTodayMode ? 'Bugün Giriş Yapan' : 'Dönemde Giriş Yapan'}
             </div>
-            <div className="text-xl font-extrabold text-emerald-600 dark:text-emerald-400 mt-0.5">{enteredVehicles.length} Araç</div>
-            <div className="text-[10px] text-slate-400 mt-0.5">
+            <div className="text-lg sm:text-xl font-extrabold text-emerald-600 dark:text-emerald-400 mt-0.5 tabular-nums truncate">{enteredVehicles.length} Araç</div>
+            <div className="text-[10px] text-slate-400 mt-0.5 truncate">
               {isTodayMode ? 'Bugünkü saha kabulleri' : 'Dönem içi girişler'}
             </div>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold">
-            <LogIn className="w-5 h-5" />
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold shrink-0">
+            <LogIn className="w-4 h-4 sm:w-5 sm:h-5" />
           </div>
         </div>
 
         {/* Kart 3: Çıkış Yapanlar */}
-        <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between transition-colors">
-          <div>
+        <div className="bg-white dark:bg-slate-900 p-3 sm:p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between gap-2 min-w-0 overflow-hidden transition-colors">
+          <div className="min-w-0 flex-1">
             <div className="text-[11px] text-slate-400 font-semibold truncate">
               {isTodayMode ? 'Bugün Çıkış Yapan' : 'Dönemde Çıkış Yapan'}
             </div>
-            <div className="text-xl font-extrabold text-rose-600 dark:text-rose-400 mt-0.5">{exitedVehicles.length} Araç</div>
-            <div className="text-[10px] text-slate-400 mt-0.5">
+            <div className="text-lg sm:text-xl font-extrabold text-rose-600 dark:text-rose-400 mt-0.5 tabular-nums truncate">{exitedVehicles.length} Araç</div>
+            <div className="text-[10px] text-slate-400 mt-0.5 truncate">
               {isTodayMode ? 'Bugün tamamlanan çıkışlar' : 'Dönem içi çıkışlar'}
             </div>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 flex items-center justify-center font-bold">
-            <LogOut className="w-5 h-5" />
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 flex items-center justify-center font-bold shrink-0">
+            <LogOut className="w-4 h-4 sm:w-5 sm:h-5" />
           </div>
         </div>
 
         {/* Kart 4: Toplam Rampada Geçen Süre */}
-        <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between transition-colors">
-          <div>
+        <div className="bg-white dark:bg-slate-900 p-3 sm:p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between gap-2 min-w-0 overflow-hidden transition-colors">
+          <div className="min-w-0 flex-1">
             <div className="text-[11px] text-slate-400 font-semibold truncate">Toplam Rampa Süresi</div>
-            <div className="text-base font-extrabold text-purple-600 dark:text-purple-400 mt-0.5">
+            <div className="text-sm sm:text-base font-extrabold text-purple-600 dark:text-purple-400 mt-0.5 tabular-nums truncate">
               {formatMinutesToHours(rampMetrics.totalMinutes)}
             </div>
-            <div className="text-[10px] text-slate-400 mt-0.5">
+            <div className="text-[10px] text-slate-400 mt-0.5 truncate tabular-nums">
               Ort: {formatMinutesToHours(rampMetrics.avgMinutes)}
             </div>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 flex items-center justify-center font-bold">
-            <Clock className="w-5 h-5" />
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 flex items-center justify-center font-bold shrink-0">
+            <Clock className="w-4 h-4 sm:w-5 sm:h-5" />
           </div>
         </div>
 
         {/* Kart 5: Rampa Verimliliği */}
-        <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between col-span-2 lg:col-span-1 transition-colors">
-          <div>
+        <div className="bg-white dark:bg-slate-900 p-3 sm:p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between gap-2 min-w-0 overflow-hidden col-span-2 lg:col-span-1 transition-colors">
+          <div className="min-w-0 flex-1">
             <div className="text-[11px] text-slate-400 font-semibold truncate">Rampa Verimliliği</div>
-            <div className="text-xl font-black text-amber-500 dark:text-amber-400 mt-0.5">
+            <div className="text-lg sm:text-xl font-black text-amber-500 dark:text-amber-400 mt-0.5 tabular-nums">
               %{rampMetrics.efficiencyScore}
             </div>
             <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold mt-0.5 flex items-center gap-0.5">
-              <Zap className="w-3 h-3" /> Optimum Akış
+              <Zap className="w-3 h-3 shrink-0" /> Optimum Akış
             </div>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-amber-50 dark:bg-amber-900/30 text-amber-500 dark:text-amber-400 flex items-center justify-center font-bold">
-            <Activity className="w-5 h-5" />
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-amber-50 dark:bg-amber-900/30 text-amber-500 dark:text-amber-400 flex items-center justify-center font-bold shrink-0">
+            <Activity className="w-4 h-4 sm:w-5 sm:h-5" />
           </div>
         </div>
       </div>
@@ -778,19 +778,19 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
       {(activeTab === 'both' || activeTab === 'charts') && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           {/* Grafik 1: Günlük Toplam Giriş & Çıkış Adetleri Grafiği */}
-          <div className="bg-white dark:bg-slate-900 p-4 sm:p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm lg:col-span-2">
-            <div className="flex items-center justify-between mb-3">
-              <div className="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
-                <TrendingUp className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                <span>
+          <div className="bg-white dark:bg-slate-900 p-4 sm:p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm lg:col-span-2 min-w-0 overflow-hidden">
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+              <div className="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2 min-w-0">
+                <TrendingUp className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
+                <span className="truncate">
                   {filters.startDate === filters.endDate ? 'Bugün Saatlik Giriş - Çıkış Dağılımı' : 'Günlük Toplam Giriş - Çıkış Adetleri'}
                 </span>
               </div>
-              <span className="text-[10px] font-semibold text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md">
+              <span className="text-[10px] font-semibold text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md shrink-0">
                 Giriş vs Çıkış
               </span>
             </div>
-            <div className="h-64">
+            <div className="h-64 min-w-0 w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={dailyMovementData} margin={{ top: 10, right: 10, left: -20, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" strokeOpacity={0.4} />
@@ -814,12 +814,12 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
           </div>
 
           {/* Grafik 2: İşlem Türü Dağılımı */}
-          <div className="bg-white dark:bg-slate-900 p-4 sm:p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+          <div className="bg-white dark:bg-slate-900 p-4 sm:p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm min-w-0 overflow-hidden">
             <div className="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-100 mb-3 flex items-center gap-1.5">
-              <PieIcon className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+              <PieIcon className="w-4 h-4 text-purple-600 dark:text-purple-400 shrink-0" />
               İşlem Türü Dağılımı
             </div>
-            <div className="h-64">
+            <div className="h-64 min-w-0 w-full">
               {operationTypeData.length > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
@@ -856,12 +856,12 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
           </div>
 
           {/* Grafik 3: Rampa Kullanım Yoğunluğu */}
-          <div className="bg-white dark:bg-slate-900 p-4 sm:p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm lg:col-span-3">
+          <div className="bg-white dark:bg-slate-900 p-4 sm:p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm lg:col-span-3 min-w-0 overflow-hidden">
             <div className="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-100 mb-3 flex items-center gap-1.5">
-              <BarChart3 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+              <BarChart3 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
               Rampa Kullanım Yoğunluğu (Araç Sayısı)
             </div>
-            <div className="h-56">
+            <div className="h-56 min-w-0 w-full">
               {rampUsageData.length > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={rampUsageData} margin={{ top: 10, right: 10, left: -20, bottom: 20 }}>
@@ -907,15 +907,15 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                   }`}
                 >
                   <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-mono text-[10px] text-slate-400">#{v.id}</span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="font-mono text-[10px] text-slate-400 shrink-0">#{v.id}</span>
                         <span className={`font-bold text-xs truncate ${isExited ? 'text-white' : 'text-slate-900 dark:text-white'}`}>
                           {v.musteri}
                         </span>
                       </div>
-                      <div className="flex items-center gap-1.5 font-mono font-bold text-xs mt-0.5">
-                        <Truck className="w-3.5 h-3.5 text-blue-500" />
+                      <div className="flex items-center flex-wrap gap-1.5 font-mono font-bold text-xs mt-0.5">
+                        <Truck className="w-3.5 h-3.5 text-blue-500 shrink-0" />
                         <span>{v.dorsePlaka}</span>
                         {v.cekiciPlaka && <span className="text-[10px] opacity-70 font-normal">({v.cekiciPlaka})</span>}
                       </div>
@@ -926,13 +926,13 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                     </span>
                   </div>
 
-                  <div className={`flex items-center justify-between text-xs py-1.5 px-2.5 rounded-xl ${
+                  <div className={`flex items-center justify-between gap-2 text-xs py-1.5 px-2.5 rounded-xl ${
                     isExited
                       ? 'bg-slate-800/90 text-slate-100 border border-slate-700/60'
                       : 'bg-slate-50 dark:bg-slate-800/50 text-slate-800 dark:text-slate-200'
                   }`}>
-                    <span className="font-semibold">{v.soforAd}</span>
-                    <span className={`text-[11px] ${isExited ? 'text-slate-300' : 'text-slate-500 dark:text-slate-400'}`}>{v.soforTel}</span>
+                    <span className="font-semibold truncate min-w-0">{v.soforAd}</span>
+                    <span className={`text-[11px] shrink-0 tabular-nums ${isExited ? 'text-slate-300' : 'text-slate-500 dark:text-slate-400'}`}>{v.soforTel}</span>
                   </div>
 
                   <div className={`grid grid-cols-2 gap-2 text-[11px] pt-1 border-t ${isExited ? 'border-slate-800' : 'border-slate-100 dark:border-slate-800'}`}>
@@ -957,7 +957,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                   <div className={`pt-2 border-t flex items-center justify-between gap-2 ${isExited ? 'border-slate-800' : 'border-slate-100 dark:border-slate-800'}`}>
                     <button
                       onClick={() => onOpenDetailModal(v)}
-                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer ${
+                      className={`min-h-[40px] px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
                         isExited
                           ? 'bg-blue-900/60 hover:bg-blue-900/80 text-blue-200 border border-blue-700/50'
                           : 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
@@ -968,9 +968,9 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                     {isExited && canUndoExit && (
                       <button
                         onClick={() => onUndoExit(v)}
-                        className="px-2.5 py-1 bg-amber-900/60 hover:bg-amber-900/80 text-amber-200 border border-amber-700/50 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer"
+                        className="min-h-[40px] px-3 py-1.5 bg-amber-900/60 hover:bg-amber-900/80 text-amber-200 border border-amber-700/50 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
                       >
-                        <RotateCcw className="w-3 h-3" /> Geri Al
+                        <RotateCcw className="w-3.5 h-3.5" /> Geri Al
                       </button>
                     )}
                   </div>

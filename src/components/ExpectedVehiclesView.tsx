@@ -238,7 +238,7 @@ export const ExpectedVehiclesView: React.FC<ExpectedVehiclesViewProps> = ({
               type="button"
               onClick={() => setMobileFiltersOpen((prev) => !prev)}
               aria-expanded={mobileFiltersOpen}
-              className={`md:hidden shrink-0 px-3 py-2 rounded-xl border text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${
+              className={`md:hidden shrink-0 px-3 py-2 min-h-[40px] rounded-xl border text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${
                 mobileFiltersOpen || activeFilterCount > 0
                   ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800'
                   : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
@@ -288,7 +288,7 @@ export const ExpectedVehiclesView: React.FC<ExpectedVehiclesViewProps> = ({
             {canManageExpected && (
               <button
                 onClick={onOpenAddModal}
-                className="w-full sm:w-auto px-4 py-2 bg-amber-500 hover:bg-amber-600 text-slate-900 font-black text-xs md:text-sm rounded-xl transition flex items-center justify-center gap-1.5 shadow cursor-pointer active:scale-95"
+                className="w-full sm:w-auto px-4 py-2 min-h-[42px] bg-amber-500 hover:bg-amber-600 text-slate-900 font-black text-xs md:text-sm rounded-xl transition flex items-center justify-center gap-1.5 shadow cursor-pointer active:scale-95"
               >
                 <Plus className="w-4 h-4" /> Tekli Ekle
               </button>
@@ -350,24 +350,24 @@ export const ExpectedVehiclesView: React.FC<ExpectedVehiclesViewProps> = ({
             className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-2 sm:p-2.5 shadow-2xs space-y-1.5 transition-colors"
           >
             {/* Kart Üst Bilgisi: Plaka & Durum */}
-            <div className="flex items-center justify-between gap-1.5">
-              <div className="flex items-center gap-1 flex-wrap min-w-0">
+            <div className="flex flex-wrap items-center justify-between gap-1.5">
+              <div className="flex items-center gap-1 flex-wrap min-w-0 flex-1">
                 {/* Türk Plaka Rozeti */}
-                <div className="inline-flex items-center border border-slate-800 rounded overflow-hidden font-mono font-black text-[11px] shadow-2xs bg-white">
-                  <span className="bg-blue-600 text-white px-1 py-0.2 text-[7px] font-bold">TR</span>
-                  <span className="px-1.5 py-0.2 tracking-wider text-slate-900">{exp.dorsePlaka || 'Plaka Yok'}</span>
+                <div className="inline-flex items-center border border-slate-800 rounded overflow-hidden font-mono font-black text-[11px] shadow-2xs bg-white max-w-full">
+                  <span className="bg-blue-600 text-white px-1 py-0.2 text-[7px] font-bold shrink-0">TR</span>
+                  <span className="px-1.5 py-0.2 tracking-wider text-slate-900 truncate">{exp.dorsePlaka || 'Plaka Yok'}</span>
                 </div>
 
                 {exp.cekiciPlaka && (
-                  <span className="text-[9px] text-slate-500 dark:text-slate-400 font-mono">
+                  <span className="text-[9px] text-slate-500 dark:text-slate-400 font-mono truncate">
                     ({exp.cekiciPlaka})
                   </span>
                 )}
               </div>
 
-              <div className="flex items-center gap-1 shrink-0">
+              <div className="flex items-center gap-1.5 min-w-0 max-w-full">
                 <span
-                  className={`px-1.5 py-0.2 rounded text-[9px] font-black uppercase border tracking-tight ${
+                  className={`px-1.5 py-0.2 rounded text-[9px] font-black uppercase border tracking-tight shrink-0 ${
                     exp.durum === 'BEKLENİYOR'
                       ? 'bg-amber-100 dark:bg-amber-950/40 text-amber-900 dark:text-amber-300 border-amber-300 dark:border-amber-700'
                       : 'bg-emerald-100 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700'
@@ -376,9 +376,9 @@ export const ExpectedVehiclesView: React.FC<ExpectedVehiclesViewProps> = ({
                   {exp.durum}
                 </span>
 
-                <span className="text-[9px] font-bold text-blue-700 dark:text-blue-400 flex items-center gap-0.5">
-                  <WarehouseIcon className="w-2.5 h-2.5" />
-                  {getWarehouseNameById(exp.depoId)}
+                <span className="text-[9px] font-bold text-blue-700 dark:text-blue-400 flex items-center gap-0.5 min-w-0 truncate">
+                  <WarehouseIcon className="w-2.5 h-2.5 shrink-0" />
+                  <span className="truncate">{getWarehouseNameById(exp.depoId)}</span>
                 </span>
               </div>
             </div>
@@ -416,50 +416,50 @@ export const ExpectedVehiclesView: React.FC<ExpectedVehiclesViewProps> = ({
 
             {/* Şoför & İletişim */}
             <div className="flex items-center justify-between gap-1.5 pt-0.5 text-[10px]">
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <p className="font-bold text-slate-800 dark:text-slate-100 truncate text-[10px]">{exp.soforAd || 'Şoför Belirtilmedi'}</p>
                 <p className="text-[9px] text-slate-400 dark:text-slate-400 truncate">{exp.soforTel || 'Telefon Yok'}</p>
               </div>
 
               {exp.soforTel && (
-                <div className="flex items-center gap-1 shrink-0">
+                <div className="flex items-center gap-1.5 shrink-0">
                   <a
                     href={`tel:${cleanPhone(exp.soforTel)}`}
-                    className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[9px] font-bold transition flex items-center gap-0.5 shadow-2xs active:scale-95"
+                    className="min-h-[36px] px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[10px] font-bold transition flex items-center gap-1 shadow-2xs active:scale-95"
                     title="Şoförü Ara"
                   >
-                    <Phone className="w-2.5 h-2.5" /> Ara
+                    <Phone className="w-3 h-3" /> Ara
                   </a>
                   <a
                     href={`https://wa.me/${cleanPhoneForWa(exp.soforTel)}`}
                     target="_blank"
                     rel="noreferrer"
-                    className="p-1 bg-emerald-100 hover:bg-emerald-200 text-emerald-800 rounded-lg transition flex items-center justify-center border border-emerald-300 active:scale-95"
+                    className="min-w-[36px] min-h-[36px] p-1.5 bg-emerald-100 hover:bg-emerald-200 text-emerald-800 rounded-lg transition flex items-center justify-center border border-emerald-300 active:scale-95"
                     title="WhatsApp"
                   >
-                    <MessageSquare className="w-2.5 h-2.5 text-emerald-700" />
+                    <MessageSquare className="w-3.5 h-3.5 text-emerald-700" />
                   </a>
                 </div>
               )}
             </div>
 
             {/* Güvenlik Aksiyon Butonu: Sahaya Al & Düzenle & Sil */}
-            <div className="pt-1 border-t border-slate-100 dark:border-slate-800 flex items-center gap-1">
+            <div className="pt-1 border-t border-slate-100 dark:border-slate-800 flex items-center gap-1.5">
               {exp.durum === 'BEKLENİYOR' ? (
                 canManageExpected ? (
                   <button
                     onClick={() => onProcessArrival(exp)}
-                    className="flex-1 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-[10px] flex items-center justify-center gap-1 shadow-2xs transition active:scale-98 cursor-pointer"
+                    className="flex-1 min-h-[42px] py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-[11px] flex items-center justify-center gap-1 shadow-2xs transition active:scale-98 cursor-pointer"
                   >
-                    <LogIn className="w-3 h-3" /> Sahaya Al / Giriş Yap
+                    <LogIn className="w-3.5 h-3.5" /> Sahaya Al / Giriş Yap
                   </button>
                 ) : (
-                  <div className="flex-1 py-1 text-center text-[10px] font-medium text-slate-400 dark:text-slate-500 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-700">
+                  <div className="flex-1 min-h-[38px] flex items-center justify-center py-1.5 text-center text-[10px] font-medium text-slate-400 dark:text-slate-500 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-700">
                     Salt Okunur
                   </div>
                 )
               ) : (
-                <div className="flex-1 py-1 text-center text-[10px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 rounded-lg border border-emerald-200 dark:border-emerald-800">
+                <div className="flex-1 min-h-[38px] flex items-center justify-center py-1.5 text-center text-[10px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 rounded-lg border border-emerald-200 dark:border-emerald-800">
                   ✓ Sahaya Kabul Edildi
                 </div>
               )}
@@ -467,20 +467,20 @@ export const ExpectedVehiclesView: React.FC<ExpectedVehiclesViewProps> = ({
               {canManageExpected && onOpenEditModal && (
                 <button
                   onClick={() => onOpenEditModal(exp)}
-                  className="p-1.5 bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/40 dark:hover:bg-blue-900/50 text-blue-600 dark:text-blue-300 rounded-lg transition active:scale-95 cursor-pointer border border-blue-200 dark:border-blue-800 shrink-0"
+                  className="min-w-[42px] min-h-[42px] flex items-center justify-center p-2 bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/40 dark:hover:bg-blue-900/50 text-blue-600 dark:text-blue-300 rounded-lg transition active:scale-95 cursor-pointer border border-blue-200 dark:border-blue-800 shrink-0"
                   title="Beklenen Araç Bilgilerini Düzenle"
                 >
-                  <Edit3 className="w-3 h-3" />
+                  <Edit3 className="w-3.5 h-3.5" />
                 </button>
               )}
 
               {canManageExpected && (
                 <button
                   onClick={() => onDeleteSingle(exp)}
-                  className="p-1.5 bg-red-50 hover:bg-red-100 dark:bg-red-950/40 dark:hover:bg-red-900/50 text-red-600 dark:text-red-300 rounded-lg transition active:scale-95 cursor-pointer border border-red-200 dark:border-red-800 shrink-0"
+                  className="min-w-[42px] min-h-[42px] flex items-center justify-center p-2 bg-red-50 hover:bg-red-100 dark:bg-red-950/40 dark:hover:bg-red-900/50 text-red-600 dark:text-red-300 rounded-lg transition active:scale-95 cursor-pointer border border-red-200 dark:border-red-800 shrink-0"
                   title="Kaydı Sil"
                 >
-                  <Trash2 className="w-3 h-3" />
+                  <Trash2 className="w-3.5 h-3.5" />
                 </button>
               )}
             </div>

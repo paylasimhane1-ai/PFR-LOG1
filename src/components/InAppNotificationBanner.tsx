@@ -45,13 +45,13 @@ export const InAppNotificationBanner: React.FC<InAppNotificationBannerProps> = (
       : '🔔 BİLDİRİM';
 
   return (
-    <div className="fixed top-3 left-3 right-3 sm:left-auto sm:right-6 sm:max-w-md z-60 animate-in slide-in-from-top-4 duration-300 pointer-events-auto">
+    <div className="fixed top-[calc(0.75rem+env(safe-area-inset-top,0px))] left-[max(0.75rem,env(safe-area-inset-left))] right-[max(0.75rem,env(safe-area-inset-right))] sm:left-auto sm:right-6 sm:max-w-md z-60 animate-in slide-in-from-top-4 duration-300 pointer-events-auto">
       <div className={`p-4 rounded-2xl border backdrop-blur-md shadow-2xl flex items-start gap-3 relative ${bgStyle}`}>
         <div className="w-10 h-10 rounded-xl bg-white p-1 flex items-center justify-center shrink-0 mt-0.5 shadow-md border border-purple-200">
           <img src="/p-logo.png" alt="P" className="w-full h-full object-contain rounded-lg" />
         </div>
 
-        <div className="flex-1 min-w-0 pr-6">
+        <div className="flex-1 min-w-0 pr-7">
           <div className="flex items-center gap-2 mb-0.5">
             <span className="text-[10px] font-black uppercase tracking-wider bg-white/20 px-2 py-0.5 rounded-full">
               {badgeText}
@@ -60,7 +60,7 @@ export const InAppNotificationBanner: React.FC<InAppNotificationBannerProps> = (
           <h4 className="font-bold text-sm text-white leading-tight truncate">{alert.title}</h4>
           <p className="text-xs text-white/90 mt-1 leading-snug break-words">{alert.body}</p>
 
-          <div className="mt-2.5 flex items-center gap-2">
+          <div className="mt-2.5 flex flex-wrap items-center gap-2">
             {alert.onClick && (
               <button
                 type="button"
@@ -68,7 +68,7 @@ export const InAppNotificationBanner: React.FC<InAppNotificationBannerProps> = (
                   alert.onClick?.();
                   onDismiss();
                 }}
-                className="px-2.5 py-1 rounded-lg bg-white/20 hover:bg-white/30 text-white text-[11px] font-bold flex items-center gap-1 cursor-pointer transition"
+                className="min-h-[36px] px-3 py-1 rounded-lg bg-white/20 hover:bg-white/30 text-white text-[11px] font-bold flex items-center gap-1 cursor-pointer transition"
               >
                 <span>İncele</span>
                 <ChevronRight className="w-3 h-3" />
@@ -82,7 +82,7 @@ export const InAppNotificationBanner: React.FC<InAppNotificationBannerProps> = (
                   alert.onShareWhatsApp?.();
                   onDismiss();
                 }}
-                className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold flex items-center gap-1 cursor-pointer transition shadow-xs"
+                className="min-h-[36px] px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold flex items-center gap-1 cursor-pointer transition shadow-xs"
               >
                 <MessageSquare className="w-3 h-3" />
                 <span>WhatsApp</span>
@@ -94,7 +94,8 @@ export const InAppNotificationBanner: React.FC<InAppNotificationBannerProps> = (
         <button
           type="button"
           onClick={onDismiss}
-          className="absolute top-3 right-3 text-white/70 hover:text-white transition cursor-pointer"
+          aria-label="Bildirimi Kapat"
+          className="absolute top-2.5 right-2.5 min-w-[36px] min-h-[36px] flex items-center justify-center rounded-lg text-white/75 hover:text-white hover:bg-white/10 transition cursor-pointer"
         >
           <X className="w-4 h-4" />
         </button>

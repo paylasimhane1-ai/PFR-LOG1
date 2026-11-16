@@ -54,6 +54,7 @@ import {
 } from 'lucide-react';
 import { playChime } from '../utils/audio';
 import { sendNativeNotification, loadPushSettings } from '../utils/notifications';
+import { useVisualViewport } from '../hooks/useVisualViewport';
 
 export interface ChatSendPayload {
   text: string;
@@ -179,6 +180,7 @@ interface ConversationWindowProps {
   isMinimized: boolean;
   isMaximized: boolean;
   isMobileView?: boolean;
+  isKeyboardOpen?: boolean;
   currentUser: User;
   users: User[];
   vehicles: Vehicle[];
@@ -220,6 +222,7 @@ const ChatConversationWindow: React.FC<ConversationWindowProps> = ({
   isMinimized,
   isMaximized,
   isMobileView = false,
+  isKeyboardOpen = false,
   currentUser,
   users,
   vehicles,
@@ -799,22 +802,26 @@ const ChatConversationWindow: React.FC<ConversationWindowProps> = ({
 
   return (
     <div
-      className={`pointer-events-auto bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-2xl flex flex-col overflow-hidden transition-all duration-200 ${
+      className={`pointer-events-auto bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 shadow-2xl flex flex-col overflow-hidden transition-all duration-200 ${
         isMaximized
-          ? 'fixed inset-3 sm:inset-6 lg:inset-10 z-[60] max-w-4xl mx-auto rounded-2xl'
+          ? 'fixed inset-3 sm:inset-6 lg:inset-10 z-[60] max-w-4xl mx-auto rounded-2xl border'
           : isMobileView
-          ? 'w-full h-full rounded-2xl'
-          : 'w-[360px] lg:w-[400px] h-[520px] max-h-[82dvh] rounded-t-xl border-b-0'
+          ? 'w-full h-full rounded-none border-0'
+          : 'w-[360px] lg:w-[400px] h-[520px] max-h-[82dvh] rounded-t-xl border border-b-0'
       }`}
     >
       {/* ================= PENCERE BAŞLIĞI (LinkedIn / Facebook Tarzı) ================= */}
-      <div className="px-3 py-2.5 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-2 shrink-0">
+      <div
+        className={`px-3 py-2.5 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-2 shrink-0 ${
+          isMobileView ? 'pt-[max(0.75rem,env(safe-area-inset-top))]' : ''
+        }`}
+      >
         <div className="flex items-center gap-2 min-w-0">
           {isMobileView && onBackMobile && (
             <button
               type="button"
               onClick={onBackMobile}
-              className="p-1.5 -ml-1 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 cursor-pointer shrink-0"
+              className="min-w-[36px] min-h-[36px] -ml-1 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 flex items-center justify-center cursor-pointer shrink-0"
               title="Sohbet Listesine Dön"
             >
               <ArrowLeft className="w-4 h-4" />
@@ -877,7 +884,7 @@ const ChatConversationWindow: React.FC<ConversationWindowProps> = ({
               type="button"
               onClick={() => onOpenManageGroup(meta.group!)}
               title="Gruba Kişi Ekle / Üyeleri Yönet"
-              className="p-1.5 rounded-full text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/60 transition cursor-pointer"
+              className="min-w-[36px] min-h-[36px] rounded-full text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/60 flex items-center justify-center transition cursor-pointer"
             >
               <UserPlus className="w-4 h-4" />
             </button>
@@ -886,7 +893,7 @@ const ChatConversationWindow: React.FC<ConversationWindowProps> = ({
               type="button"
               onClick={() => onOpenCreateGroup([meta.recipient!])}
               title="Bu Kişiyle Yeni Grup Oluştur"
-              className="p-1.5 rounded-full text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-800 dark:hover:text-white transition cursor-pointer"
+              className="min-w-[36px] min-h-[36px] rounded-full text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-800 dark:hover:text-white flex items-center justify-center transition cursor-pointer"
             >
               <UserPlus className="w-4 h-4" />
             </button>
@@ -896,7 +903,7 @@ const ChatConversationWindow: React.FC<ConversationWindowProps> = ({
             type="button"
             onClick={() => setShowHeaderMenu((prev) => !prev)}
             title="Sohbet Seçenekleri"
-            className={`p-1.5 rounded-full transition cursor-pointer ${
+            className={`min-w-[36px] min-h-[36px] rounded-full flex items-center justify-center transition cursor-pointer ${
               showHeaderMenu || showSearchBar || onlyMentionsFilter
                 ? 'bg-slate-100 dark:bg-slate-800 text-blue-600 dark:text-blue-400'
                 : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
@@ -1028,7 +1035,7 @@ const ChatConversationWindow: React.FC<ConversationWindowProps> = ({
             type="button"
             onClick={onClose}
             title="Pencereyi Kapat"
-            className="p-1.5 rounded-full text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+            className="min-w-[36px] min-h-[36px] rounded-full text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center transition cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
@@ -1934,7 +1941,11 @@ const ChatConversationWindow: React.FC<ConversationWindowProps> = ({
           e.preventDefault();
           handleSendInternal();
         }}
-        className="p-2.5 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 space-y-2 shrink-0"
+        className={`${
+          isMobileView && !isKeyboardOpen
+            ? 'p-2.5 pb-[max(0.75rem,env(safe-area-inset-bottom))]'
+            : 'p-2.5'
+        } bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 space-y-2 shrink-0`}
       >
         <input
           ref={fileInputRef}
@@ -2083,6 +2094,8 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
   onNavigateToVehicle,
   onNavigateToRamp
 }) => {
+  const { isKeyboardOpen } = useVisualViewport();
+
   // Desktop Docked Drawer + Open Windows
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [drawerTab, setDrawerTab] = useState<'groups' | 'people'>('groups');
@@ -2212,7 +2225,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
   const pendingMemberAdminRequests = useMemo(() => {
     if (!isAdminUser) return [];
     return chatGroups
-      .filter((g) => g.status !== 'rejected' && Array.isArray(g.pendingMemberRequests) && g.pendingMemberRequests.length > 0)
+      .filter((g) => g.status !== 'rejected' && g.status !== 'archived' && Array.isArray(g.pendingMemberRequests) && g.pendingMemberRequests.length > 0)
       .flatMap((g) => (g.pendingMemberRequests || []).map((req) => ({ group: g, req })))
       .sort((a, b) => (b.req.requestedAt || 0) - (a.req.requestedAt || 0));
   }, [chatGroups, isAdminUser]);
@@ -3224,7 +3237,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
             onClick={() => setMobileScreen('list')}
             aria-label="Mesajlaşma"
             title="Mesajlaşma"
-            className="fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom))] right-3 z-40 w-12 h-12 rounded-full bg-blue-600 hover:bg-blue-700 text-white shadow-2xl border border-blue-400/40 flex items-center justify-center cursor-pointer active:scale-95 transition"
+            className="fixed bottom-[calc(4.75rem+env(safe-area-inset-bottom))] right-3 z-40 w-12 h-12 rounded-full bg-blue-600 hover:bg-blue-700 text-white shadow-2xl border border-blue-400/40 flex items-center justify-center cursor-pointer active:scale-95 transition"
           >
             <MessageSquare className="w-5 h-5" />
             <span
@@ -3239,32 +3252,32 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
             )}
           </button>
         ) : (
-          <div className="fixed inset-x-2 top-3 bottom-[calc(4.5rem+env(safe-area-inset-bottom)+6px)] z-50">
+          <div className="fixed inset-x-0 top-[var(--vv-top,0px)] h-[var(--vvh,100dvh)] z-[65]">
             {mobileScreen === 'list' ? (
-              <div className="w-full h-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl flex flex-col overflow-hidden">
-                <div className="px-3.5 py-3 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <div className="relative">
+              <div className="w-full h-full bg-white dark:bg-slate-900 rounded-none border-0 shadow-2xl flex flex-col overflow-hidden">
+                <div className="px-3.5 py-3 pt-[max(0.75rem,env(safe-area-inset-top))] border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-2 shrink-0">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="relative shrink-0">
                       <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-black ${getAvatarTone(currentUser.role)}`}>
                         {getInitials(currentUser.username)}
                       </div>
                       <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white dark:border-slate-900 ${isSelfOnline ? 'bg-emerald-500' : 'bg-slate-400'}`} />
                     </div>
-                    <div>
-                      <h4 className="font-bold text-sm text-slate-900 dark:text-white">Mesajlaşma</h4>
+                    <div className="min-w-0">
+                      <h4 className="font-bold text-sm text-slate-900 dark:text-white truncate">Mesajlaşma</h4>
                       <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold tabular-nums">
                         {totalOnlineOthersCount} kişi çevrimiçi
                       </p>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-1 shrink-0">
                     {isAdminUser && onSaveQuickMessages && (
                       <button
                         type="button"
                         onClick={openQuickMessagesEditor}
                         title="Hızlı Mesajları Düzenle"
-                        className="p-1.5 rounded-xl bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-200 cursor-pointer"
+                        className="min-w-[36px] min-h-[36px] flex items-center justify-center rounded-xl bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-200 cursor-pointer"
                       >
                         <Zap className="w-4 h-4" />
                       </button>
@@ -3273,7 +3286,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
                       <button
                         type="button"
                         onClick={() => openCreateGroupDialog([])}
-                        className="px-2.5 py-1.5 rounded-xl bg-emerald-600 text-white text-xs font-bold flex items-center gap-1 cursor-pointer"
+                        className="px-2.5 py-1.5 min-h-[36px] rounded-xl bg-emerald-600 text-white text-xs font-bold flex items-center gap-1 cursor-pointer"
                       >
                         <UserPlus className="w-3.5 h-3.5" />
                         <span>Grup Kur</span>
@@ -3282,7 +3295,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
                     <button
                       type="button"
                       onClick={() => setMobileScreen('closed')}
-                      className="p-1.5 rounded-full text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                      className="min-w-[36px] min-h-[36px] rounded-full text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center cursor-pointer"
                     >
                       <X className="w-5 h-5" />
                     </button>
@@ -3359,7 +3372,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
                   </button>
                 </div>
 
-                <div className="flex-1 overflow-y-auto">
+                <div className="flex-1 min-h-0 overflow-y-auto pb-[env(safe-area-inset-bottom)]">
                   {drawerTab === 'groups' ? (
                     <div className="p-2.5 space-y-3">
                       {/* Admin Onay Kuyruğu: Yeni Gruplar & Üye Ekleme (Mobil) */}
@@ -3710,6 +3723,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
                 isMinimized={false}
                 isMaximized={false}
                 isMobileView={true}
+                isKeyboardOpen={isKeyboardOpen}
                 currentUser={currentUser}
                 users={users}
                 vehicles={vehicles}
@@ -3754,22 +3768,26 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
           MODALLAR: YENİ GRUP OLUŞTUR & GRUBA KİŞİ EKLE / ÜYELERİ YÖNET
          ======================================================================== */}
       {showCreateGroupModal && (
-        <div className="fixed inset-0 z-[75] bg-slate-950/75 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[75] bg-slate-950/75 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4">
           <form
             onSubmit={handleSubmitCreateGroup}
-            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"
+            className="bg-white dark:bg-slate-900 border-0 sm:border border-slate-200 dark:border-slate-700 rounded-t-3xl sm:rounded-2xl shadow-2xl w-full max-w-md max-h-[calc(var(--vvh,100dvh)-env(safe-area-inset-top,0px)-0.5rem)] sm:max-h-[90dvh] flex flex-col overflow-hidden"
           >
-            <div className="px-4 py-3 bg-emerald-600 text-white flex items-center justify-between">
+            <div className="px-4 py-3 bg-emerald-600 text-white flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2">
                 <UsersIcon className="w-5 h-5" />
                 <h4 className="font-bold text-sm">Yeni Sohbet Grubu Oluştur</h4>
               </div>
-              <button type="button" onClick={() => setShowCreateGroupModal(false)} className="p-1 hover:bg-white/15 rounded-full cursor-pointer">
+              <button
+                type="button"
+                onClick={() => setShowCreateGroupModal(false)}
+                className="min-w-[36px] min-h-[36px] flex items-center justify-center hover:bg-white/15 rounded-full cursor-pointer"
+              >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="p-4 space-y-3 text-xs">
+            <div className="p-4 space-y-3 text-xs flex-1 min-h-0 overflow-y-auto custom-scroll">
               {!isAdminUser && (
                 <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/70 text-amber-900 dark:text-amber-200 text-[11px] flex items-start gap-2">
                   <Clock className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
@@ -3857,18 +3875,18 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
               </div>
             </div>
 
-            <div className="px-4 py-3 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end gap-2">
+            <div className="px-4 py-3 pb-[max(0.875rem,env(safe-area-inset-bottom))] sm:py-3 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end gap-2 shrink-0">
               <button
                 type="button"
                 onClick={() => setShowCreateGroupModal(false)}
-                className="px-3.5 py-2 rounded-xl border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 font-bold text-xs cursor-pointer"
+                className="px-3.5 py-2 min-h-[40px] rounded-xl border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 font-bold text-xs cursor-pointer"
               >
                 İptal
               </button>
               <button
                 type="submit"
                 disabled={!newGroupName.trim()}
-                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs cursor-pointer disabled:opacity-40"
+                className="px-4 py-2 min-h-[40px] rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs cursor-pointer disabled:opacity-40"
               >
                 {isAdminUser ? 'Grubu Oluştur' : 'Onay Talebi Gönder'}
               </button>
@@ -3892,29 +3910,33 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
             }).length;
 
         return (
-        <div className="fixed inset-0 z-[75] bg-slate-950/75 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[75] bg-slate-950/75 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4">
           <form
             onSubmit={handleSaveGroupDetails}
-            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden max-h-[90dvh] flex flex-col"
+            className="bg-white dark:bg-slate-900 border-0 sm:border border-slate-200 dark:border-slate-700 rounded-t-3xl sm:rounded-2xl shadow-2xl w-full max-w-md overflow-hidden max-h-[calc(var(--vvh,100dvh)-env(safe-area-inset-top,0px)-0.5rem)] sm:max-h-[90dvh] flex flex-col"
           >
             <div className="px-4 py-3 bg-slate-900 text-white flex items-center justify-between shrink-0">
-              <div className="flex items-center gap-2 min-w-0">
+              <div className="flex items-center gap-2 min-w-0 pr-2">
                 <UserPlus className="w-5 h-5 text-emerald-400 shrink-0" />
                 <div className="min-w-0">
                   <h4 className="font-bold text-sm truncate">{managingGroup.name} — Grup & Üye Yönetimi</h4>
-                  <p className="text-[10px] text-slate-400">
+                  <p className="text-[10px] text-slate-400 truncate">
                     {isAdminUser
                       ? 'Grup adını, açıklamasını ve üyeleri yönetin'
                       : 'Yeni üye ekleme talepleri Admin onayından geçer'}
                   </p>
                 </div>
               </div>
-              <button type="button" onClick={() => setManagingGroupId(null)} className="p-1 hover:bg-white/10 rounded-full cursor-pointer">
+              <button
+                type="button"
+                onClick={() => setManagingGroupId(null)}
+                className="min-w-[36px] min-h-[36px] flex items-center justify-center hover:bg-white/10 rounded-full cursor-pointer shrink-0"
+              >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="p-4 space-y-3 text-xs overflow-y-auto custom-scroll">
+            <div className="p-4 space-y-3 text-xs flex-1 min-h-0 overflow-y-auto custom-scroll">
               {!isAdminUser && (
                 <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/70 text-amber-900 dark:text-amber-200 text-[11px] flex items-start gap-2">
                   <Clock className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
@@ -4078,7 +4100,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
               </div>
             </div>
 
-            <div className="px-4 py-3 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between gap-2 flex-wrap shrink-0">
+            <div className="px-4 py-3 pb-[max(0.875rem,env(safe-area-inset-bottom))] sm:py-3 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between gap-2 flex-wrap shrink-0">
               <div>
                 {onLeaveGroup && !isGroupCreator ? (
                   <button
@@ -4087,7 +4109,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
                       onLeaveGroup(managingGroup.id);
                       setManagingGroupId(null);
                     }}
-                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-amber-50 dark:bg-amber-950/60 hover:bg-amber-100 dark:hover:bg-amber-900/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 font-bold text-xs cursor-pointer"
+                    className="inline-flex items-center gap-1.5 px-3 py-2 min-h-[40px] rounded-xl bg-amber-50 dark:bg-amber-950/60 hover:bg-amber-100 dark:hover:bg-amber-900/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 font-bold text-xs cursor-pointer"
                   >
                     <LogOut className="w-3.5 h-3.5" />
                     <span>Gruptan Ayrıl</span>
@@ -4102,14 +4124,14 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
                 <button
                   type="button"
                   onClick={() => setManagingGroupId(null)}
-                  className="px-3.5 py-2 rounded-xl border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 font-bold text-xs cursor-pointer"
+                  className="px-3.5 py-2 min-h-[40px] rounded-xl border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 font-bold text-xs cursor-pointer"
                 >
                   İptal
                 </button>
                 <button
                   type="submit"
                   disabled={!editGroupName.trim()}
-                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs cursor-pointer disabled:opacity-40"
+                  className="px-4 py-2 min-h-[40px] rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs cursor-pointer disabled:opacity-40"
                 >
                   {!isAdminUser && newPendingAdditionsCount > 0
                     ? `Üye Talebi Gönder (+${newPendingAdditionsCount})`
@@ -4124,14 +4146,14 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
 
       {/* Admin: Sohbet Hızlı Mesajları Düzenleme Modalı */}
       {showQuickMessagesModal && isAdminUser && (
-        <div className="fixed inset-0 z-[76] bg-slate-950/75 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden max-h-[90dvh] flex flex-col">
+        <div className="fixed inset-0 z-[76] bg-slate-950/75 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div className="bg-white dark:bg-slate-900 border-0 sm:border border-slate-200 dark:border-slate-700 rounded-t-3xl sm:rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden max-h-[calc(var(--vvh,100dvh)-env(safe-area-inset-top,0px)-0.5rem)] sm:max-h-[90dvh] flex flex-col">
             <div className="px-4 py-3 bg-slate-900 text-white flex items-center justify-between shrink-0">
-              <div className="flex items-center gap-2">
-                <Zap className="w-5 h-5 text-amber-400" />
-                <div>
-                  <h4 className="font-bold text-sm">Sohbet Hızlı Mesajlarını Düzenle</h4>
-                  <p className="text-[10px] text-slate-400">
+              <div className="flex items-center gap-2 min-w-0 pr-2">
+                <Zap className="w-5 h-5 text-amber-400 shrink-0" />
+                <div className="min-w-0">
+                  <h4 className="font-bold text-sm truncate">Sohbet Hızlı Mesajlarını Düzenle</h4>
+                  <p className="text-[10px] text-slate-400 truncate">
                     Tüm ekip üyelerinin sohbet penceresinde görünen hazır şablonları yönetin
                   </p>
                 </div>
@@ -4139,13 +4161,13 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
               <button
                 type="button"
                 onClick={() => setShowQuickMessagesModal(false)}
-                className="p-1 hover:bg-white/10 rounded-full cursor-pointer"
+                className="min-w-[36px] min-h-[36px] flex items-center justify-center hover:bg-white/10 rounded-full cursor-pointer shrink-0"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="p-4 space-y-3 text-xs overflow-y-auto custom-scroll">
+            <div className="p-4 space-y-3 text-xs flex-1 min-h-0 overflow-y-auto custom-scroll">
               <div className="flex items-center gap-2">
                 <input
                   type="text"
@@ -4253,11 +4275,11 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
               </div>
             </div>
 
-            <div className="px-4 py-3 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between gap-2 flex-wrap shrink-0">
+            <div className="px-4 py-3 pb-[max(0.875rem,env(safe-area-inset-bottom))] sm:py-3 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between gap-2 flex-wrap shrink-0">
               <button
                 type="button"
                 onClick={() => setQuickMessagesDraft([...DEFAULT_CHAT_QUICK_MESSAGES])}
-                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 font-bold text-xs cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-3 py-2 min-h-[40px] rounded-xl border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 font-bold text-xs cursor-pointer"
               >
                 <RotateCcw className="w-3.5 h-3.5" />
                 <span>Varsayılanlara Dön</span>
@@ -4267,7 +4289,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
                 <button
                   type="button"
                   onClick={() => setShowQuickMessagesModal(false)}
-                  className="px-3.5 py-2 rounded-xl border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 font-bold text-xs cursor-pointer"
+                  className="px-3.5 py-2 min-h-[40px] rounded-xl border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 font-bold text-xs cursor-pointer"
                 >
                   İptal
                 </button>
@@ -4277,7 +4299,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
                     onSaveQuickMessages?.(quickMessagesDraft);
                     setShowQuickMessagesModal(false);
                   }}
-                  className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs flex items-center gap-1.5 cursor-pointer"
+                  className="px-4 py-2 min-h-[40px] rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs flex items-center gap-1.5 cursor-pointer"
                 >
                   <Check className="w-3.5 h-3.5" />
                   <span>Kaydet</span>
@@ -4297,7 +4319,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
           <button
             type="button"
             onClick={() => setLightboxImageUrl(null)}
-            className="absolute top-4 right-4 w-10 h-10 rounded-full bg-slate-800 text-white flex items-center justify-center hover:bg-slate-700 cursor-pointer"
+            className="absolute top-[max(1rem,env(safe-area-inset-top))] right-[max(1rem,env(safe-area-inset-right))] w-11 h-11 rounded-full bg-slate-800 text-white flex items-center justify-center hover:bg-slate-700 cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>

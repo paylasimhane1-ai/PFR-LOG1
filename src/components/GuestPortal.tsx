@@ -52,27 +52,27 @@ export const GuestPortal: React.FC<GuestPortalProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col">
-      <header className="header-safe bg-slate-950 border-b border-slate-800 px-6 flex items-center justify-between">
-        <div className="flex items-center gap-2.5">
+    <div className="min-h-[100dvh] bg-slate-900 text-slate-100 flex flex-col overflow-x-clip">
+      <header className="header-safe bg-slate-950 border-b border-slate-800 px-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] md:px-6 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2.5 min-w-0">
           <LogiPortalIcon className="w-9 h-9 shrink-0 drop-shadow-md rounded-xl" />
-          <div>
+          <div className="min-w-0">
             <div className="flex items-center gap-1">
               <span className="font-black text-base text-white tracking-tight font-sans">Logi<span className="text-purple-400">Portal</span></span>
             </div>
-            <p className="text-[10px] text-slate-400 font-medium">Lojistik & Misafir Araç Takip Portalı</p>
+            <p className="text-[10px] text-slate-400 font-medium truncate">Lojistik & Misafir Araç Takip Portalı</p>
           </div>
         </div>
         <button
           onClick={onLogout}
-          className="text-slate-400 hover:text-red-400 text-xs font-semibold flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 rounded-lg cursor-pointer transition"
+          className="min-h-[40px] shrink-0 text-slate-300 hover:text-red-400 text-xs font-semibold flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 rounded-xl cursor-pointer transition"
         >
           <LogOut className="w-3.5 h-3.5" />
           Çıkış Yap
         </button>
       </header>
 
-      <main className="flex-1 p-4 md:p-6 max-w-3xl w-full mx-auto space-y-6">
+      <main className="flex-1 px-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] pt-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] md:p-6 max-w-3xl w-full mx-auto space-y-6">
         <div className="bg-slate-800/80 border border-slate-700 p-5 rounded-2xl shadow-2xl space-y-4">
           <h2 className="text-base font-bold text-white flex items-center gap-2">
             <Search className="w-4 h-4 text-blue-400" />
@@ -133,7 +133,7 @@ export const GuestPortal: React.FC<GuestPortalProps> = ({
 
           <button
             onClick={handleSearch}
-            className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-lg shadow-blue-600/30 transition flex items-center justify-center gap-2 cursor-pointer"
+            className="w-full min-h-[44px] py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-lg shadow-blue-600/30 transition flex items-center justify-center gap-2 cursor-pointer"
           >
             <Search className="w-4 h-4" />
             Aracımı Sorgula
@@ -141,20 +141,20 @@ export const GuestPortal: React.FC<GuestPortalProps> = ({
         </div>
 
         {searchResult && (
-          <div className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-2xl p-5 md:p-6 shadow-2xl space-y-4 border border-slate-200 dark:border-slate-800">
-            <div className="flex justify-between items-start border-b border-slate-100 dark:border-slate-800 pb-4">
-              <div>
-                <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider">
+          <div className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-2xl p-4 sm:p-5 md:p-6 shadow-2xl space-y-4 border border-slate-200 dark:border-slate-800">
+            <div className="flex flex-wrap justify-between items-start gap-2 border-b border-slate-100 dark:border-slate-800 pb-4">
+              <div className="min-w-0 flex-1">
+                <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider block truncate">
                   {searchResult.musteri}
                 </span>
-                <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2 mt-0.5">
-                  <Truck className="w-5 h-5 text-slate-500 dark:text-slate-400" /> {searchResult.dorsePlaka}
+                <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2 mt-0.5 break-all">
+                  <Truck className="w-5 h-5 text-slate-500 dark:text-slate-400 shrink-0" /> {searchResult.dorsePlaka}
                 </h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
+                <p className="text-xs text-slate-500 dark:text-slate-400 break-words">
                   Çekici: {searchResult.cekiciPlaka || '-'} | Konteynır: {searchResult.konteynirNo || '-'}
                 </p>
               </div>
-              <span className={`px-3 py-1 rounded-xl text-xs font-bold shadow-sm ${getStatusBadgeClass(searchResult.durum)}`}>
+              <span className={`px-3 py-1 rounded-xl text-xs font-bold shadow-sm shrink-0 ${getStatusBadgeClass(searchResult.durum)}`}>
                 {searchResult.durum}
               </span>
             </div>

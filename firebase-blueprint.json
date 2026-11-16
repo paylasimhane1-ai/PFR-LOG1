@@ -152,7 +152,7 @@
         "pendingMemberRequests": { "type": "array", "description": "Pending member addition requests awaiting admin approval" },
         "createdBy": { "type": "string", "minLength": 1, "maxLength": 120 },
         "createdAt": { "type": "number" },
-        "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected", "archived"] },
         "approvedBy": { "type": "string", "maxLength": 120 },
         "approvedAt": { "type": "number" },
         "rejectedReason": { "type": "string", "maxLength": 300 }
@@ -181,7 +181,7 @@
       "type": "object",
       "properties": {
         "username": { "type": "string", "minLength": 1, "maxLength": 120 },
-        "password": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "password": { "type": "string", "minLength": 1, "maxLength": 200 },
         "role": { "type": "string", "enum": ["admin", "personel", "security", "guest"] },
         "depoId": { "type": "number" },
         "permissions": { "type": "object" }
@@ -201,7 +201,7 @@
     },
     "WhatsAppSettings": {
       "title": "WhatsAppSettings",
-      "description": "Cross-device WhatsApp group notification and integration settings",
+      "description": "Shared operational WhatsApp notification preferences (non-secret)",
       "type": "object",
       "properties": {
         "enabled": { "type": "boolean" },
@@ -210,15 +210,22 @@
         "autoShareOnRampAssign": { "type": "boolean" },
         "autoShareOnRampCall": { "type": "boolean" },
         "groupName": { "type": "string", "maxLength": 120 },
+        "alwaysShowPromptModal": { "type": "boolean" },
+        "customTemplate": { "type": "string", "maxLength": 1500 }
+      }
+    },
+    "WhatsAppSecrets": {
+      "title": "WhatsAppSecrets",
+      "description": "Admin-only isolated WhatsApp API tokens, webhook URLs, and endpoint credentials",
+      "type": "object",
+      "properties": {
         "groupPhoneOrId": { "type": "string", "maxLength": 120 },
         "webhookUrl": { "type": "string", "maxLength": 500 },
         "apiKey": { "type": "string", "maxLength": 300 },
         "instanceId": { "type": "string", "maxLength": 120 },
         "twilioAccountSid": { "type": "string", "maxLength": 120 },
         "twilioAuthToken": { "type": "string", "maxLength": 200 },
-        "twilioFromNumber": { "type": "string", "maxLength": 60 },
-        "alwaysShowPromptModal": { "type": "boolean" },
-        "customTemplate": { "type": "string", "maxLength": 1500 }
+        "twilioFromNumber": { "type": "string", "maxLength": 60 }
       }
     },
     "SlaSettings": {
@@ -242,6 +249,31 @@
         "updatedAt": { "type": "number" }
       },
       "required": ["messages"]
+    },
+    "AuditLog": {
+      "title": "AuditLog",
+      "description": "Immutable system audit log recording actor, action, target, and field-level before/after diffs",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "timestamp": { "type": "number" },
+        "dateStr": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "isoDate": { "type": "string", "minLength": 1, "maxLength": 20 },
+        "actorUsername": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "actorRole": { "type": "string", "enum": ["admin", "personel", "security", "guest", "system"] },
+        "category": { "type": "string", "enum": ["vehicle", "ramp", "expected", "security", "auth", "user", "warehouse", "customer", "settings", "chat", "export", "audit"] },
+        "action": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "severity": { "type": "string", "enum": ["info", "warning", "critical"] },
+        "targetType": { "type": "string", "maxLength": 60 },
+        "targetId": { "type": "string", "maxLength": 120 },
+        "targetLabel": { "type": "string", "maxLength": 200 },
+        "depoId": { "type": "number" },
+        "depoName": { "type": "string", "maxLength": 120 },
+        "summary": { "type": "string", "minLength": 1, "maxLength": 1000 },
+        "changes": { "type": "array", "description": "Up to 30 before/after field change entries" },
+        "metadata": { "type": "object", "description": "Optional flat string context map" }
+      },
+      "required": ["id", "timestamp", "dateStr", "isoDate", "actorUsername", "actorRole", "category", "action", "severity", "summary"]
     }
   },
   "firestore": {
@@ -287,7 +319,11 @@
     },
     "/settings/whatsapp": {
       "schema": { "$ref": "#/entities/WhatsAppSettings" },
-      "description": "Shared WhatsApp integration configuration"
+      "description": "Shared operational WhatsApp integration preferences"
+    },
+    "/settings/whatsappSecrets": {
+      "schema": { "$ref": "#/entities/WhatsAppSecrets" },
+      "description": "Isolated WhatsApp API keys, tokens, and webhook endpoints"
     },
     "/settings/sla": {
       "schema": { "$ref": "#/entities/SlaSettings" },
@@ -296,6 +332,10 @@
     "/settings/chatQuickMessages": {
       "schema": { "$ref": "#/entities/ChatQuickMessagesSettings" },
       "description": "Admin-editable quick chat message templates"
+    },
+    "/auditLogs/{logId}": {
+      "schema": { "$ref": "#/entities/AuditLog" },
+      "description": "Immutable admin-controlled audit trail for all system actions and sessions"
     }
   }
 }

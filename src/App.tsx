@@ -15,8 +15,23 @@ import {
   PushNotificationSettings,
   SlaSettings,
   DEFAULT_CHAT_QUICK_MESSAGES,
-  ChatGroupPendingMemberRequest
+  ChatGroupPendingMemberRequest,
+  AuditLog,
+  AuditCategory,
+  AuditSeverity,
+  AuditChangeItem
 } from './types';
+import {
+  generateAuditId,
+  buildVehicleDiff,
+  buildExpectedVehicleDiff,
+  buildUserDiff,
+  buildCustomerDiff,
+  buildWarehouseDiff,
+  buildSlaDiff,
+  buildWhatsAppConfigDiff,
+  buildChatGroupDiff
+} from './utils/audit';
 import {
   initialWarehouses,
   initialUsers,
@@ -49,16 +64,21 @@ import { PushNotificationSettingsModal } from './components/PushNotificationSett
 import { WhatsAppSharePromptModal } from './components/WhatsAppSharePromptModal';
 import { InAppNotificationBanner, InAppAlert } from './components/InAppNotificationBanner';
 import { PushNotificationPromptBanner } from './components/PushNotificationPromptBanner';
+import { AuditLogModal } from './components/AuditLogModal';
 import { LogiPortalIcon } from './components/LogiPortalLogo';
+import { useVisualViewport } from './hooks/useVisualViewport';
 import {
   loadWhatsAppConfig,
   saveWhatsAppConfig,
+  stripWhatsAppSecrets,
+  WHATSAPP_SECRET_FIELDS,
   sendVehicleToWhatsAppGroup,
   getWhatsAppDirectShareUrl,
   formatVehicleWhatsAppMessage,
   shareViaWebShareWithFiles,
   FormatVehicleMessageOptions
 } from './utils/whatsapp';
+import { hashPassword, isPasswordHashed } from './utils/authCrypto';
 import {
   loadPushSettings,
   savePushSettings,
@@ -116,7 +136,9 @@ import {
   MessageSquare,
   Sun,
   Moon,
-  SlidersHorizontal
+  SlidersHorizontal,
+  History as AuditHistoryIcon,
+  ShieldCheck
 } from 'lucide-react';
 import { playChime } from './utils/audio';
 import {
@@ -154,6 +176,8 @@ import {
   deleteChatGroupFromFirestore,
   saveWarehouseToFirestore,
   subscribeToWhatsAppSettings,
+  subscribeToWhatsAppSecrets,
+  saveWhatsAppSettingsToFirestore,
   clearAllCustomersFromFirestore,
   deleteRampFromFirestore,
   saveRampsBatchToFirestore,
@@ -161,15 +185,22 @@ import {
   saveSlaSettingsToFirestore,
   subscribeToChatQuickMessages,
   saveChatQuickMessagesToFirestore,
-  subscribeToFirestoreErrors
+  subscribeToFirestoreErrors,
+  subscribeToAuditLogs,
+  saveAuditLogToFirestore,
+  deleteAuditLogsBatchFromFirestore
 } from './lib/firebase';
 
 export default function App() {
+  useVisualViewport();
+
   // State Initialization
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
     try {
       const saved = localStorage.getItem('yms_current_user');
-      return saved ? JSON.parse(saved) : null;
+      if (!saved) return null;
+      const parsed = JSON.parse(saved) as User;
+      return parsed ? { ...parsed, password: '' } : null;
     } catch {
       return null;
     }
@@ -208,7 +239,19 @@ export default function App() {
   const [users, setUsers] = useState<User[]>(() => {
     try {
       const saved = localStorage.getItem('yms_users');
-      return saved ? JSON.parse(saved) : initialUsers;
+      if (saved) {
+        const parsed = JSON.parse(saved) as User[];
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.map((u) => {
+            if (u.password) return u;
+            const fallback = initialUsers.find(
+              (initU) => initU.username.toLowerCase() === u.username.toLowerCase()
+            );
+            return fallback ? { ...u, password: fallback.password } : u;
+          });
+        }
+      }
+      return initialUsers;
     } catch {
       return initialUsers;
     }
@@ -282,6 +325,9 @@ export default function App() {
   const [showSlaSettingsModal, setShowSlaSettingsModal] = useState(false);
   const [showRampConfigModal, setShowRampConfigModal] = useState(false);
   const [rampConfigInitialWhId, setRampConfigInitialWhId] = useState<number | undefined>(undefined);
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+  const [isAuditLoading, setIsAuditLoading] = useState(false);
+  const [showAuditLogModal, setShowAuditLogModal] = useState(false);
   const [customers, setCustomers] = useState<Customer[]>(() => {
     try {
       if (localStorage.getItem('yms_customers_cleared') === 'true') {
@@ -330,6 +376,10 @@ export default function App() {
       } else {
         document.documentElement.classList.remove('dark');
         document.documentElement.classList.add('light');
+      }
+      const metaThemeColor = document.querySelector('meta[name="theme-color"]');
+      if (metaThemeColor) {
+        metaThemeColor.setAttribute('content', theme === 'dark' ? '#020617' : '#f8fafc');
       }
       localStorage.setItem('yms_theme', theme);
     }
@@ -431,11 +481,11 @@ export default function App() {
     });
   }, []);
 
-  // Storage Synching
+  // Storage Synching (hassas parola verilerini cihaz önbelleğine yazma)
   useEffect(() => {
     try {
       if (currentUser) {
-        localStorage.setItem('yms_current_user', JSON.stringify(currentUser));
+        localStorage.setItem('yms_current_user', JSON.stringify({ ...currentUser, password: '' }));
       } else {
         localStorage.removeItem('yms_current_user');
       }
@@ -454,7 +504,8 @@ export default function App() {
 
   useEffect(() => {
     try {
-      localStorage.setItem('yms_users', JSON.stringify(users));
+      const sanitizedUsers = users.map((u) => ({ ...u, password: '' }));
+      localStorage.setItem('yms_users', JSON.stringify(sanitizedUsers));
     } catch (e) {
       console.error(e);
     }
@@ -638,7 +689,7 @@ export default function App() {
         setCurrentUser((curr) => {
           if (!curr) return null;
           const found = remoteUsers.find((u) => u.username.toLowerCase() === curr.username.toLowerCase());
-          return found || curr;
+          return found ? { ...found, password: '' } : curr;
         });
       }
     }, initialUsers);
@@ -732,10 +783,22 @@ export default function App() {
       }
     });
 
-    const unsubWhatsApp = subscribeToWhatsAppSettings((remoteConfig) => {
+    const unsubWhatsApp = subscribeToWhatsAppSettings((remoteConfig, legacyRaw) => {
       if (remoteConfig) {
-        setWhatsappConfig((prev) => ({ ...prev, ...remoteConfig }));
         saveWhatsAppConfig(remoteConfig);
+        setWhatsappConfig((prev) => {
+          const isAdmin = currentUserRef.current?.role === 'admin';
+          if (!isAdmin) return remoteConfig;
+          return { ...prev, ...remoteConfig };
+        });
+        if (
+          currentUserRef.current?.role === 'admin' &&
+          legacyRaw &&
+          WHATSAPP_SECRET_FIELDS.some((k) => Boolean(legacyRaw[k]))
+        ) {
+          // Eski tek-doküman WhatsApp anahtarlarını admin oturumunda izole gizli dokümana taşı
+          saveWhatsAppSettingsToFirestore({ ...remoteConfig, ...legacyRaw });
+        }
       }
     });
 
@@ -770,6 +833,36 @@ export default function App() {
       unsubChatQuickMessages();
     };
   }, []);
+
+  // WhatsApp API anahtarları ve Webhook URL yalnızca Admin oturumunda Firestore'dan yüklenir
+  useEffect(() => {
+    if (currentUser?.role !== 'admin') {
+      setWhatsappConfig((prev) => stripWhatsAppSecrets(prev));
+      return;
+    }
+    const unsubSecrets = subscribeToWhatsAppSecrets((secrets) => {
+      if (secrets) {
+        setWhatsappConfig((prev) => ({ ...prev, ...secrets }));
+      }
+    });
+    return () => unsubSecrets();
+  }, [currentUser?.role]);
+
+  // Denetim / İşlem Geçmişi kayıtları yalnızca Admin oturumunda canlı dinlenir
+  useEffect(() => {
+    if (currentUser?.role !== 'admin') {
+      setAuditLogs([]);
+      setIsAuditLoading(false);
+      setShowAuditLogModal(false);
+      return;
+    }
+    setIsAuditLoading(true);
+    const unsubAudit = subscribeToAuditLogs((logs) => {
+      setAuditLogs(logs);
+      setIsAuditLoading(false);
+    });
+    return () => unsubAudit();
+  }, [currentUser?.role]);
 
   // Synchronize Ramps with Vehicles
   const syncAllRamps = useCallback(() => {
@@ -813,6 +906,68 @@ export default function App() {
       return r ? r.ad : 'Atanmadı';
     },
     [ramps]
+  );
+
+  const recordAuditLog = useCallback(
+    (params: {
+      category: AuditCategory;
+      action: string;
+      severity?: AuditSeverity;
+      targetType?: string;
+      targetId?: string | number | null;
+      targetLabel?: string;
+      depoId?: number | null;
+      depoName?: string;
+      summary: string;
+      changes?: AuditChangeItem[];
+      metadata?: Record<string, string>;
+      actorUsernameOverride?: string;
+      actorRoleOverride?: User['role'] | 'system';
+    }) => {
+      const nowTs = Date.now();
+      const dt = new Date(nowTs);
+      const dateStr = dt.toLocaleString('tr-TR');
+      const isoDate = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+      const actorUser = currentUserRef.current;
+      const actorUsername = params.actorUsernameOverride || actorUser?.username || 'Sistem';
+      const actorRole = params.actorRoleOverride || actorUser?.role || 'system';
+      const resolvedDepoId = typeof params.depoId === 'number' ? params.depoId : undefined;
+      const resolvedDepoName =
+        params.depoName ||
+        (typeof resolvedDepoId === 'number'
+          ? resolvedDepoId === 0
+            ? 'Tüm Depolar (Genel)'
+            : getWarehouseNameById(resolvedDepoId)
+          : undefined);
+
+      const entry: AuditLog = {
+        id: generateAuditId(),
+        timestamp: nowTs,
+        dateStr,
+        isoDate,
+        actorUsername,
+        actorRole,
+        category: params.category,
+        action: params.action,
+        severity: params.severity || 'info',
+        ...(params.targetType ? { targetType: params.targetType } : {}),
+        ...(params.targetId !== undefined && params.targetId !== null
+          ? { targetId: String(params.targetId) }
+          : {}),
+        ...(params.targetLabel ? { targetLabel: params.targetLabel } : {}),
+        ...(typeof resolvedDepoId === 'number' ? { depoId: resolvedDepoId } : {}),
+        ...(resolvedDepoName ? { depoName: resolvedDepoName } : {}),
+        summary: params.summary,
+        ...(params.changes && params.changes.length > 0 ? { changes: params.changes } : {}),
+        ...(params.metadata ? { metadata: params.metadata } : {})
+      };
+
+      if (actorUser?.role === 'admin') {
+        setAuditLogs((prev) => [entry, ...prev.filter((l) => l.id !== entry.id)]);
+      }
+      saveAuditLogToFirestore(entry);
+    },
+    [getWarehouseNameById]
   );
 
   const activeWarehouses = useMemo(() => {
@@ -1008,11 +1163,23 @@ export default function App() {
       prev.map((w) => (w.id === warehouseId ? updatedWarehouse : w))
     );
     saveWarehouseToFirestore(updatedWarehouse);
+    recordAuditLog({
+      category: 'warehouse',
+      action: 'WAREHOUSE_TOGGLE',
+      severity: updatedWarehouse.aktif ? 'info' : 'warning',
+      targetType: 'warehouse',
+      targetId: updatedWarehouse.id,
+      targetLabel: updatedWarehouse.ad,
+      depoId: updatedWarehouse.id,
+      depoName: updatedWarehouse.ad,
+      summary: `${updatedWarehouse.ad} deposu ${updatedWarehouse.aktif ? 'aktif edildi' : 'pasif edildi'}.`,
+      changes: buildWarehouseDiff(target, updatedWarehouse)
+    });
     showToast(
       `${updatedWarehouse.ad} ${updatedWarehouse.aktif ? 'aktif edildi (sistemde görünür).' : 'pasif edildi (gizlendi).'}`,
       updatedWarehouse.aktif ? 'success' : 'info'
     );
-  }, [warehouses, activeWarehouses, showToast]);
+  }, [warehouses, activeWarehouses, showToast, recordAuditLog]);
 
   const handleAddWarehouse = useCallback((name: string) => {
     const nextId = warehouses.length > 0 ? Math.max(...warehouses.map((w) => w.id)) + 1 : 1;
@@ -1023,8 +1190,18 @@ export default function App() {
     };
     setWarehouses((prev) => [...prev, newWarehouse]);
     saveWarehouseToFirestore(newWarehouse);
+    recordAuditLog({
+      category: 'warehouse',
+      action: 'WAREHOUSE_CREATE',
+      targetType: 'warehouse',
+      targetId: newWarehouse.id,
+      targetLabel: newWarehouse.ad,
+      depoId: newWarehouse.id,
+      depoName: newWarehouse.ad,
+      summary: `Yeni depo eklendi: ${newWarehouse.ad}`
+    });
     showToast(`${newWarehouse.ad} başarıyla eklendi ve aktif edildi.`);
-  }, [warehouses, showToast]);
+  }, [warehouses, showToast, recordAuditLog]);
 
   const handleEditWarehouse = useCallback((id: number, newName: string) => {
     const target = warehouses.find((w) => w.id === id);
@@ -1037,14 +1214,35 @@ export default function App() {
       prev.map((w) => (w.id === id ? updatedWarehouse : w))
     );
     saveWarehouseToFirestore(updatedWarehouse);
+    recordAuditLog({
+      category: 'warehouse',
+      action: 'WAREHOUSE_EDIT',
+      targetType: 'warehouse',
+      targetId: updatedWarehouse.id,
+      targetLabel: updatedWarehouse.ad,
+      depoId: updatedWarehouse.id,
+      depoName: updatedWarehouse.ad,
+      summary: `Depo adı güncellendi: ${target.ad} -> ${updatedWarehouse.ad}`,
+      changes: buildWarehouseDiff(target, updatedWarehouse)
+    });
     showToast(`Depo güncellendi: ${updatedWarehouse.ad}`);
-  }, [warehouses, showToast]);
+  }, [warehouses, showToast, recordAuditLog]);
 
   const handleSaveSlaSettings = useCallback((newSettings: SlaSettings) => {
+    const diff = buildSlaDiff(slaSettings, newSettings);
     setSlaSettings(newSettings);
     saveSlaSettingsToFirestore(newSettings);
+    recordAuditLog({
+      category: 'settings',
+      action: 'SETTINGS_SLA',
+      targetType: 'settings',
+      targetId: 'sla',
+      targetLabel: 'SLA Süre Ayarları',
+      summary: `SLA hedef süre ayarları güncellendi (${diff.length} alan değişti).`,
+      changes: diff
+    });
     showToast('SLA hedef süreleri güncellendi ve tüm cihazlara aktarıldı.', 'success');
-  }, [showToast]);
+  }, [slaSettings, showToast, recordAuditLog]);
 
   const handleAddRampForWarehouse = useCallback((depoId: number, name: string) => {
     const trimmed = name.trim();
@@ -1058,8 +1256,17 @@ export default function App() {
     };
     setRamps((prev) => [...prev, newRamp]);
     saveRampToFirestore(newRamp);
+    recordAuditLog({
+      category: 'ramp',
+      action: 'RAMP_CREATE',
+      targetType: 'ramp',
+      targetId: newRamp.id,
+      targetLabel: trimmed,
+      depoId,
+      summary: `${getWarehouseNameById(depoId)} için yeni rampa tanımlandı: ${trimmed}`
+    });
     showToast(`${getWarehouseNameById(depoId)} için "${trimmed}" eklendi.`, 'success');
-  }, [ramps, getWarehouseNameById, showToast]);
+  }, [ramps, getWarehouseNameById, showToast, recordAuditLog]);
 
   const handleSeedDefaultRampsForWarehouse = useCallback((depoId: number, count: number) => {
     const safeCount = Math.max(1, Math.min(30, Math.floor(count || 1)));
@@ -1074,8 +1281,16 @@ export default function App() {
     }));
     setRamps((prev) => [...prev, ...newRamps]);
     saveRampsBatchToFirestore(newRamps);
+    recordAuditLog({
+      category: 'ramp',
+      action: 'RAMP_SEED',
+      targetType: 'ramp',
+      targetLabel: `${safeCount} Rampa`,
+      depoId,
+      summary: `${getWarehouseNameById(depoId)} için ${safeCount} adet yeni rampa toplu olarak oluşturuldu (${newRamps.map((r) => r.ad).join(', ')}).`
+    });
     showToast(`${getWarehouseNameById(depoId)} için ${safeCount} adet yeni rampa oluşturuldu.`, 'success');
-  }, [ramps, getWarehouseNameById, showToast]);
+  }, [ramps, getWarehouseNameById, showToast, recordAuditLog]);
 
   const handleRenameRamp = useCallback((ramp: Ramp, newName: string) => {
     const trimmed = newName.trim();
@@ -1083,8 +1298,18 @@ export default function App() {
     const updated: Ramp = { ...ramp, ad: trimmed };
     setRamps((prev) => prev.map((r) => (r.id === ramp.id ? updated : r)));
     saveRampToFirestore(updated);
+    recordAuditLog({
+      category: 'ramp',
+      action: 'RAMP_RENAME',
+      targetType: 'ramp',
+      targetId: ramp.id,
+      targetLabel: trimmed,
+      depoId: ramp.depoId || 1,
+      summary: `Rampa yeniden adlandırıldı: ${ramp.ad} -> ${trimmed}`,
+      changes: [{ field: 'ad', label: 'Rampa Adı', before: ramp.ad, after: trimmed }]
+    });
     showToast(`Rampa adı güncellendi: ${trimmed}`, 'success');
-  }, [showToast]);
+  }, [showToast, recordAuditLog]);
 
   const handleDeleteRamp = useCallback((ramp: Ramp) => {
     const occupied = vehicles.some((v) => v.rampaId === ramp.id && v.durum === 'RAMPADA');
@@ -1098,17 +1323,66 @@ export default function App() {
       () => {
         setRamps((prev) => prev.filter((r) => r.id !== ramp.id));
         deleteRampFromFirestore(ramp.id);
+        recordAuditLog({
+          category: 'ramp',
+          action: 'RAMP_DELETE',
+          severity: 'warning',
+          targetType: 'ramp',
+          targetId: ramp.id,
+          targetLabel: ramp.ad,
+          depoId: ramp.depoId || 1,
+          summary: `${getWarehouseNameById(ramp.depoId || 1)} deposundaki "${ramp.ad}" rampası kalıcı olarak silindi.`
+        });
         showToast(`${ramp.ad} silindi.`, 'info');
       },
       'danger',
       'Evet, Rampayı Sil'
     );
-  }, [vehicles, askConfirm, showToast]);
+  }, [vehicles, askConfirm, showToast, getWarehouseNameById, recordAuditLog]);
 
-  const handleLoginSuccess = (user: User, depoId: number) => {
-    setCurrentUser(user);
+  const handleLoginSuccess = async (user: User, depoId: number, plainPassword?: string) => {
+    if (plainPassword && !isPasswordHashed(user.password)) {
+      try {
+        const hashedPassword = await hashPassword(plainPassword);
+        const migratedUser: User = { ...user, password: hashedPassword };
+        setUsers((prev) =>
+          prev.map((u) => (u.username.toLowerCase() === user.username.toLowerCase() ? migratedUser : u))
+        );
+        saveUserToFirestore(migratedUser);
+      } catch {
+        // hash fallback ignored
+      }
+    }
+    setCurrentUser({ ...user, password: '' });
     setSelectedDepoId(depoId);
     setActiveTab('araclar');
+    recordAuditLog({
+      category: 'auth',
+      action: 'LOGIN_SUCCESS',
+      targetType: 'user',
+      targetId: user.username,
+      targetLabel: user.username,
+      depoId,
+      actorUsernameOverride: user.username,
+      actorRoleOverride: user.role,
+      summary: `${user.username} kullanıcısı ${getWarehouseNameById(depoId)} görünümünde sisteme giriş yaptı.`
+    });
+  };
+
+  const handleLoginFailed = (attemptedUsername: string, depoId: number) => {
+    const cleanUser = (attemptedUsername || '').trim() || 'Boş Kullanıcı';
+    recordAuditLog({
+      category: 'auth',
+      action: 'LOGIN_FAILED',
+      severity: 'warning',
+      targetType: 'user',
+      targetId: cleanUser,
+      targetLabel: cleanUser,
+      depoId,
+      actorUsernameOverride: cleanUser,
+      actorRoleOverride: 'system',
+      summary: `"${cleanUser}" kullanıcı adı ile hatalı şifre veya yetkisiz giriş denemesi yapıldı (${getWarehouseNameById(depoId)}).`
+    });
   };
 
   useEffect(() => {
@@ -1122,9 +1396,34 @@ export default function App() {
   const handleLoginAsGuest = () => {
     setCurrentUser({ username: 'Misafir', password: '', role: 'guest', depoId: 0 });
     setActiveTab('araclar');
+    recordAuditLog({
+      category: 'auth',
+      action: 'LOGIN_GUEST',
+      targetType: 'user',
+      targetId: 'Misafir',
+      targetLabel: 'Misafir Portalı',
+      depoId: 0,
+      actorUsernameOverride: 'Misafir',
+      actorRoleOverride: 'guest',
+      summary: 'Misafir (Salt Okunur) portalına giriş yapıldı.'
+    });
   };
 
   const handleLogout = () => {
+    const exitingUser = currentUser;
+    if (exitingUser) {
+      recordAuditLog({
+        category: 'auth',
+        action: 'LOGOUT',
+        targetType: 'user',
+        targetId: exitingUser.username,
+        targetLabel: exitingUser.username,
+        depoId: selectedDepoId,
+        actorUsernameOverride: exitingUser.username,
+        actorRoleOverride: exitingUser.role,
+        summary: `${exitingUser.username} kullanıcısı sistemden güvenli çıkış yaptı.`
+      });
+    }
     if (currentUser && currentUser.role !== 'guest') {
       upsertChatPresenceInFirestore({
         username: currentUser.username,
@@ -1155,6 +1454,7 @@ export default function App() {
 
   // Customer Management Handlers
   const handleSaveCustomer = async (cust: Customer) => {
+    const existingCustomer = customers.find((c) => c.id === cust.id);
     setCustomers((prev) => {
       const idx = prev.findIndex((c) => c.id === cust.id);
       let updated: Customer[];
@@ -1172,6 +1472,17 @@ export default function App() {
       return updated;
     });
     await saveCustomerToFirestore(cust);
+    recordAuditLog({
+      category: 'customer',
+      action: existingCustomer ? 'CUSTOMER_EDIT' : 'CUSTOMER_CREATE',
+      targetType: 'customer',
+      targetId: cust.id,
+      targetLabel: cust.name,
+      summary: existingCustomer
+        ? `"${cust.name}" firma kartı güncellendi.`
+        : `Yeni müşteri/firma eklendi: "${cust.name}".`,
+      changes: existingCustomer ? buildCustomerDiff(existingCustomer, cust) : undefined
+    });
     showToast(`"${cust.name}" firması kaydedildi.`, 'success');
   };
 
@@ -1204,6 +1515,15 @@ export default function App() {
           return updated;
         });
         await deleteCustomerFromFirestore(customerId, customerName);
+        recordAuditLog({
+          category: 'customer',
+          action: 'CUSTOMER_DELETE',
+          severity: 'warning',
+          targetType: 'customer',
+          targetId: customerId,
+          targetLabel: customerName,
+          summary: `"${customerName}" firması sistemden silindi.`
+        });
         showToast(`"${customerName}" firması silindi.`, 'info');
       }
     );
@@ -1214,12 +1534,21 @@ export default function App() {
       'Örnek Firmaları Sıfırla',
       'Tüm kayıtlı demo ve örnek firmalar sistemden ve bulut veritabanından kalıcı olarak silinecektir. Liste boşaldıktan sonra sıfırdan firma ekleme formu açılacaktır. Onaylıyor musunuz?',
       async () => {
+        const previousCount = customers.length;
         setCustomers([]);
         try {
           localStorage.setItem('yms_customers', '[]');
           localStorage.setItem('yms_customers_cleared', 'true');
         } catch (e) {}
         await clearAllCustomersFromFirestore();
+        recordAuditLog({
+          category: 'customer',
+          action: 'CUSTOMER_RESET',
+          severity: 'critical',
+          targetType: 'customer',
+          targetLabel: 'Firma Listesi',
+          summary: `Tüm kayıtlı firmalar (${previousCount} adet) kalıcı olarak sıfırlandı.`
+        });
         showToast('Tüm örnek firmalar temizlendi. Sıfırdan yeni firma ekleyebilirsiniz.', 'success');
       },
       'danger',
@@ -1333,6 +1662,17 @@ export default function App() {
 
     setShowExpectedArrivalModal(false);
     setSelectedExpectedVehicleForArrival(null);
+
+    recordAuditLog({
+      category: 'expected',
+      action: 'EXPECTED_ADMIT',
+      targetType: 'vehicle',
+      targetId: newRecord.id,
+      targetLabel: newRecord.dorsePlaka,
+      depoId: newRecord.depoId,
+      summary: `Beklenen araç ${newRecord.dorsePlaka} (${newRecord.musteri || '-'}) tek tıkla sahaya kabul edildi (${newRecord.depoTuru} / ${newRecord.islemTuru}).`,
+      metadata: { expectedId: String(exp.id) }
+    });
 
     playChime('success');
     showToast(`${newRecord.dorsePlaka} sahaya başarıyla kabul edildi!`, 'success');
@@ -1450,6 +1790,7 @@ export default function App() {
     setVehicles((prev) => [newRecord, ...prev]);
     saveVehicleToFirestore(newRecord);
 
+    const convertedExpectedId = processingExpectedVehicleId;
     if (processingExpectedVehicleId) {
       setExpectedVehicles((prev) =>
         prev.map((e) => {
@@ -1463,6 +1804,17 @@ export default function App() {
       );
       setProcessingExpectedVehicleId(null);
     }
+
+    recordAuditLog({
+      category: 'vehicle',
+      action: 'VEHICLE_CREATE',
+      targetType: 'vehicle',
+      targetId: newRecord.id,
+      targetLabel: newRecord.dorsePlaka,
+      depoId: newRecord.depoId,
+      summary: `${newRecord.dorsePlaka} (${newRecord.musteri || '-'}) yeni araç kaydı sahaya alındı (${newRecord.depoTuru} / ${newRecord.islemTuru}${newRecord.isAcik ? ' · ACİL' : ''}).`,
+      ...(convertedExpectedId ? { metadata: { fromExpectedId: String(convertedExpectedId) } } : {})
+    });
 
     playChime('success');
     showToast('Yeni araç kaydedildi ve sahaya girişi yapıldı.', 'success');
@@ -1600,6 +1952,15 @@ export default function App() {
 
     setExpectedVehicles((prev) => [newExp, ...prev]);
     saveExpectedVehicleToFirestore(newExp);
+    recordAuditLog({
+      category: 'expected',
+      action: 'EXPECTED_CREATE',
+      targetType: 'expected',
+      targetId: newExp.id,
+      targetLabel: newExp.dorsePlaka,
+      depoId: newExp.depoId,
+      summary: `Beklenen araç kaydı oluşturuldu: ${newExp.dorsePlaka} (${newExp.musteri || '-'})`
+    });
     playChime('success');
     showToast('Beklenen araç kaydı başarıyla oluşturuldu.', 'success');
   };
@@ -1609,6 +1970,7 @@ export default function App() {
       showToast('Beklenen araç güncelleme yetkiniz bulunmamaktadır.', 'warning');
       return;
     }
+    const prevExp = expectedVehicles.find((e) => e.id === updated.id);
     if (updated.musteri && updated.musteri.trim()) {
       handleAddNewCustomerByName(updated.musteri.trim());
     }
@@ -1617,6 +1979,16 @@ export default function App() {
       prev.map((e) => (e.id === updated.id ? updated : e))
     );
     saveExpectedVehicleToFirestore(updated);
+    recordAuditLog({
+      category: 'expected',
+      action: 'EXPECTED_EDIT',
+      targetType: 'expected',
+      targetId: updated.id,
+      targetLabel: updated.dorsePlaka,
+      depoId: updated.depoId,
+      summary: `${updated.dorsePlaka} beklenen araç bilgileri güncellendi.`,
+      changes: prevExp ? buildExpectedVehicleDiff(prevExp, updated, getWarehouseNameById) : undefined
+    });
     setShowEditExpectedModal(false);
     setSelectedExpectedVehicleForEdit(null);
     showToast(`${updated.dorsePlaka} beklenen araç bilgileri güncellendi.`, 'success');
@@ -1633,6 +2005,16 @@ export default function App() {
       () => {
         setExpectedVehicles((prev) => prev.filter((e) => e.id !== exp.id));
         deleteExpectedVehicleFromFirestore(exp.id);
+        recordAuditLog({
+          category: 'expected',
+          action: 'EXPECTED_DELETE',
+          severity: 'warning',
+          targetType: 'expected',
+          targetId: exp.id,
+          targetLabel: exp.dorsePlaka || 'Beklenen Araç',
+          depoId: exp.depoId,
+          summary: `${exp.dorsePlaka || 'Kayıtsız plaka'} (${exp.musteri || '-'}) beklenen araç kaydı silindi.`
+        });
         showToast('Beklenen araç kaydı silindi.', 'info');
       }
     );
@@ -1643,8 +2025,22 @@ export default function App() {
       showToast('Beklenen araçları toplu silme yetkiniz bulunmamaktadır.', 'warning');
       return;
     }
+    const deletedItems = expectedVehicles.filter((e) => ids.includes(e.id));
     setExpectedVehicles((prev) => prev.filter((e) => !ids.includes(e.id)));
     ids.forEach((id) => deleteExpectedVehicleFromFirestore(id));
+    recordAuditLog({
+      category: 'expected',
+      action: 'EXPECTED_DELETE',
+      severity: 'warning',
+      targetType: 'expected',
+      targetLabel: `${ids.length} Beklenen Araç`,
+      depoId: selectedDepoId,
+      summary: `${ids.length} adet beklenen araç kaydı toplu olarak silindi (${deletedItems
+        .slice(0, 6)
+        .map((e) => e.dorsePlaka)
+        .filter(Boolean)
+        .join(', ')}${deletedItems.length > 6 ? '...' : ''}).`
+    });
     showToast(`${ids.length} adet beklenen araç silindi.`, 'info');
   };
 
@@ -1655,6 +2051,14 @@ export default function App() {
     }
     setExpectedVehicles((prev) => [...items, ...prev]);
     items.forEach((item) => saveExpectedVehicleToFirestore(item));
+    recordAuditLog({
+      category: 'expected',
+      action: 'EXPECTED_IMPORT',
+      targetType: 'expected',
+      targetLabel: `${items.length} Beklenen Araç`,
+      depoId: selectedDepoId,
+      summary: `Excel dosyasından ${items.length} adet beklenen araç kaydı içe aktarıldı.`
+    });
     showToast(`${items.length} adet beklenen araç içe aktarıldı.`);
   };
 
@@ -1694,6 +2098,16 @@ export default function App() {
         () => {
           deleteNotificationFromFirestore(notificationId);
           setNotifications((prev) => prev.filter((n) => n.id !== notificationId));
+          recordAuditLog({
+            category: 'security',
+            action: 'NOTIFICATION_DELETE',
+            severity: 'warning',
+            targetType: 'notification',
+            targetId: notificationId,
+            targetLabel: target.plaka || 'Bildirim',
+            depoId: resolveNotifDepoId(target),
+            summary: `Bekleyen çağrı bildirimi silindi: ${target.plaka || ''} (${target.text.slice(0, 120)})`
+          });
           showToast('Bekleyen bildirim silindi.', 'info');
         },
         'warning',
@@ -1703,6 +2117,17 @@ export default function App() {
     }
     deleteNotificationFromFirestore(notificationId);
     setNotifications((prev) => prev.filter((n) => n.id !== notificationId));
+    if (target) {
+      recordAuditLog({
+        category: 'security',
+        action: 'NOTIFICATION_DELETE',
+        targetType: 'notification',
+        targetId: notificationId,
+        targetLabel: target.plaka || 'Bildirim',
+        depoId: resolveNotifDepoId(target),
+        summary: `Bildirim silindi: ${target.plaka || ''} (${target.status})`
+      });
+    }
     showToast('Bildirim silindi.', 'info');
   };
 
@@ -1775,6 +2200,18 @@ export default function App() {
                 return n;
               })
             );
+
+            recordAuditLog({
+              category: 'vehicle',
+              action: 'STATUS_CHANGE',
+              severity: 'warning',
+              targetType: 'vehicle',
+              targetId: updatedVehicle.id,
+              targetLabel: updatedVehicle.dorsePlaka,
+              depoId: updatedVehicle.depoId,
+              summary: `${updatedVehicle.dorsePlaka} plakalı araç ${rampName} üzerinden indirilerek 'EVRAK HAZIR' durumuna alındı.`,
+              changes: buildVehicleDiff(vehicle, updatedVehicle, getWarehouseNameById, getRampName)
+            });
 
             showToast(`${vehicle.dorsePlaka} plakalı araç ${rampName} üzerinden indirildi ve 'EVRAK HAZIR' durumuna alındı. Rampa boşaltıldı.`, 'success');
           },
@@ -1849,6 +2286,18 @@ export default function App() {
             })
           );
 
+          recordAuditLog({
+            category: 'vehicle',
+            action: 'STATUS_CHANGE',
+            severity: 'warning',
+            targetType: 'vehicle',
+            targetId: updatedVehicle.id,
+            targetLabel: updatedVehicle.dorsePlaka,
+            depoId: updatedVehicle.depoId,
+            summary: `${updatedVehicle.dorsePlaka} plakalı araç ${rampName} üzerinden indirilerek 'BEKLEMEDE' durumuna çekildi.`,
+            changes: buildVehicleDiff(vehicle, updatedVehicle, getWarehouseNameById, getRampName)
+          });
+
           showToast(`${vehicle.dorsePlaka} plakalı araç ${rampName} üzerinden indirildi ve bekleme sahasına ('BEKLEMEDE') alındı. Rampa boşaltıldı.`, 'info');
         },
         'warning',
@@ -1906,6 +2355,16 @@ export default function App() {
             );
           }
           removeVehicleCallNotifications(vehicle.id, vehicle.dorsePlaka);
+          recordAuditLog({
+            category: 'vehicle',
+            action: 'VEHICLE_EXIT',
+            targetType: 'vehicle',
+            targetId: updatedVehicle.id,
+            targetLabel: updatedVehicle.dorsePlaka,
+            depoId: updatedVehicle.depoId,
+            summary: `${updatedVehicle.dorsePlaka} plakalı araç için 'ÇIKIŞ YAPTI' onayı verildi.`,
+            changes: buildVehicleDiff(vehicle, updatedVehicle, getWarehouseNameById, getRampName)
+          });
           showToast(`${vehicle.dorsePlaka} plakalı aracın çıkışı yapıldı.`, 'success');
         }
       );
@@ -1958,6 +2417,16 @@ export default function App() {
       );
       if (updatedVehicle) {
         saveVehicleToFirestore(updatedVehicle);
+        recordAuditLog({
+          category: 'vehicle',
+          action: 'STATUS_CHANGE',
+          targetType: 'vehicle',
+          targetId: vehicle.id,
+          targetLabel: vehicle.dorsePlaka,
+          depoId: vehicle.depoId,
+          summary: `${vehicle.dorsePlaka} aracının durumu '${vehicle.durum}' -> '${newStatus}' olarak güncellendi.`,
+          changes: buildVehicleDiff(vehicle, updatedVehicle, getWarehouseNameById, getRampName)
+        });
       }
       if (newStatus === 'RAMPADA' && vehicle.rampaId) {
         setRamps((prev) =>
@@ -2044,6 +2513,16 @@ export default function App() {
 
         const targetRamp = ramps.find((r) => r.id === rampaId);
         const targetRampName = targetRamp ? targetRamp.ad : `Rampa ${rampaId}`;
+        recordAuditLog({
+          category: 'vehicle',
+          action: 'RAMP_ASSIGN',
+          targetType: 'vehicle',
+          targetId: updatedVehicle.id,
+          targetLabel: updatedVehicle.dorsePlaka,
+          depoId: updatedVehicle.depoId,
+          summary: `${updatedVehicle.dorsePlaka} plakalı araç ${oldRampId ? `${getRampName(oldRampId)} -> ` : ''}${targetRampName} üzerine atandı.`,
+          changes: buildVehicleDiff(vehicle, updatedVehicle, getWarehouseNameById, getRampName)
+        });
         showToast(`${vehicle.dorsePlaka} plakalı araç ${targetRampName} üzerine atandı ve bildirim temizlendi.`, 'success');
 
         // WhatsApp Grubu Bildirimi
@@ -2157,6 +2636,16 @@ export default function App() {
               );
             }
             removeVehicleCallNotifications(vehicle.id, vehicle.dorsePlaka);
+            recordAuditLog({
+              category: 'vehicle',
+              action: 'RAMP_RELEASE',
+              targetType: 'vehicle',
+              targetId: updatedVehicle.id,
+              targetLabel: updatedVehicle.dorsePlaka,
+              depoId: updatedVehicle.depoId,
+              summary: `${updatedVehicle.dorsePlaka} plakalı araç ${rampName} üzerinden indirilerek 'EVRAK HAZIR' durumuna alındı.`,
+              changes: buildVehicleDiff(vehicle, updatedVehicle, getWarehouseNameById, getRampName)
+            });
             showToast(`${vehicle.dorsePlaka} plakalı araç ${rampName} üzerinden boşaltıldı ve 'EVRAK HAZIR' durumuna alındı.`, 'success');
           },
           'warning',
@@ -2174,6 +2663,16 @@ export default function App() {
         );
         saveVehicleToFirestore(updatedVehicle);
         removeVehicleCallNotifications(vehicle.id, vehicle.dorsePlaka);
+        recordAuditLog({
+          category: 'vehicle',
+          action: 'STATUS_CHANGE',
+          targetType: 'vehicle',
+          targetId: updatedVehicle.id,
+          targetLabel: updatedVehicle.dorsePlaka,
+          depoId: updatedVehicle.depoId,
+          summary: `${updatedVehicle.dorsePlaka} aracının durumu 'EVRAK HAZIR' olarak güncellendi.`,
+          changes: buildVehicleDiff(vehicle, updatedVehicle, getWarehouseNameById, getRampName)
+        });
       }
     }
   };
@@ -2212,6 +2711,15 @@ export default function App() {
 
     setNotifications((prev) => [newNotif, ...prev]);
     saveNotificationToFirestore(newNotif);
+    recordAuditLog({
+      category: 'vehicle',
+      action: 'RAMP_CALL',
+      targetType: 'vehicle',
+      targetId: vehicle.id,
+      targetLabel: vehicle.dorsePlaka,
+      depoId: vehicle.depoId,
+      summary: `${vehicle.dorsePlaka} (${vehicle.musteri}) için Güvenlik birimine saha/rampa çağrı talebi gönderildi.`
+    });
     showToast(`${vehicle.dorsePlaka} plakalı araç için Güvenlik ekranına çağrı isteği gönderildi.`, 'info');
   };
 
@@ -2267,6 +2775,18 @@ export default function App() {
         setNotifications((prev) => [cancelNotif, ...prev]);
         saveNotificationToFirestore(cancelNotif);
 
+        recordAuditLog({
+          category: 'vehicle',
+          action: 'RAMP_CALL_CANCEL',
+          severity: 'warning',
+          targetType: 'vehicle',
+          targetId: vehicle.id,
+          targetLabel: vehicle.dorsePlaka,
+          depoId: vehicle.depoId,
+          summary: `${vehicle.dorsePlaka} plakalı aracın rampa çağrısı iptal edildi.`,
+          changes: buildVehicleDiff(vehicle, updatedVehicle, getWarehouseNameById, getRampName)
+        });
+
         playChime('cancel');
         showToast(`${vehicle.dorsePlaka} plakalı aracın çağrısı iptal edildi.`, 'info');
       }
@@ -2285,6 +2805,17 @@ export default function App() {
       prev.map((v) => (v.id === vehicle.id ? updatedVehicle : v))
     );
     saveVehicleToFirestore(updatedVehicle);
+    recordAuditLog({
+      category: 'vehicle',
+      action: 'ACIL_TOGGLE',
+      severity: updatedStatus ? 'warning' : 'info',
+      targetType: 'vehicle',
+      targetId: vehicle.id,
+      targetLabel: vehicle.dorsePlaka,
+      depoId: vehicle.depoId,
+      summary: `${vehicle.dorsePlaka} aracının öncelik durumu '${updatedStatus ? 'ACİL ARAÇ' : 'Normal Araç'}' olarak değiştirildi.`,
+      changes: buildVehicleDiff(vehicle, updatedVehicle, getWarehouseNameById, getRampName)
+    });
     showToast(`${vehicle.dorsePlaka} plakalı araç durumu ${updatedStatus ? 'ACİL ARAÇ' : 'Normal Araç'} olarak güncellendi.`, 'info');
   };
 
@@ -2337,6 +2868,15 @@ export default function App() {
           saveVehicleToFirestore(u);
         });
 
+        recordAuditLog({
+          category: 'vehicle',
+          action: 'BULK_MAKE_READY',
+          targetType: 'vehicle',
+          targetLabel: `${pendingVehicles.length} Araç`,
+          depoId: selectedDepoId,
+          summary: `${pendingVehicles.length} adet araç toplu olarak 'EVRAK HAZIR' durumuna onaylandı (${previewPlates}${moreSuffix}).`
+        });
+
         showToast(`${pendingVehicles.length} araç 'EVRAK HAZIR' durumuna güncellendi.`, 'success');
       },
       'info',
@@ -2364,9 +2904,11 @@ export default function App() {
     setRamps((prev) => prev.map((r) => (r.id === ramp.id ? updatedRamp : r)));
     saveRampToFirestore(updatedRamp);
 
+    let displacedVehicle: Vehicle | undefined;
     if (newStatus !== 'Dolu') {
       const v = vehicles.find((item) => item.rampaId === ramp.id && item.durum === 'RAMPADA');
       if (v) {
+        displacedVehicle = v;
         const nowTs = Date.now();
         const nowStr = new Date(nowTs).toLocaleString('tr-TR');
         const updatedV: Vehicle = {
@@ -2386,6 +2928,20 @@ export default function App() {
         showToast(`${ramp.ad} '${newStatus}' durumuna alındığı için üzerindeki ${v.dorsePlaka} plakalı araç rampadan çıkarıldı.`, 'info');
       }
     }
+
+    recordAuditLog({
+      category: 'ramp',
+      action: 'RAMP_STATUS_CHANGE',
+      severity: isMaintenance ? 'warning' : 'info',
+      targetType: 'ramp',
+      targetId: ramp.id,
+      targetLabel: ramp.ad,
+      depoId: ramp.depoId || 1,
+      summary: `${ramp.ad} durumu '${ramp.durum}' -> '${newStatus}' olarak güncellendi${
+        arizaNotu ? ` (Not: ${arizaNotu})` : ''
+      }${displacedVehicle ? `. Üzerindeki ${displacedVehicle.dorsePlaka} aracı EVRAK HAZIR durumuna alındı.` : '.'}`,
+      changes: [{ field: 'durum', label: 'Rampa Durumu', before: ramp.durum, after: newStatus }]
+    });
   };
 
   const handleChangeVehicleRamp = (vehicle: Vehicle, targetRampId: number) => {
@@ -2402,7 +2958,7 @@ export default function App() {
 
     const targetRamp = ramps.find((r) => r.id === targetRampId);
     if (targetRamp && (targetRamp.depoId || 1) !== (vehicle.depoId || 1)) {
-      showToast(`${targetRamp.ad} farklı bir depoya ait! Araç yalnızca kendi deposundaki rampaya taşınabilir.`, 'warning');
+      showToast(`${targetRamp.ad} farklı bir depoya aittir. Araç yalnızca kendi deposundaki rampaya taşınabilir.`, 'warning');
       return;
     }
 
@@ -2461,6 +3017,16 @@ export default function App() {
         );
 
         removeVehicleCallNotifications(vehicle.id, vehicle.dorsePlaka);
+        recordAuditLog({
+          category: 'vehicle',
+          action: 'RAMP_ASSIGN',
+          targetType: 'vehicle',
+          targetId: updatedVehicle.id,
+          targetLabel: updatedVehicle.dorsePlaka,
+          depoId: updatedVehicle.depoId,
+          summary: `${updatedVehicle.dorsePlaka} rampası değiştirildi: ${currentRampName} -> ${targetRampName}.`,
+          changes: buildVehicleDiff(vehicle, updatedVehicle, getWarehouseNameById, getRampName)
+        });
         showToast(`${vehicle.dorsePlaka} plakalı araç ${targetRampName} numarasına aktarıldı.`, 'success');
       },
       'warning',
@@ -2517,6 +3083,16 @@ export default function App() {
     }
 
     removeVehicleCallNotifications(vehicle.id, vehicle.dorsePlaka);
+    recordAuditLog({
+      category: 'vehicle',
+      action: 'VEHICLE_EXIT',
+      targetType: 'vehicle',
+      targetId: updatedVehicle.id,
+      targetLabel: updatedVehicle.dorsePlaka,
+      depoId: updatedVehicle.depoId,
+      summary: `${updatedVehicle.dorsePlaka} (${getRampName(oldRampId)}) rampadan çıkarılarak sahadan ÇIKIŞ YAPTI olarak kaydedildi.`,
+      changes: buildVehicleDiff(vehicle, updatedVehicle, getWarehouseNameById, getRampName)
+    });
 
     setShowReleaseRampModal(false);
     setSelectedVehicleForRampRelease(null);
@@ -2571,6 +3147,17 @@ export default function App() {
           );
         }
 
+        recordAuditLog({
+          category: 'vehicle',
+          action: 'RAMP_RELEASE',
+          targetType: 'vehicle',
+          targetId: updatedVehicle.id,
+          targetLabel: updatedVehicle.dorsePlaka,
+          depoId: updatedVehicle.depoId,
+          summary: `${updatedVehicle.dorsePlaka} plakalı araç ${rampName} üzerinden indirildi ve sahada EVRAK HAZIR durumuna alındı.`,
+          changes: buildVehicleDiff(vehicle, updatedVehicle, getWarehouseNameById, getRampName)
+        });
+
         setShowReleaseRampModal(false);
         setSelectedVehicleForRampRelease(null);
         playChime('alert');
@@ -2620,6 +3207,15 @@ export default function App() {
 
     setNotifications((prev) => [notif, ...prev]);
     saveNotificationToFirestore(notif);
+    recordAuditLog({
+      category: 'vehicle',
+      action: 'RAMP_CALL',
+      targetType: 'vehicle',
+      targetId: vehicle.id,
+      targetLabel: vehicle.dorsePlaka,
+      depoId: vehicle.depoId,
+      summary: `${vehicle.dorsePlaka} (${vehicle.musteri}) plakalı araç ${ramp.ad} için rampaya çağrıldı.`
+    });
 
     setShowRampAssignModal(false);
     playChime('call');
@@ -2740,6 +3336,17 @@ export default function App() {
 
         // Bildirimi tamamen sil ve temizle
         removeVehicleCallNotifications(vehicle.id, vehicle.dorsePlaka);
+
+        recordAuditLog({
+          category: 'vehicle',
+          action: 'RAMP_ASSIGN',
+          targetType: 'vehicle',
+          targetId: updatedVehicle.id,
+          targetLabel: updatedVehicle.dorsePlaka,
+          depoId: updatedVehicle.depoId,
+          summary: `${updatedVehicle.dorsePlaka} plakalı araç ${oldRampId ? `${getRampName(oldRampId)} -> ` : ''}${ramp.ad} rampasına doğrudan atandı.`,
+          changes: buildVehicleDiff(vehicle, updatedVehicle, getWarehouseNameById, getRampName)
+        });
 
         setShowRampAssignModal(false);
         setSelectedRampForAssign(null);
@@ -2871,6 +3478,8 @@ export default function App() {
 
     // İlgili bildirimi ve aracın bekleyen çağrılarını İŞLEM YAPILDI durumuna çek (sayaç işlem yapılan araç kadar azalır)
     const trimmedNote = note.trim();
+    const originalForNotif = vehicles.find((v) => v.id === notification.vehicleId);
+
     setNotifications((prev) =>
       prev.map((n) => {
         if (n.id === notification.id) {
@@ -2886,6 +3495,22 @@ export default function App() {
       })
     );
     removeVehicleCallNotifications(notification.vehicleId ?? -1, notification.plaka);
+
+    if (updatedVehicleRecord && originalForNotif) {
+      const vRec = updatedVehicleRecord as Vehicle;
+      recordAuditLog({
+        category: 'security',
+        action: 'SECURITY_ORIENT',
+        targetType: 'vehicle',
+        targetId: vRec.id,
+        targetLabel: vRec.dorsePlaka,
+        depoId: vRec.depoId,
+        summary: `Güvenlik onayı ile ${vRec.dorsePlaka} plakalı araç ${getRampName(rampId)} rampasına yönlendirildi${
+          trimmedNote ? ` (Not: ${trimmedNote})` : ''
+        }.`,
+        changes: buildVehicleDiff(originalForNotif, vRec, getWarehouseNameById, getRampName)
+      });
+    }
 
     setShowSecurityActionModal(false);
     playChime('success');
@@ -2982,6 +3607,16 @@ export default function App() {
     setNotifications((prev) => [feedbackNotif, ...prev]);
     saveNotificationToFirestore(feedbackNotif);
 
+    recordAuditLog({
+      category: 'security',
+      action: 'SECURITY_NOTE',
+      targetType: 'vehicle',
+      targetId: notification.vehicleId ?? notification.id,
+      targetLabel: notification.plaka || 'Bildirim',
+      depoId: resolveNotifDepoId(notification),
+      summary: `${notification.plaka || 'Araç'} için güvenlik geri bildirim notu eklendi: "${note.trim()}"`
+    });
+
     setShowSecurityActionModal(false);
     showToast('Geri bildirim notu araca ve sisteme başarıyla eklendi.', 'info');
   };
@@ -3022,6 +3657,17 @@ export default function App() {
           prev.map((v) => (v.id === vehicle.id ? updatedVehicle : v))
         );
         saveVehicleToFirestore(updatedVehicle);
+        recordAuditLog({
+          category: 'vehicle',
+          action: 'EXIT_UNDO',
+          severity: 'warning',
+          targetType: 'vehicle',
+          targetId: updatedVehicle.id,
+          targetLabel: updatedVehicle.dorsePlaka,
+          depoId: updatedVehicle.depoId,
+          summary: `${updatedVehicle.dorsePlaka} aracının sahadan çıkış işlemi iptal edilerek 'EVRAK HAZIR' durumuna geri alındı.`,
+          changes: buildVehicleDiff(vehicle, updatedVehicle, getWarehouseNameById, getRampName)
+        });
         showToast(`${vehicle.dorsePlaka} plakalı araç başarıyla sahaya geri alındı.`, 'success');
       }
     );
@@ -3209,6 +3855,21 @@ export default function App() {
 
       setVehicles((prev) => prev.map((v) => (v.id === finalVehicle.id ? finalVehicle : v)));
       saveVehicleToFirestore(finalVehicle);
+
+      if (originalVehicle) {
+        const diff = buildVehicleDiff(originalVehicle, finalVehicle, getWarehouseNameById, getRampName);
+        recordAuditLog({
+          category: 'vehicle',
+          action: 'VEHICLE_EDIT',
+          targetType: 'vehicle',
+          targetId: finalVehicle.id,
+          targetLabel: finalVehicle.dorsePlaka,
+          depoId: finalVehicle.depoId,
+          summary: `${finalVehicle.dorsePlaka} araç kartı güncellendi (${diff.length} alan değişti).`,
+          changes: diff
+        });
+      }
+
       setShowEditVehicleModal(false);
       setSelectedVehicleForEdit(null);
       showToast('Araç bilgileri başarıyla güncellendi.', 'success');
@@ -3319,6 +3980,16 @@ export default function App() {
           );
         }
         removeVehicleCallNotifications(vehicle.id, vehicle.dorsePlaka, true);
+        recordAuditLog({
+          category: 'vehicle',
+          action: 'VEHICLE_DELETE',
+          severity: 'critical',
+          targetType: 'vehicle',
+          targetId: vehicle.id,
+          targetLabel: vehicle.dorsePlaka,
+          depoId: vehicle.depoId,
+          summary: `${vehicle.dorsePlaka} (${vehicle.musteri || '-'}) araç kaydı sistemden kalıcı olarak silindi (Durum: ${vehicle.durum}).`
+        });
         setShowEditVehicleModal(false);
         setSelectedVehicleForEdit(null);
         showToast(`${vehicle.dorsePlaka} plakalı araç kalıcı olarak silindi.`, 'info');
@@ -3328,42 +3999,101 @@ export default function App() {
     );
   };
 
-  const handleAddUser = (newUser: User) => {
-    setUsers((prev) => [...prev, newUser]);
-    saveUserToFirestore(newUser);
-    showToast(`Yeni kullanıcı eklendi ve tüm cihazlarla eşitlendi: ${newUser.username}`, 'success');
+  const handleAddUser = async (newUser: User) => {
+    const hashedPassword = await hashPassword(newUser.password);
+    const securedUser: User = { ...newUser, password: hashedPassword };
+    setUsers((prev) => [...prev, securedUser]);
+    await saveUserToFirestore(securedUser);
+    recordAuditLog({
+      category: 'user',
+      action: 'USER_CREATE',
+      targetType: 'user',
+      targetId: securedUser.username,
+      targetLabel: securedUser.username,
+      depoId: securedUser.depoId,
+      summary: `Yeni kullanıcı eklendi: ${securedUser.username} (Rol: ${securedUser.role}, Depo: ${
+        securedUser.depoId === 0 ? 'Tüm Depolar' : getWarehouseNameById(securedUser.depoId)
+      }).`
+    });
+    showToast(`Yeni kullanıcı eklendi ve tüm cihazlarla eşitlendi: ${securedUser.username}`, 'success');
   };
 
-  const handleEditUser = (user: User) => {
-    setUsers((prev) => prev.map((u) => (u.username === user.username ? user : u)));
-    saveUserToFirestore(user);
-    if (currentUser?.username === user.username) {
-      setCurrentUser(user);
+  const handleEditUser = async (user: User) => {
+    const existingUser = users.find((u) => u.username === user.username);
+    const existingPwd = existingUser?.password || '';
+    const candidatePwd = user.password || existingPwd;
+    if (!candidatePwd) {
+      showToast('Kullanıcı şifresi henüz senkronize edilmedi, lütfen tekrar deneyin.', 'warning');
+      return;
     }
-    showToast(`${user.username} kullanıcısının yetkileri tüm cihazlarda güncellendi.`, 'success');
+    const securedPassword = isPasswordHashed(candidatePwd)
+      ? candidatePwd
+      : await hashPassword(candidatePwd);
+    const securedUser: User = { ...user, password: securedPassword };
+    setUsers((prev) => prev.map((u) => (u.username === securedUser.username ? securedUser : u)));
+    await saveUserToFirestore(securedUser);
+    if (currentUser?.username === securedUser.username) {
+      setCurrentUser({ ...securedUser, password: '' });
+    }
+    const diff = existingUser ? buildUserDiff(existingUser, securedUser, getWarehouseNameById) : [];
+    if (user.password) {
+      diff.push({ field: 'password', label: 'Şifre', before: 'Mevcut', after: 'Yenilendi (Gizli)' });
+    }
+    recordAuditLog({
+      category: 'user',
+      action: 'USER_EDIT',
+      severity: diff.some((d) => d.field === 'role') ? 'warning' : 'info',
+      targetType: 'user',
+      targetId: securedUser.username,
+      targetLabel: securedUser.username,
+      depoId: securedUser.depoId,
+      summary: `${securedUser.username} kullanıcısının rol veya özel yetki ayarları güncellendi (${diff.length} değişiklik).`,
+      changes: diff
+    });
+    showToast(`${securedUser.username} kullanıcısının yetkileri tüm cihazlarda güncellendi.`, 'success');
   };
 
   const handleDeleteUser = (user: User) => {
+    if (user.role === 'admin' || user.username.toLowerCase() === 'admin') {
+      showToast('Yönetici (Admin) hesapları güvenlik nedeniyle silinemez.', 'warning');
+      return;
+    }
     setUsers((prev) => prev.filter((u) => u.username !== user.username));
     deleteUserFromFirestore(user.username);
+    recordAuditLog({
+      category: 'user',
+      action: 'USER_DELETE',
+      severity: 'critical',
+      targetType: 'user',
+      targetId: user.username,
+      targetLabel: user.username,
+      depoId: user.depoId,
+      summary: `${user.username} (${user.role}) kullanıcısı sistemden kalıcı olarak silindi.`
+    });
     showToast(`${user.username} kullanıcısı tüm sistemden silindi.`, 'info');
   };
 
-  const handleChangePassword = (username: string, newPass: string) => {
-    setUsers((prev) =>
-      prev.map((u) => {
-        if (u.username === username) {
-          const updated = { ...u, password: newPass };
-          saveUserToFirestore(updated);
-          if (currentUser?.username === username) {
-            setCurrentUser(updated);
-          }
-          return updated;
-        }
-        return u;
-      })
-    );
-    showToast(`${username} kullanıcısının şifresi başarıyla güncellendi ve tüm cihazlara aktarıldı.`, 'success');
+  const handleChangePassword = async (username: string, newPass: string) => {
+    const hashedPassword = await hashPassword(newPass);
+    const target = users.find((u) => u.username === username);
+    if (!target) return;
+    const updated: User = { ...target, password: hashedPassword };
+    setUsers((prev) => prev.map((u) => (u.username === username ? updated : u)));
+    await saveUserToFirestore(updated);
+    if (currentUser?.username === username) {
+      setCurrentUser({ ...updated, password: '' });
+    }
+    recordAuditLog({
+      category: 'user',
+      action: 'PASSWORD_CHANGE',
+      severity: 'warning',
+      targetType: 'user',
+      targetId: username,
+      targetLabel: username,
+      depoId: target.depoId,
+      summary: `${username} kullanıcısının giriş şifresi değiştirildi.`
+    });
+    showToast(`${username} kullanıcısının şifresi güvenli biçimde güncellendi ve tüm cihazlara aktarıldı.`, 'success');
   };
 
   const handleDeleteChatMessage = (id: number) => {
@@ -3466,6 +4196,14 @@ export default function App() {
     const toDeleteIds = new Set(toDelete.map((n) => n.id));
     toDelete.forEach((n) => deleteNotificationFromFirestore(n.id));
     setNotifications((prev) => prev.filter((n) => !toDeleteIds.has(n.id)));
+    recordAuditLog({
+      category: 'security',
+      action: 'NOTIFICATION_CLEAR',
+      targetType: 'notification',
+      targetLabel: `${toDelete.length} Tamamlanan Bildirim`,
+      depoId: selectedDepoId,
+      summary: `${toDelete.length} adet tamamlanmış çağrı bildirimi listeden temizlendi.`
+    });
     showToast(`${toDelete.length} adet tamamlanmış bildirim temizlendi.`, 'info');
   };
 
@@ -3474,9 +4212,19 @@ export default function App() {
       'Tüm Bildirimleri Temizle',
       'Seçili depo kapsamındaki tüm çağrı ve işlem bildirimlerini kalıcı olarak silmek istediğinizden emin misiniz?',
       () => {
+        const deletedCount = scopedNotifications.length;
         const toDeleteIds = new Set(scopedNotifications.map((n) => n.id));
         scopedNotifications.forEach((n) => deleteNotificationFromFirestore(n.id));
         setNotifications((prev) => prev.filter((n) => !toDeleteIds.has(n.id)));
+        recordAuditLog({
+          category: 'security',
+          action: 'NOTIFICATION_CLEAR',
+          severity: 'warning',
+          targetType: 'notification',
+          targetLabel: `${deletedCount} Bildirim`,
+          depoId: selectedDepoId,
+          summary: `${getWarehouseNameById(selectedDepoId)} kapsamındaki ${deletedCount} adet bildirim kalıcı olarak temizlendi.`
+        });
         showToast('Seçili depo bildirimleri kalıcı olarak silindi.', 'info');
       }
     );
@@ -3541,6 +4289,16 @@ export default function App() {
     };
     setChatGroups((prev) => [...prev, newGroup]);
     saveChatGroupToFirestore(newGroup);
+    recordAuditLog({
+      category: 'chat',
+      action: 'CHAT_GROUP_CREATE',
+      targetType: 'chatGroup',
+      targetId: newGroup.id,
+      targetLabel: cleanName,
+      summary: isAdminUser
+        ? `Yeni sohbet grubu oluşturuldu ve aktif edildi: "${cleanName}" (${uniqueMembers.length} üye).`
+        : `Yeni sohbet grubu oluşturma talebi gönderildi: "${cleanName}" (${uniqueMembers.length} üye).`
+    });
     if (isAdminUser) {
       showToast(`"${cleanName}" grubu oluşturuldu ve aktif edildi (${uniqueMembers.length} üye).`, 'success');
     } else {
@@ -3572,6 +4330,15 @@ export default function App() {
     };
     setChatGroups((prev) => prev.map((g) => (g.id === groupId ? updated : g)));
     saveChatGroupToFirestore(updated);
+    recordAuditLog({
+      category: 'chat',
+      action: 'CHAT_GROUP_APPROVE',
+      targetType: 'chatGroup',
+      targetId: groupId,
+      targetLabel: target.name,
+      summary: `"${target.name}" sohbet grubu Admin tarafından onaylandı.`,
+      changes: buildChatGroupDiff(target, updated)
+    });
     showToast(`"${target.name}" grubu onaylandı ve tüm üyelerine açıldı.`, 'success');
   };
 
@@ -3592,6 +4359,16 @@ export default function App() {
     };
     setChatGroups((prev) => prev.map((g) => (g.id === groupId ? updated : g)));
     saveChatGroupToFirestore(updated);
+    recordAuditLog({
+      category: 'chat',
+      action: 'CHAT_GROUP_REJECT',
+      severity: 'warning',
+      targetType: 'chatGroup',
+      targetId: groupId,
+      targetLabel: target.name,
+      summary: `"${target.name}" sohbet grubu talebi reddedildi (${cleanReason}).`,
+      changes: buildChatGroupDiff(target, updated)
+    });
     showToast(`"${target.name}" grup talebi reddedildi.`, 'info');
   };
 
@@ -3617,6 +4394,15 @@ export default function App() {
       };
       setChatGroups((prev) => prev.map((g) => (g.id === groupId ? updated : g)));
       saveChatGroupToFirestore(updated);
+      recordAuditLog({
+        category: 'chat',
+        action: 'CHAT_GROUP_EDIT',
+        targetType: 'chatGroup',
+        targetId: groupId,
+        targetLabel: target.name,
+        summary: `"${target.name}" sohbet grubu üyeleri güncellendi (${requestedMembers.length} üye).`,
+        changes: buildChatGroupDiff(target, updated)
+      });
       showToast(`"${target.name}" grup üyeleri güncellendi (${requestedMembers.length} kişi).`, 'success');
       return;
     }
@@ -3646,6 +4432,14 @@ export default function App() {
     };
     setChatGroups((prev) => prev.map((g) => (g.id === groupId ? updated : g)));
     saveChatGroupToFirestore(updated);
+    recordAuditLog({
+      category: 'chat',
+      action: 'CHAT_GROUP_EDIT',
+      targetType: 'chatGroup',
+      targetId: groupId,
+      targetLabel: target.name,
+      summary: `"${target.name}" grubuna ${newlyAddedRequests.length} yeni üye ekleme talebi gönderildi.`
+    });
     showToast(
       `"${target.name}" grubuna ${newlyAddedRequests.length} yeni üye ekleme talebi Admin onayına gönderildi.`,
       'info'
@@ -3682,6 +4476,15 @@ export default function App() {
       };
       setChatGroups((prev) => prev.map((g) => (g.id === groupId ? updated : g)));
       saveChatGroupToFirestore(updated);
+      recordAuditLog({
+        category: 'chat',
+        action: 'CHAT_GROUP_EDIT',
+        targetType: 'chatGroup',
+        targetId: groupId,
+        targetLabel: cleanName,
+        summary: `"${cleanName}" sohbet grubu bilgileri güncellendi.`,
+        changes: buildChatGroupDiff(target, updated)
+      });
       showToast(`"${cleanName}" grubu güncellendi.`, 'success');
       return;
     }
@@ -3731,6 +4534,20 @@ export default function App() {
     setChatGroups((prev) => prev.map((g) => (g.id === groupId ? updated : g)));
     saveChatGroupToFirestore(updated);
 
+    if (metaChanged || existingChanged || newlyAddedRequests.length > 0 || cancelSet.size > 0) {
+      recordAuditLog({
+        category: 'chat',
+        action: 'CHAT_GROUP_EDIT',
+        targetType: 'chatGroup',
+        targetId: groupId,
+        targetLabel: updated.name,
+        summary: `"${updated.name}" sohbet grubu güncellendi${
+          newlyAddedRequests.length > 0 ? ` (${newlyAddedRequests.length} üye talebi eklendi)` : ''
+        }.`,
+        changes: buildChatGroupDiff(target, updated)
+      });
+    }
+
     if (newlyAddedRequests.length > 0) {
       showToast(
         `${newlyAddedRequests.length} yeni üye ekleme talebi Admin onayına gönderildi. Onaylandığında gruba eklenecektir.`,
@@ -3765,6 +4582,14 @@ export default function App() {
     };
     setChatGroups((prev) => prev.map((g) => (g.id === groupId ? updated : g)));
     saveChatGroupToFirestore(updated);
+    recordAuditLog({
+      category: 'chat',
+      action: 'CHAT_GROUP_MEMBER_APPROVE',
+      targetType: 'chatGroup',
+      targetId: groupId,
+      targetLabel: target.name,
+      summary: `"${uname}" kullanıcısının "${target.name}" grubuna katılma talebi Admin tarafından onaylandı.`
+    });
     showToast(`"${uname}", "${target.name}" grubuna Admin onayıyla eklendi.`, 'success');
   };
 
@@ -3785,6 +4610,14 @@ export default function App() {
     };
     setChatGroups((prev) => prev.map((g) => (g.id === groupId ? updated : g)));
     saveChatGroupToFirestore(updated);
+    recordAuditLog({
+      category: 'chat',
+      action: 'CHAT_GROUP_MEMBER_REJECT',
+      targetType: 'chatGroup',
+      targetId: groupId,
+      targetLabel: target.name,
+      summary: `"${username}" kullanıcısının "${target.name}" grubuna katılma talebi reddedildi.`
+    });
     showToast(`"${username}" için "${target.name}" grubuna ekleme talebi reddedildi.`, 'info');
   };
 
@@ -3802,6 +4635,14 @@ export default function App() {
       messages: cleaned,
       updatedBy: currentUser.username,
       updatedAt: Date.now()
+    });
+    recordAuditLog({
+      category: 'settings',
+      action: 'SETTINGS_CHAT_QUICK',
+      targetType: 'settings',
+      targetId: 'chatQuickMessages',
+      targetLabel: 'Hızlı Sohbet Şablonları',
+      summary: `Hızlı sohbet mesaj şablonları güncellendi (${cleaned.length} şablon).`
     });
     showToast('Sohbet hızlı mesajları güncellendi ve tüm ekip için kaydedildi.', 'success');
   };
@@ -3826,6 +4667,14 @@ export default function App() {
         };
         setChatGroups((prev) => prev.map((g) => (g.id === groupId ? updated : g)));
         saveChatGroupToFirestore(updated);
+        recordAuditLog({
+          category: 'chat',
+          action: 'CHAT_GROUP_LEAVE',
+          targetType: 'chatGroup',
+          targetId: groupId,
+          targetLabel: target.name,
+          summary: `${currentUser.username} kullanıcısı "${target.name}" sohbet grubundan ayrıldı.`
+        });
         showToast(`"${target.name}" grubundan ayrıldınız.`, 'info');
       },
       'warning',
@@ -3852,6 +4701,14 @@ export default function App() {
         () => {
           setChatGroups((prev) => prev.filter((g) => g.id !== groupId));
           deleteChatGroupFromFirestore(groupId);
+          recordAuditLog({
+            category: 'chat',
+            action: 'CHAT_GROUP_DELETE',
+            targetType: 'chatGroup',
+            targetId: groupId,
+            targetLabel: target.name,
+            summary: `${currentUser.username} kendi "${target.name}" grup talebini iptal etti.`
+          });
           showToast(`"${target.name}" grup talebi iptal edildi.`, 'info');
         },
         'warning',
@@ -3863,11 +4720,23 @@ export default function App() {
     askConfirm(
       'Sohbet Grubunu Kalıcı Sil',
       `"${target.name}" grubunu ve bu gruptaki tüm sohbet geçmişini kalıcı olarak silmek istediğinizden emin misiniz?`,
-      () => {
+      async () => {
         setChatGroups((prev) => prev.filter((g) => g.id !== groupId));
         setChatMessages((prev) => prev.filter((m) => m.channelId !== groupId));
-        deleteChatGroupFromFirestore(groupId);
-        clearChatMessagesFromFirestore(groupId);
+        if (!target.status || target.status === 'approved') {
+          await saveChatGroupToFirestore({ ...target, status: 'archived' });
+        }
+        await deleteChatGroupFromFirestore(groupId);
+        await clearChatMessagesFromFirestore(groupId);
+        recordAuditLog({
+          category: 'chat',
+          action: 'CHAT_GROUP_DELETE',
+          severity: 'warning',
+          targetType: 'chatGroup',
+          targetId: groupId,
+          targetLabel: target.name,
+          summary: `"${target.name}" sohbet grubu ve mesaj geçmişi Admin yetkisiyle kalıcı olarak silindi.`
+        });
         showToast(`"${target.name}" grubu Admin yetkisiyle kalıcı olarak silindi.`, 'info');
       },
       'danger',
@@ -3907,6 +4776,50 @@ export default function App() {
       return;
     }
     exportVehiclesToCsv(list, getWarehouseNameById, getRampName, slaSettings, showToast);
+    recordAuditLog({
+      category: 'export',
+      action: 'EXPORT_VEHICLES',
+      targetType: 'vehicleList',
+      targetLabel: `${list.length} Araç`,
+      depoId: selectedDepoId,
+      summary: `${list.length} araç kaydı CSV/Excel olarak dışa aktarıldı (${getWarehouseNameById(selectedDepoId)}).`
+    });
+  };
+
+  const handleDeleteOldAuditLogs = async (
+    logIds: number[],
+    retentionLabel: string,
+    exportedArchive: boolean
+  ) => {
+    if (!currentUser || currentUser.role !== 'admin') {
+      showToast('Denetim kayıtlarını temizleme yetkisi yalnızca Admin kullanıcılara aittir.', 'warning');
+      return;
+    }
+    if (logIds.length === 0) return;
+    const deletedCount = await deleteAuditLogsBatchFromFirestore(logIds);
+    const deletedSet = new Set(logIds);
+    setAuditLogs((prev) => prev.filter((l) => !deletedSet.has(l.id)));
+    recordAuditLog({
+      category: 'audit',
+      action: 'AUDIT_ARCHIVE_CLEANUP',
+      severity: 'warning',
+      targetType: 'auditLogs',
+      targetLabel: `${deletedCount || logIds.length} Kayıt`,
+      summary: `${deletedCount || logIds.length} adet denetim kaydı Admin arşiv/temizlik işlemiyle silindi (Kapsam: ${retentionLabel}, Excel Yedeği: ${
+        exportedArchive ? 'İndirildi' : 'İndirilmedi'
+      }).`
+    });
+    showToast(`${deletedCount || logIds.length} adet denetim kaydı temizlendi.`, 'info');
+  };
+
+  const handleRecordAuditExport = (format: 'xlsx' | 'csv', count: number) => {
+    recordAuditLog({
+      category: 'audit',
+      action: 'AUDIT_EXPORT',
+      targetType: 'auditLogs',
+      targetLabel: `${count} Denetim Kaydı`,
+      summary: `${count} adet denetim kaydı ${format.toUpperCase()} formatında dışa aktarıldı.`
+    });
   };
 
   // 1. Render Login Screen if no user logged in
@@ -3916,6 +4829,7 @@ export default function App() {
         warehouses={warehouses}
         users={users}
         onLoginSuccess={handleLoginSuccess}
+        onLoginFailed={handleLoginFailed}
         onLoginAsGuest={handleLoginAsGuest}
       />
     );
@@ -3947,7 +4861,7 @@ export default function App() {
   };
 
   return (
-    <div className="flex h-[100dvh] overflow-hidden bg-slate-100 dark:bg-slate-950 pb-[calc(4rem+env(safe-area-inset-bottom))] md:pb-0 font-sans text-slate-800 dark:text-slate-100 transition-colors duration-200">
+    <div className="flex h-[var(--vvh,100dvh)] w-full max-w-full overflow-x-clip overflow-y-hidden bg-slate-100 dark:bg-slate-950 pb-[calc(4rem+env(safe-area-inset-bottom))] md:pb-0 font-sans text-slate-800 dark:text-slate-100 transition-colors duration-200">
       {/* ================= Sol Sidebar Menu (Masaüstü) ================= */}
       <aside className="hidden md:flex w-64 bg-slate-900 dark:bg-black text-slate-300 flex-col justify-between shrink-0 shadow-xl no-print border-r border-slate-800 dark:border-slate-850">
         <div>
@@ -4138,6 +5052,13 @@ export default function App() {
                 <MessageSquare className="w-3 h-3 text-emerald-200" /> WhatsApp Bildirim Ayarları
               </button>
               <button
+                onClick={() => setShowAuditLogModal(true)}
+                className="w-full py-1.5 bg-slate-800 hover:bg-slate-700 text-indigo-300 text-xs rounded-lg border border-indigo-500/40 font-bold transition flex items-center justify-center gap-1.5 shadow cursor-pointer"
+                title="Tüm kullanıcı işlemleri ve değişiklik geçmişi (Sadece Admin)"
+              >
+                <AuditHistoryIcon className="w-3 h-3 text-indigo-400" /> İşlem Geçmişi (Denetim)
+              </button>
+              <button
                 onClick={() => setShowPasswordModal(true)}
                 className="w-full py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs rounded-lg border border-slate-700 transition flex items-center justify-center gap-1.5 cursor-pointer"
               >
@@ -4149,13 +5070,13 @@ export default function App() {
       </aside>
 
       {/* ================= Mobil Alt Navigasyon Barı ================= */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-slate-900 text-slate-400 border-t border-slate-800 flex justify-around items-center h-[calc(4rem+env(safe-area-inset-bottom))] pb-[env(safe-area-inset-bottom)] z-40 shadow-2xl no-print px-2">
+      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-slate-900 text-slate-400 border-t border-slate-800 flex justify-around items-center h-[calc(4rem+env(safe-area-inset-bottom))] pb-[env(safe-area-inset-bottom)] z-40 shadow-2xl no-print pl-[max(0.5rem,env(safe-area-inset-left))] pr-[max(0.5rem,env(safe-area-inset-right))] gap-1">
         {currentUser.role === 'security' ? (
           <>
             <button
               onClick={() => setActiveTab('canli')}
-              className={`flex-1 py-2 flex flex-col items-center gap-1 text-[11px] cursor-pointer transition ${
-                activeTab === 'canli' ? 'text-blue-400 font-extrabold' : 'text-slate-400 hover:text-slate-200'
+              className={`flex-1 py-1.5 min-h-[48px] flex flex-col items-center justify-center gap-1 rounded-xl text-[11px] cursor-pointer transition ${
+                activeTab === 'canli' ? 'text-blue-400 font-extrabold bg-slate-800/90' : 'text-slate-400 hover:text-slate-200'
               }`}
             >
               <Tv className="w-5 h-5" />
@@ -4164,37 +5085,39 @@ export default function App() {
 
             <button
               onClick={() => setActiveTab('araclar')}
-              className={`flex-1 py-2 flex flex-col items-center gap-1 text-[11px] cursor-pointer transition ${
-                activeTab === 'araclar' ? 'text-blue-400 font-extrabold' : 'text-slate-400 hover:text-slate-200'
+              className={`flex-1 py-1.5 min-h-[48px] flex flex-col items-center justify-center gap-1 rounded-xl text-[11px] cursor-pointer transition ${
+                activeTab === 'araclar' ? 'text-blue-400 font-extrabold bg-slate-800/90' : 'text-slate-400 hover:text-slate-200'
               }`}
             >
               <Truck className="w-5 h-5" />
-              <span>Araç Yönetimi</span>
+              <span>Araçlar</span>
             </button>
 
             <button
               onClick={() => setActiveTab('rampalar')}
-              className={`flex-1 py-2 flex flex-col items-center gap-1 text-[11px] cursor-pointer transition ${
-                activeTab === 'rampalar' ? 'text-emerald-400 font-extrabold' : 'text-slate-400 hover:text-slate-200'
+              className={`flex-1 py-1.5 min-h-[48px] flex flex-col items-center justify-center gap-1 rounded-xl text-[11px] cursor-pointer transition ${
+                activeTab === 'rampalar' ? 'text-emerald-400 font-extrabold bg-slate-800/90' : 'text-slate-400 hover:text-slate-200'
               }`}
             >
               <WarehouseIcon className="w-5 h-5" />
-              <span>Rampa Yönetimi</span>
+              <span>Rampalar</span>
             </button>
 
             <button
               onClick={() => setActiveTab('beklenen')}
-              className={`flex-1 py-2 flex flex-col items-center gap-1 text-[11px] relative cursor-pointer transition ${
-                activeTab === 'beklenen' ? 'text-amber-400 font-extrabold' : 'text-slate-400 hover:text-slate-200'
+              className={`flex-1 py-1.5 min-h-[48px] flex flex-col items-center justify-center gap-1 rounded-xl text-[11px] cursor-pointer transition ${
+                activeTab === 'beklenen' ? 'text-amber-400 font-extrabold bg-slate-800/90' : 'text-slate-400 hover:text-slate-200'
               }`}
             >
-              <Clock className="w-5 h-5" />
+              <div className="relative inline-flex">
+                <Clock className="w-5 h-5" />
+                {pendingExpectedVehiclesCount > 0 && (
+                  <span className="absolute -top-1.5 -right-2.5 bg-amber-500 text-slate-900 font-black text-[9px] min-w-[16px] h-4 px-1 rounded-full flex items-center justify-center shadow tabular-nums">
+                    {pendingExpectedVehiclesCount}
+                  </span>
+                )}
+              </div>
               <span>Beklenen</span>
-              {pendingExpectedVehiclesCount > 0 && (
-                <span className="absolute top-1.5 right-6 bg-amber-500 text-slate-900 font-black text-[9px] w-4 h-4 rounded-full flex items-center justify-center shadow">
-                  {pendingExpectedVehiclesCount}
-                </span>
-              )}
             </button>
           </>
         ) : (
@@ -4261,11 +5184,11 @@ export default function App() {
       {/* ================= Sağ İçerik Alanı ================= */}
       <main className="flex-1 flex flex-col overflow-hidden bg-slate-100 dark:bg-slate-950 relative transition-colors duration-200">
         {/* Üst Header - iPhone Çentik / Dinamik Ada Güvenli Alanı Uyumlu */}
-        <header className="header-safe bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-3 md:px-6 flex items-center justify-between shrink-0 shadow-sm no-print transition-colors duration-200">
+        <header className="header-safe bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))] md:px-6 flex items-center justify-between shrink-0 shadow-sm no-print transition-colors duration-200">
           <div className="flex items-center gap-2 md:gap-3 min-w-0">
             {/* Mobil Ekranlarda Temiz Alan: Başlık ve Depo İsmi Gizlenir, Sadece Kompakt Logo Gösterilir */}
             <div className="md:hidden flex items-center gap-1.5 shrink-0">
-              <LogiPortalIcon className="w-6 h-6 shrink-0 drop-shadow-xs" />
+              <LogiPortalIcon className="w-7 h-7 shrink-0 drop-shadow-xs" />
             </div>
 
             {/* Panel İsmi Başlığı (Mobilde Gizli, Sadece Masaüstünde Gösterilir) */}
@@ -4298,12 +5221,12 @@ export default function App() {
             <button
               onClick={() => setActiveTab('beklenen')}
               title="Beklenen Araçlar"
-              className="px-2.5 py-1.5 md:py-2 bg-amber-50 dark:bg-amber-950/60 hover:bg-amber-100 dark:hover:bg-amber-900/60 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800/70 text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer relative shrink-0 h-9"
+              className="px-2.5 py-1.5 md:py-2 bg-amber-50 dark:bg-amber-950/60 hover:bg-amber-100 dark:hover:bg-amber-900/60 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800/70 text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer relative shrink-0 min-h-[40px]"
             >
               <Truck className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
               <span className="hidden lg:inline">Beklenen Araçlar</span>
               {pendingExpectedVehiclesCount > 0 && (
-                <span className="bg-amber-500 text-slate-950 text-[10px] font-black px-1.5 py-0.5 rounded-full min-w-[18px] text-center leading-none">
+                <span className="bg-amber-500 text-slate-950 text-[10px] font-black px-1.5 py-0.5 rounded-full min-w-[18px] text-center leading-none tabular-nums">
                   {pendingExpectedVehiclesCount}
                 </span>
               )}
@@ -4313,7 +5236,7 @@ export default function App() {
             <div className="relative">
               <button
                 onClick={() => setShowNotificationMenu((prev) => !prev)}
-                className="px-2.5 py-1.5 md:py-2 bg-purple-50 dark:bg-purple-950/60 hover:bg-purple-100 dark:hover:bg-purple-900/60 text-purple-800 dark:text-purple-200 border border-purple-200 dark:border-purple-800/70 text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer relative shrink-0 h-9"
+                className="px-2.5 py-1.5 md:py-2 bg-purple-50 dark:bg-purple-950/60 hover:bg-purple-100 dark:hover:bg-purple-900/60 text-purple-800 dark:text-purple-200 border border-purple-200 dark:border-purple-800/70 text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer relative shrink-0 min-h-[40px]"
                 title="Rampaya Çağrılan Araçlar"
               >
                 <Megaphone
@@ -4323,7 +5246,7 @@ export default function App() {
                 />
                 <span className="hidden lg:inline">Rampaya Çağrılan Araçlar</span>
                 {pendingNotificationsCount > 0 && (
-                  <span className="bg-red-600 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full min-w-[18px] text-center leading-none">
+                  <span className="bg-red-600 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full min-w-[18px] text-center leading-none tabular-nums">
                     {pendingNotificationsCount}
                   </span>
                 )}
@@ -4338,7 +5261,7 @@ export default function App() {
               )}
 
               {showNotificationMenu && (
-                <div className="fixed inset-x-2 top-16 md:absolute md:inset-x-auto md:right-0 md:top-full mt-2 w-auto md:w-[420px] max-w-[calc(100vw-1rem)] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl z-50 overflow-hidden text-xs animate-in fade-in zoom-in-95 duration-150">
+                <div className="fixed inset-x-2 top-[calc(4.25rem+env(safe-area-inset-top,0px))] md:absolute md:inset-x-auto md:right-0 md:top-full mt-2 w-auto md:w-[420px] max-w-[calc(100vw-1rem)] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl z-50 overflow-hidden text-xs animate-in fade-in zoom-in-95 duration-150">
                   <div className="p-3.5 bg-slate-900 dark:bg-black text-white font-bold flex justify-between items-center border-b border-slate-800">
                     <span className="flex items-center gap-2">
                       <Megaphone className="w-4 h-4 text-amber-400" /> Rampaya Çağrılan Araçlar
@@ -4347,19 +5270,19 @@ export default function App() {
                       <button
                         onClick={handleClearCompletedNotifications}
                         title="İşlem yapılanları temizle"
-                        className="text-[10px] text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 px-2.5 py-1 rounded transition cursor-pointer"
+                        className="text-[10px] text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 px-2.5 py-1.5 rounded-lg transition cursor-pointer"
                       >
                         Tamamlananları Sil
                       </button>
                       <button
                         onClick={() => setShowNotificationMenu(false)}
-                        className="p-1 text-slate-400 hover:text-white rounded hover:bg-slate-800 transition cursor-pointer md:hidden"
+                        className="min-w-[36px] min-h-[36px] flex items-center justify-center text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition cursor-pointer md:hidden"
                       >
                         <XIcon className="w-4 h-4" />
                       </button>
                     </div>
                   </div>
-                  <div className="max-h-[380px] overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800 custom-scroll">
+                  <div className="max-h-[min(380px,calc(var(--vvh,100dvh)-8.5rem-env(safe-area-inset-top,0px)-env(safe-area-inset-bottom,0px)))] overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800 custom-scroll">
                     {scopedNotifications.map((n) => (
                       <div
                         key={n.id}
@@ -4426,7 +5349,7 @@ export default function App() {
               )}
             </div>
 
-            {/* Web Push & Sistem Bildirimleri butonu (Mobil & Masaüstü) */}
+            {/* Web Push & Sistem Bildirimleri butonu (Masaüstü - Mobilde Menüde) */}
             <button
               onClick={() => {
                 if (pushPermission !== 'granted') {
@@ -4452,23 +5375,23 @@ export default function App() {
                   ? 'Tarayıcı Sistem Bildirimleri Aktif'
                   : 'Tarayıcı Bildirimlerini Etkinleştir'
               }
-              className={`flex px-2 sm:px-2.5 md:px-3 py-1.5 md:py-2 text-xs font-bold rounded-xl transition items-center gap-1.5 cursor-pointer shrink-0 ${
+              className={`hidden md:flex px-2.5 md:px-3 py-2 text-xs font-bold rounded-xl transition items-center gap-1.5 cursor-pointer shrink-0 ${
                 pushPermission === 'granted'
                   ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-200 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 border border-indigo-200 dark:border-indigo-800'
                   : 'bg-amber-500 text-slate-950 font-black hover:bg-amber-400 border border-amber-400 shadow-sm animate-pulse'
               }`}
             >
               <Bell className="w-4 h-4 text-inherit" />
-              <span className="hidden sm:inline">
+              <span className="hidden lg:inline">
                 {pushPermission === 'granted' ? 'Bildirimler' : 'Bildirimleri Aç'}
               </span>
             </button>
 
-            {/* Siyah Mod / Normal Mod Tema Butonu (Masaüstü & Mobil) */}
+            {/* Siyah Mod / Normal Mod Tema Butonu (Masaüstü - Mobilde Menüde) */}
             <button
               onClick={toggleTheme}
               title={theme === 'dark' ? 'Normal (Aydınlık) Moda Geç' : 'Siyah (Karanlık) Moda Geç'}
-              className={`flex px-2 sm:px-2.5 md:px-3 py-1.5 md:py-2 text-xs font-bold rounded-xl transition items-center gap-1.5 cursor-pointer shrink-0 border shadow-2xs active:scale-95 ${
+              className={`hidden md:flex px-2.5 md:px-3 py-2 text-xs font-bold rounded-xl transition items-center gap-1.5 cursor-pointer shrink-0 border shadow-2xs active:scale-95 ${
                 theme === 'dark'
                   ? 'bg-slate-800 hover:bg-slate-700 text-amber-300 border-slate-700'
                   : 'bg-purple-50 hover:bg-purple-100 text-purple-800 border-purple-200'
@@ -4477,12 +5400,12 @@ export default function App() {
               {theme === 'dark' ? (
                 <>
                   <Sun className="w-4 h-4 text-amber-400" />
-                  <span className="hidden sm:inline">Aydınlık</span>
+                  <span className="hidden lg:inline">Aydınlık</span>
                 </>
               ) : (
                 <>
                   <Moon className="w-4 h-4 text-purple-700" />
-                  <span className="hidden sm:inline">Siyah Mod</span>
+                  <span className="hidden lg:inline">Siyah Mod</span>
                 </>
               )}
             </button>
@@ -4515,7 +5438,7 @@ export default function App() {
               (currentUser.role === 'admin' || hasPermission(currentUser, 'canCreateVehicle')) && (
                 <button
                   onClick={handleOpenNewVehicleDirectly}
-                  className="px-3 md:px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs md:text-sm font-semibold rounded-xl shadow-md transition flex items-center gap-1.5 cursor-pointer shadow-blue-500/20"
+                  className="min-h-[40px] px-3 md:px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs md:text-sm font-semibold rounded-xl shadow-md transition flex items-center gap-1.5 cursor-pointer shadow-blue-500/20"
                 >
                   <Plus className="w-4 h-4" />
                   <span className="hidden sm:inline">Yeni Araç</span>
@@ -4525,13 +5448,13 @@ export default function App() {
             {/* Mobil Menü Butonu (Yönetici İşlemleri, Ayarlar & Çıkış) */}
             <button
               onClick={() => setShowMobileAdminMenu(true)}
-              className="md:hidden p-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl transition flex items-center justify-center cursor-pointer border border-slate-200 dark:border-slate-700 relative"
+              className="md:hidden min-w-[40px] min-h-[40px] p-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl transition flex items-center justify-center cursor-pointer border border-slate-200 dark:border-slate-700 relative"
               title="Yönetim & Hızlı İşlemler Menüsü"
             >
               <Menu className="w-4 h-4 text-slate-800 dark:text-slate-200" />
-              {currentUser.role === 'admin' && pendingChatGroupsCount > 0 && (
-                <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-600 text-white text-[9px] font-black flex items-center justify-center tabular-nums">
-                  {pendingChatGroupsCount}
+              {((currentUser.role === 'admin' && pendingChatGroupsCount > 0) || unreadChatCount > 0) && (
+                <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-red-600 text-white text-[9px] font-black flex items-center justify-center tabular-nums">
+                  {(currentUser.role === 'admin' ? pendingChatGroupsCount : 0) + unreadChatCount}
                 </span>
               )}
             </button>
@@ -4539,7 +5462,7 @@ export default function App() {
         </header>
 
         {/* Sekme İçerikleri */}
-        <div className="flex-1 overflow-y-auto p-3 sm:p-4 md:p-6 pb-24 md:pb-6 custom-scroll">
+        <div className="flex-1 overflow-y-auto overflow-x-clip p-3 sm:p-4 md:p-6 pb-[calc(5.25rem+env(safe-area-inset-bottom))] md:pb-6 custom-scroll">
           {/* İnternet veya Veritabanı Bağlantısı Kesildiğinde Anlık Canlı Uyarı Banner'ı */}
           {!isFirebaseConnected && (
             <div className="mb-3 p-3 bg-red-600 text-white rounded-2xl shadow-lg flex items-center justify-between gap-3 text-xs animate-pulse">
@@ -4828,6 +5751,8 @@ export default function App() {
         rampName={getRampName(liveSelectedDetailVehicle?.rampaId)}
         warehouseName={liveSelectedDetailVehicle ? getWarehouseNameById(liveSelectedDetailVehicle.depoId) : undefined}
         slaSettings={slaSettings}
+        currentUser={currentUser}
+        auditLogs={currentUser.role === 'admin' ? auditLogs : []}
         onClose={() => {
           setSelectedDetailVehicle(null);
           setShowDetailViewModal(false);
@@ -5008,10 +5933,37 @@ export default function App() {
         onClose={() => setShowWhatsAppModal(false)}
         currentConfig={whatsappConfig}
         onConfigSaved={(newCfg) => {
+          const diff = buildWhatsAppConfigDiff(whatsappConfig, newCfg);
           setWhatsappConfig(newCfg);
+          recordAuditLog({
+            category: 'settings',
+            action: 'SETTINGS_WHATSAPP',
+            targetType: 'settings',
+            targetId: 'whatsapp',
+            targetLabel: 'WhatsApp Entegrasyonu',
+            summary: `WhatsApp entegrasyon ayarları güncellendi (${diff.length} alan değişti).`,
+            changes: diff
+          });
           showToast('WhatsApp entegrasyon ayarları güncellendi.', 'success');
         }}
       />
+
+      {/* 13.1 Admin İşlem Geçmişi ve Denetim Kayıtları Modalı (Sadece Admin) */}
+      {currentUser.role === 'admin' && (
+        <AuditLogModal
+          isOpen={showAuditLogModal}
+          onClose={() => setShowAuditLogModal(false)}
+          auditLogs={auditLogs}
+          currentUser={currentUser}
+          users={users}
+          warehouses={warehouses}
+          isLoading={isAuditLoading}
+          onNotify={showToast}
+          onAskConfirm={askConfirm}
+          onDeleteOldLogs={handleDeleteOldAuditLogs}
+          onRecordExport={handleRecordAuditExport}
+        />
+      )}
 
       {/* 14. Web Push & Sistem Bildirim Ayarları Modalı */}
       <PushNotificationSettingsModal
@@ -5046,26 +5998,92 @@ export default function App() {
             className="fixed inset-0"
             onClick={() => setShowMobileAdminMenu(false)}
           />
-          <div className="relative bg-white dark:bg-slate-900 w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl p-5 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4 max-h-[85vh] overflow-y-auto">
+          <div className="relative bg-white dark:bg-slate-900 w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4 max-h-[calc(var(--vvh,100dvh)-env(safe-area-inset-top,0px)-0.75rem)] overflow-y-auto custom-scroll">
             {/* Üst Bar / Kullanıcı Bilgisi */}
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-blue-600 text-white font-black flex items-center justify-center text-sm shadow-md">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-10 h-10 rounded-2xl bg-blue-600 text-white font-black flex items-center justify-center text-sm shadow-md shrink-0">
                   {currentUser.username.substring(0, 2).toUpperCase()}
                 </div>
-                <div>
-                  <h4 className="font-bold text-slate-900 dark:text-slate-100 text-sm">{currentUser.username}</h4>
+                <div className="min-w-0">
+                  <h4 className="font-bold text-slate-900 dark:text-slate-100 text-sm truncate">{currentUser.username}</h4>
                   <span className="text-[11px] font-semibold text-blue-600 dark:text-blue-400 capitalize flex items-center gap-1">
-                    <Shield className="w-3.5 h-3.5" />
+                    <Shield className="w-3.5 h-3.5 shrink-0" />
                     <span>{currentUser.role === 'admin' ? 'Yönetici (Admin)' : currentUser.role}</span>
                   </span>
                 </div>
               </div>
               <button
                 onClick={() => setShowMobileAdminMenu(false)}
-                className="p-2 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                className="min-w-[40px] min-h-[40px] flex items-center justify-center text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer shrink-0"
               >
                 <XIcon className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Görünüm, Sohbet & Bildirimler (Tüm Roller) */}
+            <div className="space-y-2">
+              <p className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Görünüm, Sohbet & Bildirimler</p>
+
+              {/* Siyah Mod / Normal Mod Hızlı Geçiş */}
+              <div className="flex items-center justify-between gap-2 p-3.5 bg-slate-100 dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  {theme === 'dark' ? <Moon className="w-5 h-5 text-purple-400 shrink-0" /> : <Sun className="w-5 h-5 text-amber-500 shrink-0" />}
+                  <div className="min-w-0">
+                    <span className="font-bold text-xs text-slate-800 dark:text-slate-100 block truncate">
+                      {theme === 'dark' ? 'Siyah Mod (Aktif)' : 'Normal Mod (Aktif)'}
+                    </span>
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400 block truncate">
+                      {theme === 'dark' ? 'Göz yorgunluğunu azaltan siyah tema' : 'Klasik aydınlık tema'}
+                    </span>
+                  </div>
+                </div>
+                <button
+                  onClick={toggleTheme}
+                  className={`min-h-[38px] px-3 py-1.5 rounded-xl text-xs font-black transition cursor-pointer shadow-xs shrink-0 ${
+                    theme === 'dark' ? 'bg-purple-600 text-white' : 'bg-slate-200 text-slate-800'
+                  }`}
+                >
+                  {theme === 'dark' ? 'Siyah Mod' : 'Normal'}
+                </button>
+              </div>
+
+              <button
+                onClick={() => {
+                  setShowMobileAdminMenu(false);
+                  window.dispatchEvent(new CustomEvent('open-chat-widget'));
+                }}
+                className="w-full min-h-[44px] p-3.5 bg-blue-50 dark:bg-blue-950/50 hover:bg-blue-100 dark:hover:bg-blue-900/60 text-blue-900 dark:text-blue-200 rounded-2xl font-bold text-xs flex items-center justify-between gap-2 border border-blue-200 dark:border-blue-800/70 transition cursor-pointer"
+              >
+                <span className="flex items-center gap-2.5 min-w-0">
+                  <MessageSquare className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
+                  <span className="truncate">Saha & Güvenlik Sohbeti</span>
+                </span>
+                {unreadChatCount > 0 ? (
+                  <span className="text-[10px] bg-red-600 text-white px-2 py-0.5 rounded-full font-black animate-bounce shrink-0 tabular-nums">
+                    {unreadChatCount} Okunmamış
+                  </span>
+                ) : (
+                  <span className="text-[10px] bg-blue-600 text-white px-2 py-0.5 rounded-full font-semibold shrink-0">Aç</span>
+                )}
+              </button>
+
+              <button
+                onClick={() => {
+                  setShowMobileAdminMenu(false);
+                  setShowPushSettingsModal(true);
+                }}
+                className="w-full min-h-[44px] p-3.5 bg-indigo-50 dark:bg-indigo-950/50 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-indigo-900 dark:text-indigo-200 rounded-2xl font-bold text-xs flex items-center justify-between gap-2 border border-indigo-200 dark:border-indigo-800/70 transition cursor-pointer"
+              >
+                <span className="flex items-center gap-2.5 min-w-0">
+                  <Bell className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                  <span className="truncate">Web Push / Kayan Bildirimler</span>
+                </span>
+                <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold shrink-0 ${
+                  pushPermission === 'granted' ? 'bg-indigo-600 text-white' : 'bg-amber-500 text-slate-950'
+                }`}>
+                  {pushPermission === 'granted' ? 'Açık' : 'İzin Ver'}
+                </span>
               </button>
             </div>
 
@@ -5073,41 +6091,19 @@ export default function App() {
             {currentUser.role === 'admin' && (
               <div className="space-y-2">
                 <p className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Yönetici İşlemleri</p>
-                
-                {/* Siyah Mod / Normal Mod Hızlı Geçiş */}
-                <div className="flex items-center justify-between p-3.5 bg-slate-100 dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700">
-                  <div className="flex items-center gap-2.5">
-                    {theme === 'dark' ? <Moon className="w-5 h-5 text-purple-400" /> : <Sun className="w-5 h-5 text-amber-500" />}
-                    <div>
-                      <span className="font-bold text-xs text-slate-800 dark:text-slate-100 block">
-                        {theme === 'dark' ? 'Siyah Mod (Aktif)' : 'Normal Mod (Aktif)'}
-                      </span>
-                      <span className="text-[10px] text-slate-500 dark:text-slate-400">
-                        {theme === 'dark' ? 'Göz yorgunluğunu azaltan siyah tema' : 'Klasik aydınlık tema'}
-                      </span>
-                    </div>
-                  </div>
-                  <button
-                    onClick={toggleTheme}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-black transition cursor-pointer shadow-xs ${
-                      theme === 'dark' ? 'bg-purple-600 text-white' : 'bg-slate-200 text-slate-800'
-                    }`}
-                  >
-                    {theme === 'dark' ? 'Siyah Mod' : 'Normal'}
-                  </button>
-                </div>
+
                 <button
                   onClick={() => {
                     setShowMobileAdminMenu(false);
                     setShowCustomerModal(true);
                   }}
-                  className="w-full p-3.5 bg-teal-50 dark:bg-teal-950/50 hover:bg-teal-100 dark:hover:bg-teal-900/60 text-teal-900 dark:text-teal-200 rounded-2xl font-bold text-xs flex items-center justify-between border border-teal-200 dark:border-teal-800/70 transition cursor-pointer"
+                  className="w-full min-h-[44px] p-3.5 bg-teal-50 dark:bg-teal-950/50 hover:bg-teal-100 dark:hover:bg-teal-900/60 text-teal-900 dark:text-teal-200 rounded-2xl font-bold text-xs flex items-center justify-between gap-2 border border-teal-200 dark:border-teal-800/70 transition cursor-pointer"
                 >
-                  <span className="flex items-center gap-2.5">
-                    <Briefcase className="w-4 h-4 text-teal-600 dark:text-teal-400" />
-                    <span>Firma / Müşteri Yönetimi</span>
+                  <span className="flex items-center gap-2.5 min-w-0">
+                    <Briefcase className="w-4 h-4 text-teal-600 dark:text-teal-400 shrink-0" />
+                    <span className="truncate">Firma / Müşteri Yönetimi</span>
                   </span>
-                  <span className="text-[10px] bg-teal-600 text-white px-2 py-0.5 rounded-full font-semibold">Tanımlamalar</span>
+                  <span className="text-[10px] bg-teal-600 text-white px-2 py-0.5 rounded-full font-semibold shrink-0">Tanımlamalar</span>
                 </button>
 
                 <button
@@ -5115,38 +6111,18 @@ export default function App() {
                     setShowMobileAdminMenu(false);
                     setShowUserManagementModal(true);
                   }}
-                  className="w-full p-3.5 bg-blue-50 dark:bg-blue-950/50 hover:bg-blue-100 dark:hover:bg-blue-900/60 text-blue-800 dark:text-blue-200 rounded-2xl font-bold text-xs flex items-center justify-between border border-blue-200 dark:border-blue-800/70 transition cursor-pointer"
+                  className="w-full min-h-[44px] p-3.5 bg-blue-50 dark:bg-blue-950/50 hover:bg-blue-100 dark:hover:bg-blue-900/60 text-blue-800 dark:text-blue-200 rounded-2xl font-bold text-xs flex items-center justify-between gap-2 border border-blue-200 dark:border-blue-800/70 transition cursor-pointer"
                 >
-                  <span className="flex items-center gap-2.5">
-                    <Users className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                    <span>Kullanıcı, İzin & Sohbet Yönetimi</span>
+                  <span className="flex items-center gap-2.5 min-w-0">
+                    <Users className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
+                    <span className="truncate">Kullanıcı, İzin & Sohbet Yönetimi</span>
                   </span>
                   {pendingChatGroupsCount > 0 ? (
-                    <span className="text-[10px] bg-red-600 text-white px-2 py-0.5 rounded-full font-black tabular-nums">
+                    <span className="text-[10px] bg-red-600 text-white px-2 py-0.5 rounded-full font-black tabular-nums shrink-0">
                       {pendingChatGroupsCount} Onay Bekliyor
                     </span>
                   ) : (
-                    <span className="text-[10px] bg-blue-600 text-white px-2 py-0.5 rounded-full font-semibold">Yönetim</span>
-                  )}
-                </button>
-
-                <button
-                  onClick={() => {
-                    setShowMobileAdminMenu(false);
-                    window.dispatchEvent(new CustomEvent('open-chat-widget'));
-                  }}
-                  className="w-full p-3.5 bg-blue-50 dark:bg-blue-950/50 hover:bg-blue-100 dark:hover:bg-blue-900/60 text-blue-900 dark:text-blue-200 rounded-2xl font-bold text-xs flex items-center justify-between border border-blue-200 dark:border-blue-800/70 transition cursor-pointer"
-                >
-                  <span className="flex items-center gap-2.5">
-                    <MessageSquare className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                    <span>Saha & Güvenlik Sohbeti</span>
-                  </span>
-                  {unreadChatCount > 0 ? (
-                    <span className="text-[10px] bg-red-600 text-white px-2 py-0.5 rounded-full font-black animate-bounce">
-                      {unreadChatCount} Okunmamış
-                    </span>
-                  ) : (
-                    <span className="text-[10px] bg-blue-600 text-white px-2 py-0.5 rounded-full font-semibold">Aç</span>
+                    <span className="text-[10px] bg-blue-600 text-white px-2 py-0.5 rounded-full font-semibold shrink-0">Yönetim</span>
                   )}
                 </button>
 
@@ -5155,13 +6131,13 @@ export default function App() {
                     setShowMobileAdminMenu(false);
                     setShowWarehouseModal(true);
                   }}
-                  className="w-full p-3.5 bg-indigo-50 dark:bg-indigo-950/50 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-indigo-900 dark:text-indigo-200 rounded-2xl font-bold text-xs flex items-center justify-between border border-indigo-200 dark:border-indigo-800/70 transition cursor-pointer"
+                  className="w-full min-h-[44px] p-3.5 bg-indigo-50 dark:bg-indigo-950/50 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-indigo-900 dark:text-indigo-200 rounded-2xl font-bold text-xs flex items-center justify-between gap-2 border border-indigo-200 dark:border-indigo-800/70 transition cursor-pointer"
                 >
-                  <span className="flex items-center gap-2.5">
-                    <Building className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-                    <span>Depo & Saha Yönetimi</span>
+                  <span className="flex items-center gap-2.5 min-w-0">
+                    <Building className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                    <span className="truncate">Depo & Saha Yönetimi</span>
                   </span>
-                  <span className="text-[10px] bg-indigo-600 text-white px-2 py-0.5 rounded-full font-semibold">Aktif / Pasif</span>
+                  <span className="text-[10px] bg-indigo-600 text-white px-2 py-0.5 rounded-full font-semibold shrink-0">Aktif / Pasif</span>
                 </button>
 
                 <button
@@ -5170,13 +6146,13 @@ export default function App() {
                     setRampConfigInitialWhId(selectedDepoId > 0 ? selectedDepoId : activeWarehouses[0]?.id || 1);
                     setShowRampConfigModal(true);
                   }}
-                  className="w-full p-3.5 bg-sky-50 dark:bg-sky-950/50 hover:bg-sky-100 dark:hover:bg-sky-900/60 text-sky-900 dark:text-sky-200 rounded-2xl font-bold text-xs flex items-center justify-between border border-sky-200 dark:border-sky-800/70 transition cursor-pointer"
+                  className="w-full min-h-[44px] p-3.5 bg-sky-50 dark:bg-sky-950/50 hover:bg-sky-100 dark:hover:bg-sky-900/60 text-sky-900 dark:text-sky-200 rounded-2xl font-bold text-xs flex items-center justify-between gap-2 border border-sky-200 dark:border-sky-800/70 transition cursor-pointer"
                 >
-                  <span className="flex items-center gap-2.5">
-                    <WarehouseIcon className="w-4 h-4 text-sky-600 dark:text-sky-400" />
-                    <span>Depo Bazlı Rampalar</span>
+                  <span className="flex items-center gap-2.5 min-w-0">
+                    <WarehouseIcon className="w-4 h-4 text-sky-600 dark:text-sky-400 shrink-0" />
+                    <span className="truncate">Depo Bazlı Rampalar</span>
                   </span>
-                  <span className="text-[10px] bg-sky-600 text-white px-2 py-0.5 rounded-full font-semibold">{currentWarehouseRamps.length} Rampa</span>
+                  <span className="text-[10px] bg-sky-600 text-white px-2 py-0.5 rounded-full font-semibold shrink-0">{currentWarehouseRamps.length} Rampa</span>
                 </button>
 
                 <button
@@ -5184,13 +6160,13 @@ export default function App() {
                     setShowMobileAdminMenu(false);
                     setShowSlaSettingsModal(true);
                   }}
-                  className="w-full p-3.5 bg-amber-50 dark:bg-amber-950/50 hover:bg-amber-100 dark:hover:bg-amber-900/60 text-amber-900 dark:text-amber-200 rounded-2xl font-bold text-xs flex items-center justify-between border border-amber-200 dark:border-amber-800/70 transition cursor-pointer"
+                  className="w-full min-h-[44px] p-3.5 bg-amber-50 dark:bg-amber-950/50 hover:bg-amber-100 dark:hover:bg-amber-900/60 text-amber-900 dark:text-amber-200 rounded-2xl font-bold text-xs flex items-center justify-between gap-2 border border-amber-200 dark:border-amber-800/70 transition cursor-pointer"
                 >
-                  <span className="flex items-center gap-2.5">
-                    <SlidersHorizontal className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-                    <span>SLA Hedef Süre Ayarları</span>
+                  <span className="flex items-center gap-2.5 min-w-0">
+                    <SlidersHorizontal className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                    <span className="truncate">SLA Hedef Süre Ayarları</span>
                   </span>
-                  <span className="text-[10px] bg-amber-600 text-white px-2 py-0.5 rounded-full font-semibold">Ayarla</span>
+                  <span className="text-[10px] bg-amber-600 text-white px-2 py-0.5 rounded-full font-semibold shrink-0">Ayarla</span>
                 </button>
 
                 <button
@@ -5198,13 +6174,13 @@ export default function App() {
                     setShowMobileAdminMenu(false);
                     setShowWhatsAppModal(true);
                   }}
-                  className="w-full p-3.5 bg-emerald-50 dark:bg-emerald-950/50 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 text-emerald-900 dark:text-emerald-200 rounded-2xl font-bold text-xs flex items-center justify-between border border-emerald-200 dark:border-emerald-800/70 transition cursor-pointer"
+                  className="w-full min-h-[44px] p-3.5 bg-emerald-50 dark:bg-emerald-950/50 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 text-emerald-900 dark:text-emerald-200 rounded-2xl font-bold text-xs flex items-center justify-between gap-2 border border-emerald-200 dark:border-emerald-800/70 transition cursor-pointer"
                 >
-                  <span className="flex items-center gap-2.5">
-                    <MessageSquare className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                    <span>WhatsApp Grubu API Entegrasyonu</span>
+                  <span className="flex items-center gap-2.5 min-w-0">
+                    <MessageSquare className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                    <span className="truncate">WhatsApp Grubu API Entegrasyonu</span>
                   </span>
-                  <span className="text-[10px] bg-emerald-600 text-white px-2 py-0.5 rounded-full font-semibold">
+                  <span className="text-[10px] bg-emerald-600 text-white px-2 py-0.5 rounded-full font-semibold shrink-0">
                     {whatsappConfig.enabled ? 'Aktif' : 'Ayarla'}
                   </span>
                 </button>
@@ -5212,18 +6188,16 @@ export default function App() {
                 <button
                   onClick={() => {
                     setShowMobileAdminMenu(false);
-                    setShowPushSettingsModal(true);
+                    setShowAuditLogModal(true);
                   }}
-                  className="w-full p-3.5 bg-indigo-50 dark:bg-indigo-950/50 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-indigo-900 dark:text-indigo-200 rounded-2xl font-bold text-xs flex items-center justify-between border border-indigo-200 dark:border-indigo-800/70 transition cursor-pointer"
+                  className="w-full min-h-[44px] p-3.5 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-indigo-900 dark:text-indigo-200 rounded-2xl font-bold text-xs flex items-center justify-between gap-2 border border-indigo-200 dark:border-indigo-700/70 transition cursor-pointer"
                 >
-                  <span className="flex items-center gap-2.5">
-                    <Bell className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-                    <span>Web Push / Kayan Bildirimler</span>
+                  <span className="flex items-center gap-2.5 min-w-0">
+                    <AuditHistoryIcon className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                    <span className="truncate">İşlem Geçmişi & Denetim Kayıtları</span>
                   </span>
-                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${
-                    pushPermission === 'granted' ? 'bg-indigo-600 text-white' : 'bg-amber-500 text-white'
-                  }`}>
-                    {pushPermission === 'granted' ? 'Açık' : 'İzin Ver'}
+                  <span className="text-[10px] bg-indigo-600 text-white px-2 py-0.5 rounded-full font-semibold shrink-0 flex items-center gap-1">
+                    <ShieldCheck className="w-3 h-3" /> Admin
                   </span>
                 </button>
 
@@ -5232,13 +6206,13 @@ export default function App() {
                     setShowMobileAdminMenu(false);
                     setShowPasswordModal(true);
                   }}
-                  className="w-full p-3.5 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-2xl font-bold text-xs flex items-center justify-between border border-slate-200 dark:border-slate-700 transition cursor-pointer"
+                  className="w-full min-h-[44px] p-3.5 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-2xl font-bold text-xs flex items-center justify-between gap-2 border border-slate-200 dark:border-slate-700 transition cursor-pointer"
                 >
-                  <span className="flex items-center gap-2.5">
-                    <Key className="w-4 h-4 text-amber-500" />
-                    <span>Şifre Değiştir</span>
+                  <span className="flex items-center gap-2.5 min-w-0">
+                    <Key className="w-4 h-4 text-amber-500 shrink-0" />
+                    <span className="truncate">Şifre Değiştir</span>
                   </span>
-                  <span className="text-slate-400">→</span>
+                  <span className="text-slate-400 shrink-0">→</span>
                 </button>
               </div>
             )}
@@ -5335,7 +6309,7 @@ export default function App() {
 
       {/* 12. Floating Toast Bildirimi */}
       {toast && (
-        <div className="fixed top-4 right-4 z-[80] max-w-sm w-full transition-all">
+        <div className="fixed top-[calc(0.75rem+env(safe-area-inset-top,0px))] left-[max(0.75rem,env(safe-area-inset-left))] right-[max(0.75rem,env(safe-area-inset-right))] sm:left-auto sm:right-4 z-[80] sm:max-w-sm sm:w-full transition-all">
           <div
             className={`p-4 rounded-2xl shadow-2xl border flex items-start gap-3 text-xs font-semibold ${
               toast.type === 'success'

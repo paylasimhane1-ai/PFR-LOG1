@@ -52,22 +52,22 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       {overdueVehicles.length > 0 && (
         <div
           onClick={() => onNavigateTab('rampalar')}
-          className="bg-red-600 hover:bg-red-700 text-white p-3 sm:p-4 rounded-xl md:rounded-2xl shadow-md flex items-center justify-between cursor-pointer transition animate-in fade-in"
+          className="bg-red-600 hover:bg-red-700 text-white p-3 sm:p-4 rounded-xl md:rounded-2xl shadow-md flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 cursor-pointer transition animate-in fade-in"
         >
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2.5 min-w-0 flex-1">
             <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
               <Flame className="w-5 h-5 text-white animate-bounce" />
             </div>
-            <div>
-              <h4 className="font-extrabold text-xs sm:text-sm">
+            <div className="min-w-0 flex-1">
+              <h4 className="font-extrabold text-xs sm:text-sm leading-snug">
                 {overdueVehicles.length} Araç Rampa Hedef İşlem Süresini (SLA) Aştı!
               </h4>
-              <p className="text-[10px] sm:text-[11px] text-red-100">
+              <p className="text-[10px] sm:text-[11px] text-red-100 leading-snug">
                 Gecikmedeki araçları ve rampa sayaçlarını incelemek için tıklayın.
               </p>
             </div>
           </div>
-          <span className="text-xs font-bold bg-white text-red-700 px-3 py-1.5 rounded-xl shadow-xs shrink-0">
+          <span className="self-end sm:self-center text-xs font-bold bg-white text-red-700 px-3 py-1.5 rounded-xl shadow-xs shrink-0">
             Rampaları Gör →
           </span>
         </div>
@@ -157,7 +157,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               }`}
             >
               <div className="flex items-center justify-between gap-1.5">
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5 flex-wrap">
                     <span className="font-bold text-slate-900 dark:text-slate-100 text-[11px] truncate">{v.musteri}</span>
                     {v.isAcik && (
@@ -166,9 +166,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       </span>
                     )}
                   </div>
-                  <div className="flex items-center gap-1 mt-0.5 text-[10px] text-slate-500 dark:text-slate-400">
+                  <div className="flex items-center flex-wrap gap-1 mt-0.5 text-[10px] text-slate-500 dark:text-slate-400">
                     <span className="font-mono font-bold text-slate-800 dark:text-slate-200 text-[10px]">{v.dorsePlaka}</span>
-                    {v.konteynirNo && <span>• {v.konteynirNo}</span>}
+                    {v.konteynirNo && <span className="truncate">• {v.konteynirNo}</span>}
                   </div>
                 </div>
 
@@ -177,7 +177,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 </span>
               </div>
 
-              <div className="flex items-center justify-between text-[10px] pt-1.5 border-t border-slate-200/70 dark:border-slate-700/60 text-slate-600 dark:text-slate-300">
+              <div className="flex flex-wrap items-center justify-between gap-1.5 text-[10px] pt-1.5 border-t border-slate-200/70 dark:border-slate-700/60 text-slate-600 dark:text-slate-300">
                 <span className="text-[9px] text-slate-500 dark:text-slate-400">{v.depoTuru} / {v.islemTuru}</span>
                 <div className="flex items-center gap-1.5">
                   <span className="font-bold text-blue-600 dark:text-blue-400 text-[10px]">
@@ -189,9 +189,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                         e.stopPropagation();
                         onOpenDetailModal(v);
                       }}
-                      className="px-1.5 py-0.5 bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-900/50 text-blue-700 dark:text-blue-300 font-bold text-[9px] rounded border border-blue-200 dark:border-blue-800 flex items-center gap-0.5 cursor-pointer transition active:scale-95"
+                      className="min-h-[34px] px-2.5 py-1 bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-900/50 text-blue-700 dark:text-blue-300 font-bold text-[10px] rounded-lg border border-blue-200 dark:border-blue-800 flex items-center gap-1 cursor-pointer transition active:scale-95"
                     >
-                      <Eye className="w-2.5 h-2.5 text-blue-600 dark:text-blue-400" /> İncele
+                      <Eye className="w-3 h-3 text-blue-600 dark:text-blue-400" /> İncele
                     </button>
                   )}
                 </div>

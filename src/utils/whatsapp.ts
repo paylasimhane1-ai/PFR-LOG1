@@ -19,11 +19,35 @@ export const DEFAULT_WHATSAPP_CONFIG: WhatsAppConfig = {
 
 const STORAGE_KEY = 'yms_whatsapp_config';
 
+export const WHATSAPP_SECRET_FIELDS = [
+  'groupPhoneOrId',
+  'webhookUrl',
+  'apiKey',
+  'instanceId',
+  'twilioAccountSid',
+  'twilioAuthToken',
+  'twilioFromNumber'
+] as const;
+
+export function stripWhatsAppSecrets(config: Partial<WhatsAppConfig>): WhatsAppConfig {
+  return {
+    ...DEFAULT_WHATSAPP_CONFIG,
+    ...config,
+    groupPhoneOrId: '',
+    webhookUrl: '',
+    apiKey: '',
+    instanceId: '',
+    twilioAccountSid: '',
+    twilioAuthToken: '',
+    twilioFromNumber: ''
+  };
+}
+
 export function loadWhatsAppConfig(): WhatsAppConfig {
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
-      return { ...DEFAULT_WHATSAPP_CONFIG, ...JSON.parse(saved) };
+      return stripWhatsAppSecrets(JSON.parse(saved));
     }
   } catch {
     // fallback
@@ -33,7 +57,7 @@ export function loadWhatsAppConfig(): WhatsAppConfig {
 
 export function saveWhatsAppConfig(config: WhatsAppConfig): void {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(stripWhatsAppSecrets(config)));
   } catch {
     // ignore
   }

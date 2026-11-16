@@ -150,17 +150,17 @@ export const WhatsAppSharePromptModal: React.FC<WhatsAppSharePromptModalProps> =
       : '🚛 Yeni Araç Kabul WhatsApp Bildirimi';
 
   return (
-    <div className="fixed inset-0 bg-slate-950/75 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 z-50 animate-in fade-in duration-150">
-      <div className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-3xl shadow-2xl max-w-lg w-full overflow-hidden border border-emerald-200 dark:border-emerald-800 flex flex-col max-h-[92vh] transition-colors">
+    <div className="fixed inset-0 bg-slate-950/75 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 z-50 animate-in fade-in duration-150">
+      <div className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-none sm:rounded-3xl shadow-2xl max-w-lg w-full overflow-hidden border-0 sm:border sm:border-emerald-200 dark:sm:border-emerald-800 flex flex-col h-[var(--vvh,100dvh)] sm:h-auto sm:max-h-[90dvh] transition-colors">
         {/* Header */}
-        <div className="bg-emerald-600 px-5 py-4 text-white flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-white/20 flex items-center justify-center shadow-inner">
+        <div className="bg-emerald-600 px-4 sm:px-5 pb-3.5 pt-[max(0.875rem,env(safe-area-inset-top))] sm:py-4 text-white flex items-center justify-between shrink-0 gap-2">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-2xl bg-white/20 flex items-center justify-center shadow-inner shrink-0">
               <MessageSquare className="w-5 h-5 text-white" />
             </div>
-            <div>
-              <h3 className="font-bold text-sm sm:text-base leading-tight">{titleText}</h3>
-              <p className="text-[11px] text-emerald-100 mt-0.5">
+            <div className="min-w-0">
+              <h3 className="font-bold text-sm sm:text-base leading-tight truncate">{titleText}</h3>
+              <p className="text-[11px] text-emerald-100 mt-0.5 truncate">
                 {eventType === 'ramp_assigned'
                   ? `${vehicle.dorsePlaka} aracı ${rampName || 'Rampaya'} yönlendirildi.`
                   : `${vehicle.dorsePlaka} - ${vehicle.musteri} sisteme işlendi.`}
@@ -169,14 +169,15 @@ export const WhatsAppSharePromptModal: React.FC<WhatsAppSharePromptModalProps> =
           </div>
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-xl text-emerald-200 hover:text-white hover:bg-emerald-700/60 flex items-center justify-center transition cursor-pointer"
+            className="min-w-[40px] min-h-[40px] rounded-xl text-emerald-200 hover:text-white hover:bg-emerald-700/60 flex items-center justify-center transition cursor-pointer shrink-0"
+            aria-label="Kapat"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Body */}
-        <div className="p-5 space-y-4 text-xs overflow-y-auto custom-scroll flex-1">
+        <div className="p-4 sm:p-5 space-y-4 text-xs overflow-y-auto custom-scroll flex-1">
           {/* API Status Badge if exists */}
           {apiMessage && (
             <div
@@ -337,11 +338,11 @@ export const WhatsAppSharePromptModal: React.FC<WhatsAppSharePromptModalProps> =
         </div>
 
         {/* Footer Actions */}
-        <div className="bg-slate-50 dark:bg-slate-800/70 px-5 py-4 border-t border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
+        <div className="bg-slate-50 dark:bg-slate-800/70 px-4 sm:px-5 pt-3.5 pb-[max(1rem,env(safe-area-inset-bottom))] sm:py-4 border-t border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-2.5 shrink-0">
           <button
             type="button"
             onClick={onClose}
-            className="w-full sm:w-auto px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 font-semibold text-xs transition cursor-pointer order-2 sm:order-1"
+            className="w-full sm:w-auto min-h-[44px] px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 font-semibold text-xs transition cursor-pointer order-2 sm:order-1"
           >
             Kapat
           </button>
@@ -350,7 +351,7 @@ export const WhatsAppSharePromptModal: React.FC<WhatsAppSharePromptModalProps> =
             <button
               type="button"
               onClick={handleCopyText}
-              className="px-3 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 font-bold text-xs flex items-center justify-center gap-1.5 transition cursor-pointer shadow-xs"
+              className="min-h-[42px] px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 font-bold text-xs flex items-center justify-center gap-1.5 transition cursor-pointer shadow-xs"
             >
               {copied ? <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400" /> : <Copy className="w-4 h-4 text-slate-600 dark:text-slate-300" />}
               <span>{copied ? 'Kopyalandı' : 'Açıklamayı Kopyala'}</span>

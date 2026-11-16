@@ -16,8 +16,11 @@ import {
   where,
   type DocumentReference
 } from 'firebase/firestore';
-import type { Vehicle, Ramp, ExpectedVehicle, AppNotification, ChatMessage, ChatPresence, ChatGroup, ChatQuickMessagesSettings, Warehouse, User, Customer, WhatsAppConfig, SlaSettings } from '../types';
+import type { Vehicle, Ramp, ExpectedVehicle, AppNotification, ChatMessage, ChatPresence, ChatGroup, ChatQuickMessagesSettings, Warehouse, User, Customer, WhatsAppConfig, SlaSettings, AuditLog } from '../types';
 import firebaseConfigData from '../../firebase-applet-config.json';
+import { hashPassword } from '../utils/authCrypto';
+import { WHATSAPP_SECRET_FIELDS, stripWhatsAppSecrets } from '../utils/whatsapp';
+import { sanitizeAuditLogPayload } from '../utils/audit';
 
 /**
  * Vercel veya diğer üretim platformlarından girilen ortam değişkenlerini temizler.
@@ -711,8 +714,14 @@ export function subscribeToUsers(
     async (snapshot) => {
       if (snapshot.empty && initialDataIfEmpty && initialDataIfEmpty.length > 0) {
         try {
+          const hashedUsers = await Promise.all(
+            initialDataIfEmpty.map(async (item) => ({
+              ...item,
+              password: await hashPassword(item.password)
+            }))
+          );
           await commitSetDocsInChunks(
-            initialDataIfEmpty.map((item) => ({
+            hashedUsers.map((item) => ({
               ref: doc(db, 'users', item.username.toLowerCase()),
               data: removeUndefinedFields(item)
             }))
@@ -891,15 +900,27 @@ export async function clearAllCustomersFromFirestore(): Promise<void> {
 // WhatsApp Configuration Sync & Mutations (Cross-Device Global Settings)
 // -------------------------------------------------------------
 
+export type WhatsAppSecrets = Pick<
+  WhatsAppConfig,
+  | 'groupPhoneOrId'
+  | 'webhookUrl'
+  | 'apiKey'
+  | 'instanceId'
+  | 'twilioAccountSid'
+  | 'twilioAuthToken'
+  | 'twilioFromNumber'
+>;
+
 export function subscribeToWhatsAppSettings(
-  onData: (cfg: WhatsAppConfig) => void
+  onData: (cfg: WhatsAppConfig, legacyRaw?: Partial<WhatsAppConfig>) => void
 ): () => void {
   const docRef = doc(db, 'settings', 'whatsapp');
   const unsubscribe = onSnapshot(
     docRef,
     (snapshot) => {
       if (snapshot.exists()) {
-        onData(snapshot.data() as WhatsAppConfig);
+        const raw = snapshot.data() as Partial<WhatsAppConfig>;
+        onData(stripWhatsAppSecrets(raw), raw);
       }
     },
     (err) => {
@@ -909,10 +930,41 @@ export function subscribeToWhatsAppSettings(
   return unsubscribe;
 }
 
+export function subscribeToWhatsAppSecrets(
+  onData: (secrets: WhatsAppSecrets) => void
+): () => void {
+  const docRef = doc(db, 'settings', 'whatsappSecrets');
+  const unsubscribe = onSnapshot(
+    docRef,
+    (snapshot) => {
+      if (snapshot.exists()) {
+        onData(snapshot.data() as WhatsAppSecrets);
+      }
+    },
+    (err) => {
+      handleFirestoreError(err, FirestoreOperationType.GET, 'settings/whatsappSecrets', 'WhatsApp gizli anahtar senkronizasyonu');
+    }
+  );
+  return unsubscribe;
+}
+
 export async function saveWhatsAppSettingsToFirestore(config: WhatsAppConfig): Promise<void> {
   try {
-    const cleaned = removeUndefinedFields(config);
-    await setDoc(doc(db, 'settings', 'whatsapp'), cleaned);
+    const publicSettings: Record<string, any> = {};
+    const secretSettings: Record<string, any> = {};
+    const secretKeySet = new Set<string>(WHATSAPP_SECRET_FIELDS);
+
+    for (const [key, value] of Object.entries(config)) {
+      if (value === undefined) continue;
+      if (secretKeySet.has(key)) {
+        secretSettings[key] = value;
+      } else {
+        publicSettings[key] = value;
+      }
+    }
+
+    await setDoc(doc(db, 'settings', 'whatsapp'), removeUndefinedFields(publicSettings));
+    await setDoc(doc(db, 'settings', 'whatsappSecrets'), removeUndefinedFields(secretSettings));
   } catch (err) {
     handleFirestoreError(err, FirestoreOperationType.WRITE, 'settings/whatsapp', 'WhatsApp ayarları kaydedilemedi');
   }
@@ -979,3 +1031,52 @@ export async function saveChatQuickMessagesToFirestore(settings: ChatQuickMessag
     handleFirestoreError(err, FirestoreOperationType.WRITE, 'settings/chatQuickMessages', 'Hızlı sohbet mesajları kaydedilemedi');
   }
 }
+
+// -------------------------------------------------------------
+// Audit Logs Sync & Immutable Write / Admin Cleanup Operations
+// -------------------------------------------------------------
+
+export function subscribeToAuditLogs(
+  onData: (logs: AuditLog[]) => void
+): () => void {
+  const colRef = collection(db, 'auditLogs');
+  const unsubscribe = onSnapshot(
+    colRef,
+    (snapshot) => {
+      const list: AuditLog[] = [];
+      snapshot.forEach((d) => {
+        list.push(d.data() as AuditLog);
+      });
+      list.sort((a, b) => (b.timestamp - a.timestamp) || (b.id - a.id));
+      onData(list);
+    },
+    (err) => {
+      handleFirestoreError(err, FirestoreOperationType.LIST, 'auditLogs', 'Denetim kayıtları senkronizasyonu');
+    }
+  );
+  return unsubscribe;
+}
+
+export async function saveAuditLogToFirestore(log: AuditLog): Promise<void> {
+  const path = `auditLogs/${log.id}`;
+  try {
+    const sanitized = sanitizeAuditLogPayload(log);
+    const cleaned = removeUndefinedFields(sanitized);
+    await setDoc(doc(db, 'auditLogs', String(sanitized.id)), cleaned);
+  } catch (err) {
+    handleFirestoreError(err, FirestoreOperationType.CREATE, path, 'Denetim kaydı yazılamadı');
+  }
+}
+
+export async function deleteAuditLogsBatchFromFirestore(logIds: number[]): Promise<number> {
+  if (!logIds.length) return 0;
+  try {
+    const refs = logIds.map((id) => doc(db, 'auditLogs', String(id)));
+    await commitDeleteDocsInChunks(refs);
+    return refs.length;
+  } catch (err) {
+    handleFirestoreError(err, FirestoreOperationType.DELETE, 'auditLogs', 'Eski denetim kayıtları temizlenemedi');
+    return 0;
+  }
+}
+

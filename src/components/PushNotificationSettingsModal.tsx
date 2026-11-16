@@ -78,36 +78,37 @@ export const PushNotificationSettingsModal: React.FC<PushNotificationSettingsMod
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 z-50 animate-in fade-in duration-150">
-      <div className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden max-h-[92vh] flex flex-col border border-slate-200 dark:border-slate-800 transition-colors">
+    <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 z-50 animate-in fade-in duration-150">
+      <div className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-none sm:rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden h-[var(--vvh,100dvh)] sm:h-auto sm:max-h-[90dvh] flex flex-col border-0 sm:border sm:border-slate-200 dark:sm:border-slate-800 transition-colors">
         {/* Header */}
-        <div className="px-5 py-4 bg-indigo-700 text-white flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center">
+        <div className="px-4 sm:px-5 pb-3.5 pt-[max(0.875rem,env(safe-area-inset-top))] sm:py-4 bg-indigo-700 text-white flex items-center justify-between shrink-0 gap-2">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
               <Bell className="w-5 h-5 text-white" />
             </div>
-            <div>
-              <h3 className="font-bold text-sm sm:text-base text-white flex items-center gap-2">
-                Web Push & Sistem Bildirimleri
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-indigo-800 text-indigo-100 border border-indigo-500">
+            <div className="min-w-0">
+              <h3 className="font-bold text-sm sm:text-base text-white flex items-center gap-2 flex-wrap">
+                <span className="truncate">Web Push & Sistem Bildirimleri</span>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-indigo-800 text-indigo-100 border border-indigo-500 shrink-0">
                   Native
                 </span>
               </h3>
-              <p className="text-[11px] text-indigo-100">
-                Kayan bildirimlerle rampa atamalarını ve çağrıları telefondan/tarayıcıdan anında yakalayın.
+              <p className="text-[11px] text-indigo-100 truncate">
+                Kayan bildirimlerle rampa atamalarını ve çağrıları anında yakalayın.
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-lg text-indigo-200 hover:text-white hover:bg-indigo-800 flex items-center justify-center transition cursor-pointer"
+            className="min-w-[40px] min-h-[40px] rounded-xl text-indigo-200 hover:text-white hover:bg-indigo-800 flex items-center justify-center transition cursor-pointer shrink-0"
+            aria-label="Kapat"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Content */}
-        <form onSubmit={handleSave} className="p-5 overflow-y-auto space-y-4 text-xs custom-scroll flex-1">
+        <form onSubmit={handleSave} className="p-4 sm:p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:pb-5 overflow-y-auto space-y-4 text-xs custom-scroll flex-1">
           {/* Tarayıcı İzin Durum Kutusu */}
           <div
             className={`p-3.5 rounded-xl border flex items-center justify-between gap-3 ${
@@ -240,27 +241,27 @@ export const PushNotificationSettingsModal: React.FC<PushNotificationSettingsMod
           )}
 
           {/* Test Butonu */}
-          <div className="pt-2 border-t border-slate-200 flex items-center justify-between">
+          <div className="pt-3 border-t border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2">
             <button
               type="button"
               onClick={handleSendTest}
-              className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-xs flex items-center gap-1.5 transition cursor-pointer"
+              className="min-h-[42px] px-3.5 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold rounded-xl text-xs flex items-center gap-1.5 transition cursor-pointer"
             >
               <Sparkles className="w-3.5 h-3.5 text-amber-500" />
               <span>Test Bildirimi Gönder</span>
             </button>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 ml-auto">
               <button
                 type="button"
                 onClick={onClose}
-                className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-xl text-xs font-semibold transition cursor-pointer"
+                className="min-h-[42px] px-4 py-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl text-xs font-semibold transition cursor-pointer"
               >
                 Vazgeç
               </button>
               <button
                 type="submit"
-                className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-md transition flex items-center gap-1.5 cursor-pointer"
+                className="min-h-[42px] px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-md transition flex items-center gap-1.5 cursor-pointer"
               >
                 {savedSuccess ? (
                   <>

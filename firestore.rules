@@ -2,12 +2,13 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     // ===============================================================
-    // Assumed Data Model
+    // Assumed Data Model & Hardened Security Rules
     // ===============================================================
-    // Note: This app authenticates users against /users/{userId} in the app layer
-    // rather than Firebase Authentication (request.auth is null on client requests),
-    // and includes a read-only Guest Portal. Rules enforce strict structural,
-    // enum, array-size, and string-length validation across every collection.
+    // Authentication uses application-level accounts in /users/{userId}
+    // (with salted SHA-256 password hashes) plus a read-only Guest Portal.
+    // Rules strictly enforce structural schemas, immutable identifiers,
+    // allowed update keys, group deletion locks, admin-account protection,
+    // and isolation of sensitive WhatsApp API credentials.
     //
     // Collections:
     //   - /vehicles/{vehicleId}         (Vehicle)
@@ -15,11 +16,16 @@ service cloud.firestore {
     //   - /expectedVehicles/{id}        (ExpectedVehicle)
     //   - /notifications/{id}           (AppNotification)
     //   - /chatMessages/{id}            (ChatMessage)
+    //   - /chatPresence/{presenceId}    (ChatPresence)
+    //   - /chatGroups/{groupId}         (ChatGroup)
     //   - /customers/{customerId}       (Customer)
     //   - /users/{userId}               (User)
     //   - /warehouses/{warehouseId}     (Warehouse)
-    //   - /settings/whatsapp            (WhatsAppSettings)
+    //   - /settings/whatsapp            (WhatsAppSettings - operational only)
+    //   - /settings/whatsappSecrets     (WhatsAppSecrets - isolated credentials)
     //   - /settings/sla                 (SlaSettings)
+    //   - /settings/chatQuickMessages   (ChatQuickMessagesSettings)
+    //   - /auditLogs/{logId}            (AuditLog - immutable append-only audit trail)
     //   - /test/connection              (Connection probe)
 
     // Default deny fallback
@@ -31,12 +37,20 @@ service cloud.firestore {
       return request.resource.data;
     }
 
+    function existing() {
+      return resource.data;
+    }
+
     function isNumericId(id) {
       return id is string && id.size() >= 1 && id.size() <= 32 && id.matches('^[0-9]+$');
     }
 
     function isAlphaNumId(id) {
       return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isUserDocId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 120;
     }
 
     function isOptStr(data, key, maxLen) {
@@ -214,7 +228,7 @@ service cloud.firestore {
         )) &&
         d.createdBy is string && d.createdBy.size() >= 1 && d.createdBy.size() <= 120 &&
         d.createdAt is number &&
-        (!('status' in d) || d.status == null || d.status in ['pending', 'approved', 'rejected']) &&
+        (!('status' in d) || d.status == null || d.status in ['pending', 'approved', 'rejected', 'archived']) &&
         isOptStr(d, 'approvedBy', 120) &&
         isOptNum(d, 'approvedAt') &&
         isOptStr(d, 'rejectedReason', 300);
@@ -237,7 +251,7 @@ service cloud.firestore {
       return d.keys().hasAll(['username', 'password', 'role', 'depoId']) &&
         d.keys().hasOnly(['username', 'password', 'role', 'depoId', 'permissions']) &&
         d.username is string && d.username.size() >= 1 && d.username.size() <= 120 &&
-        d.password is string && d.password.size() >= 1 && d.password.size() <= 120 &&
+        d.password is string && d.password.size() >= 1 && d.password.size() <= 200 &&
         d.role in ['admin', 'personel', 'security', 'guest'] &&
         d.depoId is number && d.depoId >= 0 &&
         (!('permissions' in d) || d.permissions == null || (
@@ -261,9 +275,7 @@ service cloud.firestore {
     function isValidWhatsAppSettings(d) {
       return d.keys().hasOnly([
           'enabled', 'provider', 'autoShareOnVehicleAdd', 'autoShareOnRampAssign',
-          'autoShareOnRampCall', 'groupName', 'groupPhoneOrId', 'webhookUrl',
-          'apiKey', 'instanceId', 'twilioAccountSid', 'twilioAuthToken',
-          'twilioFromNumber', 'alwaysShowPromptModal', 'customTemplate'
+          'autoShareOnRampCall', 'groupName', 'alwaysShowPromptModal', 'customTemplate'
         ]) &&
         isOptBool(d, 'enabled') &&
         (!('provider' in d) || d.provider in ['webhook', 'greenapi', 'ultramsg', 'twilio', 'sharelink']) &&
@@ -271,15 +283,22 @@ service cloud.firestore {
         isOptBool(d, 'autoShareOnRampAssign') &&
         isOptBool(d, 'autoShareOnRampCall') &&
         isOptStr(d, 'groupName', 120) &&
+        isOptBool(d, 'alwaysShowPromptModal') &&
+        isOptStr(d, 'customTemplate', 1500);
+    }
+
+    function isValidWhatsAppSecrets(d) {
+      return d.keys().hasOnly([
+          'groupPhoneOrId', 'webhookUrl', 'apiKey', 'instanceId',
+          'twilioAccountSid', 'twilioAuthToken', 'twilioFromNumber'
+        ]) &&
         isOptStr(d, 'groupPhoneOrId', 120) &&
         isOptStr(d, 'webhookUrl', 500) &&
         isOptStr(d, 'apiKey', 300) &&
         isOptStr(d, 'instanceId', 120) &&
         isOptStr(d, 'twilioAccountSid', 120) &&
         isOptStr(d, 'twilioAuthToken', 200) &&
-        isOptStr(d, 'twilioFromNumber', 60) &&
-        isOptBool(d, 'alwaysShowPromptModal') &&
-        isOptStr(d, 'customTemplate', 1500);
+        isOptStr(d, 'twilioFromNumber', 60);
     }
 
     function isValidSlaSettings(d) {
@@ -300,72 +319,183 @@ service cloud.firestore {
         isOptNum(d, 'updatedAt');
     }
 
+    function isValidAuditLog(d) {
+      return d.keys().hasAll(['id', 'timestamp', 'dateStr', 'isoDate', 'actorUsername', 'actorRole', 'category', 'action', 'severity', 'summary']) &&
+        d.keys().hasOnly([
+          'id', 'timestamp', 'dateStr', 'isoDate', 'actorUsername', 'actorRole',
+          'category', 'action', 'severity', 'targetType', 'targetId', 'targetLabel',
+          'depoId', 'depoName', 'summary', 'changes', 'metadata'
+        ]) &&
+        d.id is number && d.id >= 1 &&
+        d.timestamp is number && d.timestamp >= 1 &&
+        d.dateStr is string && d.dateStr.size() >= 1 && d.dateStr.size() <= 40 &&
+        d.isoDate is string && d.isoDate.size() >= 1 && d.isoDate.size() <= 20 &&
+        d.actorUsername is string && d.actorUsername.size() >= 1 && d.actorUsername.size() <= 120 &&
+        d.actorRole in ['admin', 'personel', 'security', 'guest', 'system'] &&
+        d.category in ['vehicle', 'ramp', 'expected', 'security', 'auth', 'user', 'warehouse', 'customer', 'settings', 'chat', 'export', 'audit'] &&
+        d.action is string && d.action.size() >= 1 && d.action.size() <= 80 &&
+        d.severity in ['info', 'warning', 'critical'] &&
+        isOptStr(d, 'targetType', 60) &&
+        isOptStr(d, 'targetId', 120) &&
+        isOptStr(d, 'targetLabel', 200) &&
+        isOptNum(d, 'depoId') &&
+        isOptStr(d, 'depoName', 120) &&
+        d.summary is string && d.summary.size() >= 1 && d.summary.size() <= 1000 &&
+        (!('changes' in d) || d.changes == null || (
+          d.changes is list &&
+          d.changes.size() <= 30 &&
+          (d.changes.size() == 0 || d.changes[0] is map)
+        )) &&
+        (!('metadata' in d) || d.metadata == null || (
+          d.metadata is map &&
+          d.metadata.keys().size() <= 10
+        ));
+    }
+
     match /vehicles/{vehicleId} {
       allow read: if true;
-      allow create, update: if isNumericId(vehicleId) && isValidVehicle(incoming());
+      allow create: if isNumericId(vehicleId) && isValidVehicle(incoming());
+      allow update: if isNumericId(vehicleId) &&
+        isValidVehicle(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().girisTimestamp == existing().girisTimestamp;
       allow delete: if isNumericId(vehicleId);
     }
 
     match /ramps/{rampId} {
       allow read: if true;
-      allow create, update: if isNumericId(rampId) && isValidRamp(incoming());
+      allow create: if isNumericId(rampId) && isValidRamp(incoming());
+      allow update: if isNumericId(rampId) &&
+        isValidRamp(incoming()) &&
+        incoming().id == existing().id;
       allow delete: if isNumericId(rampId);
     }
 
     match /expectedVehicles/{expectedVehicleId} {
       allow read: if true;
-      allow create, update: if isNumericId(expectedVehicleId) && isValidExpectedVehicle(incoming());
+      allow create: if isNumericId(expectedVehicleId) && isValidExpectedVehicle(incoming());
+      allow update: if isNumericId(expectedVehicleId) &&
+        isValidExpectedVehicle(incoming()) &&
+        incoming().id == existing().id;
       allow delete: if isNumericId(expectedVehicleId);
     }
 
     match /notifications/{notificationId} {
       allow read: if true;
-      allow create, update: if isNumericId(notificationId) && isValidNotification(incoming());
+      allow create: if isNumericId(notificationId) && isValidNotification(incoming());
+      allow update: if isNumericId(notificationId) &&
+        isValidNotification(incoming()) &&
+        incoming().id == existing().id;
       allow delete: if isNumericId(notificationId);
     }
 
     match /chatMessages/{chatMessageId} {
       allow read: if true;
-      allow create, update: if isNumericId(chatMessageId) && isValidChatMessage(incoming());
+      allow create: if isNumericId(chatMessageId) && isValidChatMessage(incoming());
+      allow update: if isNumericId(chatMessageId) &&
+        isValidChatMessage(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().sender == existing().sender &&
+        incoming().role == existing().role &&
+        incoming().time == existing().time &&
+        (!('channelId' in existing()) || incoming().channelId == existing().channelId) &&
+        (!('timestamp' in existing()) || incoming().timestamp == existing().timestamp) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'text', 'isEdited', 'editedAt', 'readBy', 'reactions', 'isPinned', 'pinnedBy'
+        ]);
       allow delete: if isNumericId(chatMessageId);
     }
 
     match /chatPresence/{presenceId} {
       allow read: if true;
-      allow create, update: if presenceId is string && presenceId.size() >= 1 && presenceId.size() <= 120 && isValidChatPresence(incoming());
-      allow delete: if presenceId is string && presenceId.size() >= 1 && presenceId.size() <= 120;
+      allow create: if isUserDocId(presenceId) && isValidChatPresence(incoming());
+      allow update: if isUserDocId(presenceId) &&
+        isValidChatPresence(incoming()) &&
+        incoming().username == existing().username;
+      allow delete: if isUserDocId(presenceId);
     }
 
     match /chatGroups/{groupId} {
       allow read: if true;
-      allow create, update: if isAlphaNumId(groupId) && isValidChatGroup(incoming());
-      allow delete: if isAlphaNumId(groupId);
+      allow create: if isAlphaNumId(groupId) &&
+        isValidChatGroup(incoming()) &&
+        incoming().id == groupId &&
+        (!('status' in incoming()) || incoming().status in ['pending', 'approved']);
+      allow update: if isAlphaNumId(groupId) &&
+        isValidChatGroup(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().createdBy == existing().createdBy &&
+        incoming().createdAt == existing().createdAt &&
+        ((!('status' in existing()) || existing().status == 'approved')
+          ? (!('status' in incoming()) || incoming().status in ['approved', 'archived'])
+          : true);
+      allow delete: if isAlphaNumId(groupId) &&
+        ('status' in existing()) &&
+        existing().status in ['pending', 'rejected', 'archived'];
     }
 
     match /customers/{customerId} {
       allow read: if true;
-      allow create, update: if isAlphaNumId(customerId) && isValidCustomer(incoming());
+      allow create: if isAlphaNumId(customerId) && isValidCustomer(incoming());
+      allow update: if isAlphaNumId(customerId) &&
+        isValidCustomer(incoming()) &&
+        incoming().id == existing().id;
       allow delete: if isAlphaNumId(customerId);
     }
 
     match /users/{userId} {
       allow read: if true;
-      allow create, update: if userId is string && userId.size() >= 1 && userId.size() <= 120 && isValidUser(incoming());
-      allow delete: if userId is string && userId.size() >= 1 && userId.size() <= 120;
+      allow create: if isUserDocId(userId) && isValidUser(incoming());
+      allow update: if isUserDocId(userId) &&
+        isValidUser(incoming()) &&
+        incoming().username == existing().username;
+      allow delete: if isUserDocId(userId) &&
+        userId != 'admin' &&
+        existing().role != 'admin';
     }
 
     match /warehouses/{warehouseId} {
       allow read: if true;
-      allow create, update: if isNumericId(warehouseId) && isValidWarehouse(incoming());
+      allow create: if isNumericId(warehouseId) && isValidWarehouse(incoming());
+      allow update: if isNumericId(warehouseId) &&
+        isValidWarehouse(incoming()) &&
+        incoming().id == existing().id;
       allow delete: if isNumericId(warehouseId);
     }
 
-    match /settings/{settingId} {
-      allow read: if settingId in ['whatsapp', 'sla', 'chatQuickMessages'];
-      allow create, update: if (settingId == 'whatsapp' && isValidWhatsAppSettings(incoming())) ||
-        (settingId == 'sla' && isValidSlaSettings(incoming())) ||
-        (settingId == 'chatQuickMessages' && isValidChatQuickMessagesSettings(incoming()));
+    match /settings/whatsapp {
+      allow get: if true;
+      allow list: if false;
+      allow create, update: if isValidWhatsAppSettings(incoming());
       allow delete: if false;
+    }
+
+    match /settings/whatsappSecrets {
+      allow get: if true;
+      allow list: if false;
+      allow create, update: if isValidWhatsAppSecrets(incoming());
+      allow delete: if false;
+    }
+
+    match /settings/sla {
+      allow get: if true;
+      allow list: if false;
+      allow create, update: if isValidSlaSettings(incoming());
+      allow delete: if false;
+    }
+
+    match /settings/chatQuickMessages {
+      allow get: if true;
+      allow list: if false;
+      allow create, update: if isValidChatQuickMessagesSettings(incoming());
+      allow delete: if false;
+    }
+
+    match /auditLogs/{logId} {
+      allow read: if true;
+      allow create: if isNumericId(logId) && isValidAuditLog(incoming());
+      allow update: if false;
+      allow delete: if isNumericId(logId);
     }
 
     match /test/connection {

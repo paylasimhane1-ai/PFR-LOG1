@@ -428,7 +428,7 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
               type="button"
               onClick={() => setMobileFiltersOpen((prev) => !prev)}
               aria-expanded={mobileFiltersOpen}
-              className={`md:hidden shrink-0 px-3 py-2 rounded-xl border text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${
+              className={`md:hidden shrink-0 min-h-[40px] px-3 py-2 rounded-xl border text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${
                 mobileFiltersOpen || activeFilterCount > 0
                   ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800'
                   : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
@@ -451,7 +451,7 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                 type="button"
                 onClick={() => onExportCsv(filtered)}
                 disabled={filtered.length === 0}
-                className="flex-1 md:flex-initial px-3 py-2 md:py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 tabular-nums"
+                className="flex-1 md:flex-initial min-h-[42px] px-3 py-2 md:py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 tabular-nums"
                 title="Filtrelenmiş aktif araç listesini CSV/Excel olarak indir"
               >
                 <Download className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
@@ -463,7 +463,7 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
               <button
                 type="button"
                 onClick={onOpenNewVehicleModal}
-                className="flex-1 md:flex-initial px-4 py-2 md:py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs md:text-sm font-bold rounded-xl transition flex items-center justify-center gap-2 cursor-pointer shadow-md shadow-blue-500/20 active:scale-98 whitespace-nowrap shrink-0"
+                className="flex-1 md:flex-initial min-h-[42px] px-4 py-2 md:py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs md:text-sm font-bold rounded-xl transition flex items-center justify-center gap-2 cursor-pointer shadow-md shadow-blue-500/20 active:scale-98 whitespace-nowrap shrink-0"
               >
                 <Plus className="w-4 h-4" /> Yeni Araç Ekle
               </button>
@@ -580,13 +580,13 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
 
         {/* İkincil Filtreler & Sıralama Çubuğu */}
         <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 dark:border-slate-800 text-xs">
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center gap-1.5">
-              <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">İşlem:</span>
+          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto min-w-0">
+            <div className="flex items-center gap-1.5 flex-1 sm:flex-none min-w-0">
+              <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 shrink-0">İşlem:</span>
               <select
                 value={islemFilter}
                 onChange={(e) => setIslemFilter(e.target.value as ProcessFilter)}
-                className="border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs font-semibold bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full sm:w-auto min-w-0 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs font-semibold bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="TÜMÜ">Tüm İşlemler</option>
                 <option value="Boşaltma">Boşaltma</option>
@@ -594,12 +594,12 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
               </select>
             </div>
 
-            <div className="flex items-center gap-1.5">
-              <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Depo Türü:</span>
+            <div className="flex items-center gap-1.5 flex-1 sm:flex-none min-w-0">
+              <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 shrink-0">Depo Türü:</span>
               <select
                 value={depoTuruFilter}
                 onChange={(e) => setDepoTuruFilter(e.target.value as DepoTypeFilter)}
-                className="border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs font-semibold bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full sm:w-auto min-w-0 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs font-semibold bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="TÜMÜ">Tümü</option>
                 <option value="Antrepo">Antrepo</option>
@@ -607,12 +607,12 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
               </select>
             </div>
 
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 w-full sm:w-auto min-w-0">
               <ArrowUpDown className="w-3.5 h-3.5 text-slate-400 shrink-0" />
               <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value as SortOption)}
-                className="border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs font-semibold bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full sm:w-auto min-w-0 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs font-semibold bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-blue-500"
                 aria-label="Sıralama Ölçütü"
               >
                 <option value="default">Sırala: Acil ve En Yeni</option>
@@ -750,27 +750,27 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                   </span>
                 </div>
 
-                <div className="flex items-center justify-between text-[10px] text-slate-600 dark:text-slate-300">
-                  <span className="truncate">
+                <div className="flex items-center justify-between gap-2 text-[10px] text-slate-600 dark:text-slate-300">
+                  <span className="truncate min-w-0">
                     <b className="text-slate-800 dark:text-slate-100 font-semibold">{v.soforAd}</b>{' '}
                     {v.soforTel && <span className="text-slate-400 tabular-nums">({v.soforTel})</span>}
                   </span>
-                  <div className="flex items-center gap-1 shrink-0">
+                  <div className="flex items-center gap-1.5 shrink-0">
                     <a
                       href={`tel:${cleanPhone(v.soforTel)}`}
-                      className="p-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md transition"
+                      className="min-w-[36px] min-h-[36px] p-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition flex items-center justify-center"
                       title="Ara"
                     >
-                      <Phone className="w-3 h-3" />
+                      <Phone className="w-3.5 h-3.5" />
                     </a>
                     <a
                       href={`https://wa.me/${cleanPhoneForWa(v.soforTel)}`}
                       target="_blank"
                       rel="noreferrer"
-                      className="p-1.5 bg-emerald-100 hover:bg-emerald-200 dark:bg-emerald-950/60 dark:hover:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300 rounded-md border border-emerald-300 dark:border-emerald-700 transition"
+                      className="min-w-[36px] min-h-[36px] p-1.5 bg-emerald-100 hover:bg-emerald-200 dark:bg-emerald-950/60 dark:hover:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300 rounded-lg border border-emerald-300 dark:border-emerald-700 transition flex items-center justify-center"
                       title="WhatsApp"
                     >
-                      <MessageSquare className="w-3 h-3" />
+                      <MessageSquare className="w-3.5 h-3.5" />
                     </a>
                   </div>
                 </div>
@@ -821,7 +821,7 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                 <button
                   type="button"
                   onClick={() => onOpenDetailModal(v)}
-                  className="min-h-[36px] py-1 px-1 bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/40 dark:hover:bg-blue-900/50 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 rounded-lg text-[10px] font-bold flex items-center justify-center gap-1 transition active:scale-95 cursor-pointer"
+                  className="min-h-[40px] py-1 px-1 bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/40 dark:hover:bg-blue-900/50 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 rounded-lg text-[10px] font-bold flex items-center justify-center gap-1 transition active:scale-95 cursor-pointer"
                   title="Detay İncele"
                 >
                   <Eye className="w-3 h-3 text-blue-600 dark:text-blue-400 shrink-0" />
@@ -831,7 +831,7 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                 <button
                   type="button"
                   onClick={() => onOpenPhotoGallery(v)}
-                  className="min-h-[36px] py-1 px-1 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg text-[10px] font-semibold flex items-center justify-center gap-1 transition active:scale-95 cursor-pointer tabular-nums"
+                  className="min-h-[40px] py-1 px-1 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg text-[10px] font-semibold flex items-center justify-center gap-1 transition active:scale-95 cursor-pointer tabular-nums"
                   title="Fotoğraflar"
                 >
                   <Camera className="w-3 h-3 text-blue-600 dark:text-blue-400 shrink-0" />
@@ -842,7 +842,7 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                   <button
                     type="button"
                     onClick={() => onOpenEditModal(v)}
-                    className="min-h-[36px] py-1 px-1 bg-slate-800 hover:bg-slate-900 dark:bg-slate-700 dark:hover:bg-slate-600 text-white rounded-lg text-[10px] font-bold flex items-center justify-center gap-1 transition active:scale-95 cursor-pointer"
+                    className="min-h-[40px] py-1 px-1 bg-slate-800 hover:bg-slate-900 dark:bg-slate-700 dark:hover:bg-slate-600 text-white rounded-lg text-[10px] font-bold flex items-center justify-center gap-1 transition active:scale-95 cursor-pointer"
                     title="Düzenle"
                   >
                     <Edit3 className="w-3 h-3 shrink-0" />
@@ -856,7 +856,7 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                   <button
                     type="button"
                     onClick={() => handleConfirmExit(v)}
-                    className="min-h-[36px] py-1 px-1 bg-red-50 hover:bg-red-100 dark:bg-red-950/40 dark:hover:bg-red-900/50 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800 rounded-lg text-[10px] font-bold flex items-center justify-center gap-1 transition active:scale-95 cursor-pointer"
+                    className="min-h-[40px] py-1 px-1 bg-red-50 hover:bg-red-100 dark:bg-red-950/40 dark:hover:bg-red-900/50 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800 rounded-lg text-[10px] font-bold flex items-center justify-center gap-1 transition active:scale-95 cursor-pointer"
                     title="Çıkış Ver"
                   >
                     <LogOut className="w-3 h-3 shrink-0" />
@@ -874,7 +874,7 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                     <select
                       value={v.durum}
                       onChange={(e) => onUpdateStatus(v, e.target.value as Vehicle['durum'])}
-                      className="w-full min-h-[36px] text-[11px] font-bold border border-slate-300 dark:border-slate-700 rounded-lg px-2 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-100 outline-none focus:ring-1 focus:ring-blue-500"
+                      className="w-full min-h-[40px] text-[11px] font-bold border border-slate-300 dark:border-slate-700 rounded-lg px-2 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-100 outline-none focus:ring-1 focus:ring-blue-500"
                     >
                       <option value="BEKLEMEDE">BEKLEMEDE</option>
                       <option value="EVRAK HAZIR" disabled={!canMakeReady && v.durum !== 'EVRAK HAZIR'}>
@@ -888,7 +888,7 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                       </option>
                     </select>
 
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1 min-w-0">
                       {(() => {
                         const isSerbest = isVehicleSerbestDepo(v);
                         const isSecurityOrAdmin = currentUser?.role === 'security' || currentUser?.role === 'admin';
@@ -909,7 +909,7 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                               onAssignRamp(v, val);
                             }}
                             disabled={!canDirectToRamp || !canAssignRamp}
-                            className={`w-full min-h-[36px] text-[11px] font-bold border rounded-lg px-2 outline-none focus:ring-1 focus:ring-purple-500 truncate ${
+                            className={`w-full min-w-0 min-h-[40px] text-[11px] font-bold border rounded-lg px-2 outline-none focus:ring-1 focus:ring-purple-500 truncate ${
                               !canDirectToRamp || !canAssignRamp
                                 ? 'bg-slate-100 dark:bg-slate-800/60 text-slate-400 dark:text-slate-500 border-slate-200 dark:border-slate-700 cursor-not-allowed'
                                 : isSerbest && v.durum !== 'EVRAK HAZIR' && v.durum !== 'RAMPADA'
@@ -939,7 +939,7 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                         <button
                           type="button"
                           onClick={() => onAssignRamp(v, null)}
-                          className="min-h-[36px] px-2 text-[10px] font-bold text-red-600 dark:text-red-300 bg-red-50 dark:bg-red-950/40 hover:bg-red-100 dark:hover:bg-red-900/50 border border-red-200 dark:border-red-800 rounded-lg shrink-0 cursor-pointer"
+                          className="min-w-[38px] min-h-[40px] px-2 text-[10px] font-bold text-red-600 dark:text-red-300 bg-red-50 dark:bg-red-950/40 hover:bg-red-100 dark:hover:bg-red-900/50 border border-red-200 dark:border-red-800 rounded-lg shrink-0 cursor-pointer flex items-center justify-center"
                           title="Rampa Atamasını Kaldır"
                         >
                           X
@@ -954,10 +954,10 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                       <button
                         type="button"
                         onClick={() => onUpdateStatus(v, 'EVRAK HAZIR')}
-                        className="flex-1 min-w-[140px] min-h-[36px] py-1.5 px-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[10px] font-extrabold flex items-center justify-center gap-1 shadow-2xs transition active:scale-95 cursor-pointer"
+                        className="flex-1 basis-[calc(50%-0.375rem)] sm:basis-auto min-w-0 min-h-[42px] py-1.5 px-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[10px] font-extrabold flex items-center justify-center gap-1 shadow-2xs transition active:scale-95 cursor-pointer"
                       >
-                        <Check className="w-3.5 h-3.5" />
-                        <span>Evrak Hazır Onayı</span>
+                        <Check className="w-3.5 h-3.5 shrink-0" />
+                        <span className="truncate">Evrak Hazır Onayı</span>
                       </button>
                     )}
 
@@ -970,14 +970,14 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                         <button
                           type="button"
                           onClick={() => handleQuickAssignRamp(v)}
-                          className={`flex-1 min-w-[140px] min-h-[36px] py-1.5 px-2.5 font-bold rounded-lg text-[10px] flex items-center justify-center gap-1 transition active:scale-98 cursor-pointer shadow-2xs ${
+                          className={`flex-1 basis-[calc(50%-0.375rem)] sm:basis-auto min-w-0 min-h-[42px] py-1.5 px-2.5 font-bold rounded-lg text-[10px] flex items-center justify-center gap-1 transition active:scale-98 cursor-pointer shadow-2xs ${
                             isVehicleSerbestDepo(v) && v.durum !== 'EVRAK HAZIR'
                               ? 'bg-linear-to-r from-emerald-600 to-teal-600 text-white'
                               : 'bg-linear-to-r from-purple-600 to-indigo-600 text-white'
                           }`}
                         >
-                          <Zap className="w-3.5 h-3.5 text-amber-300 fill-amber-300" />
-                          <span>
+                          <Zap className="w-3.5 h-3.5 text-amber-300 fill-amber-300 shrink-0" />
+                          <span className="truncate">
                             {isVehicleSerbestDepo(v) && v.durum !== 'EVRAK HAZIR'
                               ? 'Serbest Depo: Rampa Ata'
                               : 'Boş Rampaya Hızlı Ata'}
@@ -989,10 +989,10 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                       <button
                         type="button"
                         onClick={() => onSendAdminCallRequest(v)}
-                        className="flex-1 min-w-[150px] min-h-[36px] py-1.5 px-2.5 bg-amber-500 hover:bg-amber-600 text-slate-900 font-extrabold text-[10px] rounded-lg transition flex items-center justify-center gap-1 shadow-2xs active:scale-95 cursor-pointer"
+                        className="flex-1 basis-[calc(50%-0.375rem)] sm:basis-auto min-w-0 min-h-[42px] py-1.5 px-2.5 bg-amber-500 hover:bg-amber-600 text-slate-900 font-extrabold text-[10px] rounded-lg transition flex items-center justify-center gap-1 shadow-2xs active:scale-95 cursor-pointer"
                       >
-                        <Megaphone className="w-3.5 h-3.5" />
-                        <span>Güvenliğe Çağrı Gönder</span>
+                        <Megaphone className="w-3.5 h-3.5 shrink-0" />
+                        <span className="truncate">Güvenliğe Çağrı Gönder</span>
                       </button>
                     )}
 
@@ -1000,13 +1000,13 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                       <button
                         type="button"
                         onClick={() => onToggleAcil(v)}
-                        className={`min-h-[36px] py-1.5 px-3 rounded-lg text-[10px] font-extrabold transition flex items-center justify-center gap-1 cursor-pointer ${
+                        className={`min-h-[42px] py-1.5 px-3 rounded-lg text-[10px] font-extrabold transition flex items-center justify-center gap-1 cursor-pointer shrink-0 ${
                           v.isAcik
                             ? 'bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-300 dark:hover:bg-slate-700'
                             : 'bg-red-600 hover:bg-red-700 text-white shadow-2xs'
                         }`}
                       >
-                        <AlertTriangle className="w-3 h-3" />
+                        <AlertTriangle className="w-3 h-3 shrink-0" />
                         <span>{v.isAcik ? 'Acil Kaldır' : 'Acil Araç'}</span>
                       </button>
                     )}
@@ -1429,9 +1429,9 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
 
       {/* ================= YAPIŞKAN TOPLU İŞLEM ÇUBUĞU (BEKLEMEDE ARAÇLAR) ================= */}
       {canMakeReady && onBulkMakeReady && selectedPendingVehicles.length > 0 && (
-        <div className="sticky bottom-3 z-20 bg-slate-900 dark:bg-slate-800 text-white px-4 py-3 rounded-2xl border border-slate-700 shadow-xl flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
+        <div className="sticky bottom-2 z-20 bg-slate-900 dark:bg-slate-800 text-white px-4 py-3 rounded-2xl border border-slate-700 shadow-xl flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
           <div className="flex items-center gap-2 text-xs font-semibold tabular-nums">
-            <span className="inline-flex items-center justify-center w-6 h-6 rounded-lg bg-emerald-600 text-white font-black text-xs">
+            <span className="inline-flex items-center justify-center w-6 h-6 rounded-lg bg-emerald-600 text-white font-black text-xs shrink-0">
               {selectedPendingVehicles.length}
             </span>
             <span>
@@ -1443,16 +1443,16 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
             <button
               type="button"
               onClick={() => setSelectedIds([])}
-              className="flex-1 sm:flex-initial px-3 py-2 rounded-xl bg-slate-800 dark:bg-slate-700 hover:bg-slate-700 dark:hover:bg-slate-600 text-slate-200 text-xs font-bold transition cursor-pointer"
+              className="flex-1 sm:flex-initial min-h-[42px] px-3 py-2 rounded-xl bg-slate-800 dark:bg-slate-700 hover:bg-slate-700 dark:hover:bg-slate-600 text-slate-200 text-xs font-bold transition cursor-pointer"
             >
               Seçimi Temizle
             </button>
             <button
               type="button"
               onClick={() => onBulkMakeReady(selectedPendingVehicles)}
-              className="flex-1 sm:flex-initial px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-extrabold flex items-center justify-center gap-1.5 shadow-md transition cursor-pointer"
+              className="flex-1 sm:flex-initial min-h-[42px] px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-extrabold flex items-center justify-center gap-1.5 shadow-md transition cursor-pointer"
             >
-              <Check className="w-4 h-4" />
+              <Check className="w-4 h-4 shrink-0" />
               <span>Seçilenleri Evrak Hazır Yap</span>
             </button>
           </div>
