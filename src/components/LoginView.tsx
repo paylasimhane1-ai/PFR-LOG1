@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Warehouse, User } from '../types';
 import { verifyPassword } from '../utils/authCrypto';
 import { Warehouse as WarehouseIcon, AlertCircle, Clock, Eye, EyeOff } from 'lucide-react';
+import { PWAInstallButton } from './PWAInstallButton';
 
 interface LoginViewProps {
   warehouses: Warehouse[];
@@ -152,6 +153,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
             <Clock className="w-4 h-4 text-blue-600 dark:text-blue-400" />
             Misafir Girişi (Şifresiz Sorgulama)
           </button>
+          <PWAInstallButton variant="login" />
         </div>
       </div>
     </div>

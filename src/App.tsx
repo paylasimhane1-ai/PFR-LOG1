@@ -66,7 +66,11 @@ import { InAppNotificationBanner, InAppAlert } from './components/InAppNotificat
 import { PushNotificationPromptBanner } from './components/PushNotificationPromptBanner';
 import { AuditLogModal } from './components/AuditLogModal';
 import { LogiPortalIcon } from './components/LogiPortalLogo';
+import { PWAInstallButton } from './components/PWAInstallButton';
+import { OfflineIndicator } from './components/OfflineIndicator';
+import { SwUpdateBanner } from './components/SwUpdateBanner';
 import { useVisualViewport } from './hooks/useVisualViewport';
+import { useAppUpdate } from './hooks/useAppUpdate';
 import {
   loadWhatsAppConfig,
   saveWhatsAppConfig,
@@ -358,6 +362,15 @@ export default function App() {
   const currentUserRef = useRef<User | null>(currentUser);
   const selectedDepoIdRef = useRef<number>(selectedDepoId);
   const activeDepoIdsRef = useRef<Set<number>>(new Set(warehouses.filter((w) => w.aktif !== false).map((w) => w.id)));
+  const {
+    needRefresh: isAppUpdateAvailable,
+    hasPendingUpdate,
+    isUpdating: isAppUpdating,
+    isChecking: isCheckingAppUpdate,
+    applyUpdate: applyAppUpdate,
+    dismissUpdate: dismissAppUpdate,
+    checkNow: checkForAppUpdate,
+  } = useAppUpdate();
 
   // Siyah (Karanlık) Mod / Normal Mod Tema Durumu
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
@@ -1447,9 +1460,21 @@ export default function App() {
   const handleRefreshData = () => {
     setIsRefreshing(true);
     syncAllRamps();
+    void checkForAppUpdate();
     setTimeout(() => {
       setIsRefreshing(false);
     }, 400);
+  };
+
+  const handleManualUpdateCheck = async () => {
+    const result = await checkForAppUpdate();
+    if (result === 'update-available') {
+      showToast('Yeni uygulama sürümü bulundu! Güncelleme penceresinden geçiş yapabilirsiniz.', 'info');
+    } else if (result === 'up-to-date') {
+      showToast('Uygulamanız zaten en güncel sürümde.', 'success');
+    } else {
+      showToast('Güncelleme sunucusuna şu anda erişilemedi (çevrimdışı veya önizleme modu).', 'warning');
+    }
   };
 
   // Customer Management Handlers
@@ -4825,28 +4850,46 @@ export default function App() {
   // 1. Render Login Screen if no user logged in
   if (!currentUser) {
     return (
-      <LoginView
-        warehouses={warehouses}
-        users={users}
-        onLoginSuccess={handleLoginSuccess}
-        onLoginFailed={handleLoginFailed}
-        onLoginAsGuest={handleLoginAsGuest}
-      />
+      <>
+        <LoginView
+          warehouses={warehouses}
+          users={users}
+          onLoginSuccess={handleLoginSuccess}
+          onLoginFailed={handleLoginFailed}
+          onLoginAsGuest={handleLoginAsGuest}
+        />
+        <OfflineIndicator />
+        <SwUpdateBanner
+          visible={isAppUpdateAvailable}
+          isUpdating={isAppUpdating}
+          onUpdate={applyAppUpdate}
+          onDismiss={dismissAppUpdate}
+        />
+      </>
     );
   }
 
   // 2. Render Guest Portal if role is 'guest'
   if (currentUser.role === 'guest') {
     return (
-      <GuestPortal
-        vehicles={vehicles}
-        getRampName={getRampName}
-        onLogout={handleLogout}
-        onOpenPhotoGallery={(v) => {
-          setSelectedVehicleForPhoto(v);
-          setShowPhotoGalleryModal(true);
-        }}
-      />
+      <>
+        <GuestPortal
+          vehicles={vehicles}
+          getRampName={getRampName}
+          onLogout={handleLogout}
+          onOpenPhotoGallery={(v) => {
+            setSelectedVehicleForPhoto(v);
+            setShowPhotoGalleryModal(true);
+          }}
+        />
+        <OfflineIndicator />
+        <SwUpdateBanner
+          visible={isAppUpdateAvailable}
+          isUpdating={isAppUpdating}
+          onUpdate={applyAppUpdate}
+          onDismiss={dismissAppUpdate}
+        />
+      </>
     );
   }
 
@@ -6288,6 +6331,41 @@ export default function App() {
                   {isFirebaseConnected ? 'Firebase Canlı' : 'Bağlanıyor...'}
                 </span>
               </div>
+
+              {/* Uygulamayı Telefona Yükle (Standalone değilse görünür) */}
+              <PWAInstallButton
+                variant="menu"
+                onActionComplete={() => setShowMobileAdminMenu(false)}
+              />
+
+              {/* Uygulama Sürümü & Güncelleme Denetimi */}
+              <button
+                type="button"
+                onClick={() => {
+                  if (hasPendingUpdate) {
+                    setShowMobileAdminMenu(false);
+                    void applyAppUpdate();
+                  } else {
+                    void handleManualUpdateCheck();
+                  }
+                }}
+                disabled={isCheckingAppUpdate || isAppUpdating}
+                className="w-full min-h-[44px] p-3.5 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-2xl border border-slate-200 dark:border-slate-700 font-bold text-xs flex items-center justify-between gap-2 transition cursor-pointer disabled:opacity-70"
+              >
+                <span className="flex items-center gap-2.5 min-w-0">
+                  <RotateCw className={`w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0 ${isCheckingAppUpdate || isAppUpdating ? 'animate-spin' : ''}`} />
+                  <span className="truncate">
+                    {hasPendingUpdate ? 'Yeni Sürümü Şimdi Yükle' : 'Uygulama Güncelleme Kontrolü'}
+                  </span>
+                </span>
+                <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold shrink-0 ${
+                  hasPendingUpdate
+                    ? 'bg-emerald-600 text-white animate-pulse'
+                    : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200'
+                }`}>
+                  {isCheckingAppUpdate ? 'Kontrol...' : hasPendingUpdate ? 'Güncelle' : 'Denetle'}
+                </span>
+              </button>
             </div>
 
             {/* Çıkış Yap */}
@@ -6332,6 +6410,14 @@ export default function App() {
           </div>
         </div>
       )}
+
+      <OfflineIndicator />
+      <SwUpdateBanner
+        visible={isAppUpdateAvailable}
+        isUpdating={isAppUpdating}
+        onUpdate={applyAppUpdate}
+        onDismiss={dismissAppUpdate}
+      />
     </div>
   );
 }
